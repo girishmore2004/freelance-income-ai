@@ -1,8 +1,11 @@
 
-"""Persist the RQ job ID for each durable agent workflow.
+"""Persist RQ job IDs for durable agent workflow attempts.
 
 Revision ID: 0046_agent_workflow_rq_job_id
 Revises: 0045_mfa_and_login_lockout
+
+The stored job ID allows recovery services to inspect the corresponding
+RQ job without guessing which queue execution belongs to a workflow.
 """
 
 from alembic import op
@@ -16,25 +19,40 @@ branch_labels = None
 depends_on = None
 
 
-def upgrade():
-    inspector = inspect(op.get_bind())
+TABLE_NAME = "agent_workflow_runs"
+COLUMN_NAME = "rq_job_id"
 
-    if "agent_workflow_runs" not in inspector.get_table_names():
+
+def _inspector():
+    return inspect(op.get_bind())
+
+
+def _table_exists():
+    return TABLE_NAME in _inspector().get_table_names()
+
+
+def _column_exists():
+    if not _table_exists():
+        return False
+
+    return any(
+        column["name"] == COLUMN_NAME
+        for column in _inspector().get_columns(TABLE_NAME)
+    )
+
+
+def upgrade():
+    if not _table_exists():
         raise RuntimeError(
-            "agent_workflow_runs table does not exist; "
-            "cannot add RQ job tracking."
+            "agent_workflow_runs does not exist. "
+            "Apply the durable agent workflow migrations first."
         )
 
-    columns = {
-        column["name"]
-        for column in inspector.get_columns("agent_workflow_runs")
-    }
-
-    if "rq_job_id" not in columns:
+    if not _column_exists():
         op.add_column(
-            "agent_workflow_runs",
+            TABLE_NAME,
             sa.Column(
-                "rq_job_id",
+                COLUMN_NAME,
                 sa.String(length=100),
                 nullable=False,
                 server_default="",
@@ -43,77 +61,8 @@ def upgrade():
 
 
 def downgrade():
-    inspector = inspect(op.get_bind())
-
-    if "agent_workflow_runs" not in inspector.get_table_names():
-        return
-
-    columns = {
-        column["name"]
-        for column in inspector.get_columns("agent_workflow_runs")
-    }
-
-    if "rq_job_id" in columns:
-        op.drop_column("agent_workflow_runs", "rq_job_id")
-### 2. Update `backend/app/models.py`
-
-Find the existing `AgentWorkflowRun` class (around line 948 in the uploaded version). Replace that class with:
-
-<CodeBlock language="python" editable>
-class AgentWorkflowRun(Base):
-    __tablename__ = "agent_workflow_runs"
-    __table_args__ = (
-        UniqueConstraint(
-            "user_id",
-            "idempotency_key",
-            name="uq_agent_workflow_user_idempotency",
-        ),
-    )
-
-    id: Mapped[str] = mapped_column(
-        String(36),
-        primary_key=True,
-        default=uid,
-    )
-    user_id: Mapped[str] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"),
-        index=True,
-    )
-    workflow_type: Mapped[str] = mapped_column(
-        String(40),
-        default="business_review",
-    )
-    idempotency_key: Mapped[str] = mapped_column(String(100))
-    status: Mapped[str] = mapped_column(
-        String(30),
-        default="queued",
-        index=True,
-    )
-    current_step: Mapped[str] = mapped_column(
-        String(80),
-        default="queued",
-    )
-    state_json: Mapped[str] = mapped_column(Text, default="{}")
-    result_json: Mapped[str] = mapped_column(Text, default="{}")
-    error_message: Mapped[str] = mapped_column(Text, default="")
-    error_code: Mapped[str] = mapped_column(String(60), default="")
-    last_error_node: Mapped[str] = mapped_column(String(80), default="")
-    rq_job_id: Mapped[str] = mapped_column(String(100), default="")
-    attempt_count: Mapped[int] = mapped_column(Integer, default=0)
-    max_attempts: Mapped[int] = mapped_column(Integer, default=3)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=now,
-    )
-    started_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True,
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=now,
-    )
-    finished_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True,
-    )
+    if _column_exists():
+        op.drop_column(
+            TABLE_NAME,
+            COLUMN_NAME,
+        )
