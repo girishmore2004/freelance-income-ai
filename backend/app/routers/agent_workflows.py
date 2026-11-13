@@ -2,7 +2,7 @@
 import json
 import uuid
 from datetime import datetime, timezone, timedelta
-
+from ..services.rq_submission import enqueue_once
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select, delete
@@ -36,12 +36,25 @@ def _out(run):
     }
 
 
+
 def _enqueue(run, user_id, db):
+    next_attempt = int(run.attempt_count or 0) + 1
+    deterministic_job_id = (
+        f"agent-workflow-{run.id}-attempt-{next_attempt}"
+    )
+
     try:
-        job = get_queue().enqueue(
-            "app.agent_workflow_engine.run_agent_workflow", run.id, user_id,
-            job_timeout=900, result_ttl=86400, failure_ttl=604800,
+        job = enqueue_once(
+            get_queue(),
+            "app.agent_workflow_engine.run_agent_workflow",
+            run.id,
+            user_id,
+            job_id=deterministic_job_id,
+            job_timeout=900,
+            result_ttl=86400,
+            failure_ttl=604800,
         )
+
         run.status = "queued"
         run.current_step = "queued"
         run.error_message = ""
@@ -49,15 +62,42 @@ def _enqueue(run, user_id, db):
         run.last_error_node = ""
         run.finished_at = None
         run.updated_at = datetime.now(timezone.utc)
+
         db.commit()
-        return {"workflow_id": run.id, "status": "queued", "queue_job_id": job.id}
+
+        return {
+            "workflow_id": run.id,
+            "status": "queued",
+            "queue_job_id": job.id,
+        }
+
     except Exception as exc:
-        run.status = "failed"
-        run.current_step = "queue_failed"
-        run.error_message = "Workflow queue unavailable. Check REDIS_URL and the RQ worker."
-        run.finished_at = datetime.now(timezone.utc)
-        db.commit()
-        raise HTTPException(503, run.error_message) from exc
+        db.rollback()
+
+        # Re-read the record after rollback before recording the failure.
+        persisted_run = db.scalar(
+            select(AgentWorkflowRun).where(
+                AgentWorkflowRun.id == run.id,
+                AgentWorkflowRun.user_id == user_id,
+            )
+        )
+
+        if persisted_run and persisted_run.status == "queued":
+            persisted_run.status = "failed"
+            persisted_run.current_step = "queue_failed"
+            persisted_run.error_message = (
+                "Workflow queue unavailable. Check REDIS_URL "
+                "and the RQ worker."
+            )
+            persisted_run.finished_at = datetime.now(timezone.utc)
+            persisted_run.updated_at = datetime.now(timezone.utc)
+            db.commit()
+
+        raise HTTPException(
+            503,
+            "Workflow queue unavailable. Check REDIS_URL and the RQ worker.",
+        ) from exc
+
 
 
 @router.post("")
