@@ -31,7 +31,14 @@ def test_source_performance_groups_by_source_and_latest_feedback():
     rss = next(x for x in result if x["source"] == "rss")
     assert rss["wins"] == 1
     assert rss["losses"] == 0
-    assert rss["win_rate_percent"] == 100.0
+    # One decided outcome is insufficient for the minimum sample threshold.
+    assert rss["decided_sample_size"] == 1
+    assert rss["minimum_sample"] == 5
+    assert rss["minimum_sample_met"] is False
+
+# Descriptive rate remains available, but the qualified rate is suppressed.
+    assert rss["descriptive_win_rate_percent"] == 100.0
+    assert rss["win_rate_percent"] is None
 
 
 def test_capacity_uses_profile_weekly_target_and_recorded_hours():
