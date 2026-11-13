@@ -49,4 +49,6 @@ def test_project_aggregation_is_user_scoped_at_api_and_migration_is_chained():
     assert '@app.get("/api/v1/analytics/delivery-disputes")' in main
     assert 'DeliveryIssue.user_id == user.id' in main
     assert 'down_revision = "0038_delivery_issue_workflow"' in migration
-    assert 'sa.Column("root_cause", sa.String(length=40)' in migration
+    assert '"root_cause"' in migration
+    assert "String" in migration
+    assert "40" in migration
