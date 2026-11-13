@@ -15,7 +15,7 @@ client = TestClient(main.app)
 
 
 def _register():
-    email = f"journey-v43-{uuid.uuid4().hex}@example.test"
+    email = f"v41-{uuid.uuid4().hex}@example.com"
     response = client.post("/api/v1/auth/register", json={
         "email": email, "password": "StrongPassword123!"
     })
