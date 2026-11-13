@@ -1,0 +1,70 @@
+{
+  "dataset_name": "Synthetic portfolio retrieval smoke benchmark",
+  "dataset_version": "1.0",
+  "review_status": "synthetic",
+  "cases": [
+    {
+      "case_id": "react-dashboard",
+      "query": "React dashboard frontend",
+      "relevant_chunk_ids": [
+        "chunk-react"
+      ],
+      "chunks": [
+        {
+          "id": "chunk-react",
+          "content": "Built a React dashboard frontend with responsive components and API integration."
+        },
+        {
+          "id": "chunk-python",
+          "content": "Python scripts automate spreadsheet cleanup and reporting."
+        },
+        {
+          "id": "chunk-brand",
+          "content": "Brand guidelines include typography and logo spacing."
+        }
+      ]
+    },
+    {
+      "case_id": "python-automation",
+      "query": "Python automation reporting scripts",
+      "relevant_chunk_ids": [
+        "chunk-python"
+      ],
+      "chunks": [
+        {
+          "id": "chunk-react",
+          "content": "Built a React dashboard frontend with responsive components and API integration."
+        },
+        {
+          "id": "chunk-python",
+          "content": "Python scripts automate spreadsheet cleanup and reporting."
+        },
+        {
+          "id": "chunk-brand",
+          "content": "Brand guidelines include typography and logo spacing."
+        }
+      ]
+    },
+    {
+      "case_id": "brand-guidelines",
+      "query": "brand typography logo guidelines",
+      "relevant_chunk_ids": [
+        "chunk-brand"
+      ],
+      "chunks": [
+        {
+          "id": "chunk-react",
+          "content": "Built a React dashboard frontend with responsive components and API integration."
+        },
+        {
+          "id": "chunk-python",
+          "content": "Python scripts automate spreadsheet cleanup and reporting."
+        },
+        {
+          "id": "chunk-brand",
+          "content": "Brand guidelines include typography and logo spacing."
+        }
+      ]
+    }
+  ]
+}

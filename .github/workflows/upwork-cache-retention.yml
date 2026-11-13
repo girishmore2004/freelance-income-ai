@@ -1,0 +1,33 @@
+name: Upwork API cache retention
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  expire-upwork-listings:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements-retention.txt
+      - name: Install minimal retention dependencies
+        run: python -m pip install -r backend/requirements-retention.txt
+      - name: Redact expired Upwork listing cache
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "Missing PRODUCTION_DATABASE_URL repository secret" >&2
+            exit 1
+          fi
+          python -m app.retention_cleanup

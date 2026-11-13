@@ -1,0 +1,133 @@
+{
+  "dataset_name": "Freelance Income AI synthetic grounding smoke set",
+  "dataset_version": "1.0",
+  "labeling": "Synthetic examples for test harness validation; replace/add human-reviewed production examples before relying on aggregate scores.",
+  "cases": [
+    {
+      "case_id": "synthetic-portfolio-001",
+      "claims": [
+        {
+          "claim": "Built a React dashboard for a logistics client.",
+          "cited_evidence_ids": [
+            "p1"
+          ],
+          "evidence": [
+            {
+              "id": "p1",
+              "text": "Designed and built a React dashboard for a logistics client to monitor deliveries."
+            }
+          ],
+          "expected_supported": true
+        },
+        {
+          "claim": "Built a mobile banking application.",
+          "cited_evidence_ids": [
+            "p1"
+          ],
+          "evidence": [
+            {
+              "id": "p1",
+              "text": "Designed and built a React dashboard for a logistics client to monitor deliveries."
+            }
+          ],
+          "expected_supported": false
+        }
+      ]
+    },
+    {
+      "case_id": "synthetic-project-002",
+      "claims": [
+        {
+          "claim": "Reduced invoice processing time by 40 percent.",
+          "cited_evidence_ids": [
+            "p2"
+          ],
+          "evidence": [
+            {
+              "id": "p2",
+              "text": "Automated invoice processing and reduced manual processing time by 40 percent."
+            }
+          ],
+          "expected_supported": true
+        },
+        {
+          "claim": "Reduced invoice processing time by 90 percent.",
+          "cited_evidence_ids": [
+            "p2"
+          ],
+          "evidence": [
+            {
+              "id": "p2",
+              "text": "Automated invoice processing and reduced manual processing time by 40 percent."
+            }
+          ],
+          "expected_supported": false
+        }
+      ]
+    },
+    {
+      "case_id": "synthetic-scope-003",
+      "claims": [
+        {
+          "claim": "The project does not include payment processing.",
+          "cited_evidence_ids": [
+            "p3"
+          ],
+          "evidence": [
+            {
+              "id": "p3",
+              "text": "The project scope explicitly excludes payment processing and money movement."
+            }
+          ],
+          "expected_supported": true
+        },
+        {
+          "claim": "The project includes payment processing.",
+          "cited_evidence_ids": [
+            "p3"
+          ],
+          "evidence": [
+            {
+              "id": "p3",
+              "text": "The project scope explicitly excludes payment processing and money movement."
+            }
+          ],
+          "expected_supported": false
+        }
+      ]
+    },
+    {
+      "case_id": "synthetic-citation-004",
+      "claims": [
+        {
+          "claim": "Implemented a FastAPI backend with PostgreSQL.",
+          "cited_evidence_ids": [
+            "p4"
+          ],
+          "evidence": [
+            {
+              "id": "p4",
+              "text": "Implemented a FastAPI backend backed by PostgreSQL with SQLAlchemy migrations."
+            }
+          ],
+          "expected_supported": true
+        },
+        {
+          "claim": "Implemented a Django backend with MongoDB.",
+          "cited_evidence_ids": [
+            "p4"
+          ],
+          "evidence": [
+            {
+              "id": "p4",
+              "text": "Implemented a FastAPI backend backed by PostgreSQL with SQLAlchemy migrations."
+            }
+          ],
+          "expected_supported": false
+        }
+      ]
+    }
+  ],
+  "review_status": "synthetic",
+  "benchmark_scope": "Smoke-test fixture only. Do not use its score as a production quality gate."
+}

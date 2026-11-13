@@ -1,0 +1,60 @@
+name: Staging load smoke test
+
+on:
+  workflow_dispatch:
+    inputs:
+      staging_base_url:
+        description: "HTTPS staging API base URL (must be a staging host)"
+        required: true
+        type: string
+      confirm_staging:
+        description: "Confirm this is an isolated staging environment"
+        required: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  k6-smoke:
+    if: ${{ inputs.confirm_staging == true }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate staging target
+        env:
+          TARGET: ${{ inputs.staging_base_url }}
+        run: |
+          python - <<'PY'
+          import os
+          from urllib.parse import urlparse
+          target = os.environ["TARGET"].strip()
+          parsed = urlparse(target)
+          if parsed.scheme != "https" or not parsed.hostname:
+              raise SystemExit("Only a valid HTTPS staging URL is permitted.")
+          host = parsed.hostname.lower()
+          if not any(marker in host for marker in ("staging", "stage", "stg")):
+              raise SystemExit("Target hostname must clearly identify a staging environment.")
+          if parsed.username or parsed.password:
+              raise SystemExit("Do not embed credentials in the staging URL.")
+          print("Staging target accepted:", host)
+          PY
+      - name: Run k6 smoke test
+        env:
+          API_BASE_URL: ${{ inputs.staging_base_url }}
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/work" \
+            -w /work \
+            -e API_BASE_URL \
+            grafana/k6:latest \
+            run ops/load/k6_smoke.js \
+            --summary-export=ops/load/k6-summary.json
+      - name: Upload load-test summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: staging-k6-summary
+          path: ops/load/k6-summary.json
+          if-no-files-found: ignore
+          retention-days: 14

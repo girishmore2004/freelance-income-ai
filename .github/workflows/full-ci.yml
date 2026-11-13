@@ -1,0 +1,160 @@
+name: Full CI
+on:
+  push:
+  pull_request:
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: fia
+          POSTGRES_PASSWORD: fia_test_password
+          POSTGRES_DB: fia_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U fia -d fia_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgresql+psycopg://fia:fia_test_password@localhost:5432/fia_test
+      TEST_REDIS_URL: redis://localhost:6379/15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r backend/requirements.txt
+      - name: Validate production configuration policy
+        working-directory: backend
+        env:
+          ENVIRONMENT: production
+          SECRET_KEY: ci-only-random-secret-value-with-more-than-32-characters
+          DATABASE_URL: postgresql+psycopg://fia:fia_test_password@localhost:5432/fia_test
+          REDIS_URL: redis://localhost:6379/15
+          OLLAMA_BASE_URL: https://ollama.example.test
+          FRONTEND_URL: https://app.example.test
+          CORS_ORIGINS: https://app.example.test
+          PUBLIC_REGISTRATION: "false"
+        run: python scripts/production_preflight.py
+      - name: Validate migration chain against PostgreSQL + pgvector
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+psycopg://fia:fia_test_password@localhost:5432/fia_test
+        run: alembic upgrade head
+      - name: Run backend unit and integration tests
+        working-directory: backend
+        env:
+          REDIS_URL: ${{ env.TEST_REDIS_URL }}
+          TEST_REDIS_URL: ${{ env.TEST_REDIS_URL }}
+        run: pytest -q
+      - name: Run RAG benchmark structural and smoke evaluation
+        working-directory: backend
+        run: python scripts/evaluate_rag_grounding.py --dataset evaluation/grounding_cases.json --output evaluation/smoke_report.json
+      - name: Run retrieval ranking benchmark
+        working-directory: backend
+        run: python scripts/evaluate_retrieval.py --dataset evaluation/retrieval_cases.json --k 5 --output evaluation/retrieval_smoke_report.json
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Validate frontend package metadata
+        run: node -e "JSON.parse(require('fs').readFileSync('frontend/package.json', 'utf8'))"
+      - run: cd frontend && npm install --no-audit --no-fund
+      - name: Validate production API origin
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_URL: https://api.example.test
+        run: npm run check:production
+      - run: cd frontend && npm run typecheck
+      - name: Build frontend with production API configuration
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_URL: https://api.example.test
+        run: npm run build
+
+  frontend-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: cd frontend && npm install --no-audit --no-fund
+      - run: cd frontend && npx playwright install --with-deps chromium
+      - name: Run browser regression suite
+        working-directory: frontend
+        env:
+          CI: "true"
+        run: npm run test:e2e
+
+  dependency-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --upgrade pip pip-audit
+      - name: Audit Python dependencies
+        run: |
+          mkdir -p security-reports
+          pip-audit -r backend/requirements.txt --format json --output security-reports/pip-audit.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: cd frontend && npm install --no-audit --no-fund
+      - name: Audit production npm dependencies
+        working-directory: frontend
+        run: |
+          mkdir -p ../security-reports
+          npm audit --omit=dev --json > ../security-reports/npm-audit.json || audit_status=$?
+          if [ "${audit_status:-0}" -ne 0 ]; then
+            echo "npm audit reported findings (or an audit execution error); inspect the uploaded JSON report."
+            exit "$audit_status"
+          fi
+      - name: Upload dependency audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-audit-reports
+          path: security-reports/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  release-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test release ZIP exclusion and integrity logic
+        run: python -m unittest discover -s ops/tests -v
+      - name: Build and verify release archive
+        run: python ops/package_release.py --output /tmp/freelance-income-ai-release.zip
+      - name: Upload verified source archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: freelance-income-ai-source-release
+          path: /tmp/freelance-income-ai-release.zip
+          if-no-files-found: error
+          retention-days: 14

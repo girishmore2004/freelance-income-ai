@@ -1,0 +1,69 @@
+{
+  "evaluated_queries": 3,
+  "hit_rate_at_k": 1.0,
+  "precision_at_k": 0.2,
+  "precision_among_returned": 1.0,
+  "recall_at_k": 1.0,
+  "mrr_at_k": 1.0,
+  "ndcg_at_k": 1.0,
+  "k": 5,
+  "metric_scope": "Ranking metrics against supplied relevant chunk IDs; label quality determines validity.",
+  "details": [
+    {
+      "case_id": "react-dashboard",
+      "retrieved_chunk_ids": [
+        "chunk-react"
+      ],
+      "relevant_chunk_ids": [
+        "chunk-react"
+      ],
+      "first_relevant_rank": 1,
+      "hit": true,
+      "precision_at_k": 0.2,
+      "precision_among_returned": 1.0,
+      "returned_count": 1,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_k": 1.0
+    },
+    {
+      "case_id": "python-automation",
+      "retrieved_chunk_ids": [
+        "chunk-python"
+      ],
+      "relevant_chunk_ids": [
+        "chunk-python"
+      ],
+      "first_relevant_rank": 1,
+      "hit": true,
+      "precision_at_k": 0.2,
+      "precision_among_returned": 1.0,
+      "returned_count": 1,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_k": 1.0
+    },
+    {
+      "case_id": "brand-guidelines",
+      "retrieved_chunk_ids": [
+        "chunk-brand"
+      ],
+      "relevant_chunk_ids": [
+        "chunk-brand"
+      ],
+      "first_relevant_rank": 1,
+      "hit": true,
+      "precision_at_k": 0.2,
+      "precision_among_returned": 1.0,
+      "returned_count": 1,
+      "recall_at_k": 1.0,
+      "reciprocal_rank": 1.0,
+      "ndcg_at_k": 1.0
+    }
+  ],
+  "valid": true,
+  "dataset_name": "Synthetic portfolio retrieval smoke benchmark",
+  "dataset_version": "1.0",
+  "review_status": "synthetic",
+  "production_quality_gate": false
+}\n
