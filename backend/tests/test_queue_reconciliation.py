@@ -56,6 +56,7 @@ def make_run(
     run_id="run-1",
     user_id="user-1",
     rq_job_id="job-1",
+    workflow_type="business_review",
     status="queued",
     created_minutes_ago=1,
     started_minutes_ago=None,
@@ -69,16 +70,19 @@ def make_run(
     return SimpleNamespace(
         id=run_id,
         user_id=user_id,
+        workflow_type=workflow_type,
         rq_job_id=rq_job_id,
         status=status,
         current_step="queued",
+        state_json="{}",
+        result_json="{}",
+        error_message="",
+        attempt_count=0,
+        max_attempts=3,
         created_at=now - timedelta(minutes=created_minutes_ago),
         started_at=started_at,
         updated_at=now,
         finished_at=None,
-        attempt_count=0,
-        max_attempts=3,
-        error_message="",
     )
 
 
