@@ -37,15 +37,23 @@ def _out(run):
 
 
 
+
 def _enqueue(run, user_id, db):
-    next_attempt = int(run.attempt_count or 0) + 1
+    """
+    Submit one deterministic RQ job per workflow attempt and persist
+    its queue ID for future recovery and diagnostics.
+    """
+    attempt_number = int(run.attempt_count or 0) + 1
     deterministic_job_id = (
-        f"agent-workflow-{run.id}-attempt-{next_attempt}"
+        f"agent-workflow-{run.id}-attempt-{attempt_number}"
     )
 
+    submitted = False
+
     try:
-        job = enqueue_once(
-            get_queue(),
+        queue = get_queue()
+
+        job = queue.enqueue(
             "app.agent_workflow_engine.run_agent_workflow",
             run.id,
             user_id,
@@ -54,7 +62,9 @@ def _enqueue(run, user_id, db):
             result_ttl=86400,
             failure_ttl=604800,
         )
+        submitted = True
 
+        run.rq_job_id = job.id
         run.status = "queued"
         run.current_step = "queued"
         run.error_message = ""
@@ -69,34 +79,49 @@ def _enqueue(run, user_id, db):
             "workflow_id": run.id,
             "status": "queued",
             "queue_job_id": job.id,
+            "attempt_number": attempt_number,
         }
 
     except Exception as exc:
         db.rollback()
 
-        # Re-read the record after rollback before recording the failure.
-        persisted_run = db.scalar(
-            select(AgentWorkflowRun).where(
-                AgentWorkflowRun.id == run.id,
-                AgentWorkflowRun.user_id == user_id,
+        if not submitted:
+            # Queue submission itself failed. Persist a recoverable
+            # failure state so the user can explicitly retry.
+            persisted_run = db.scalar(
+                select(AgentWorkflowRun).where(
+                    AgentWorkflowRun.id == run.id,
+                    AgentWorkflowRun.user_id == user_id,
+                ).with_for_update()
             )
-        )
 
-        if persisted_run and persisted_run.status == "queued":
-            persisted_run.status = "failed"
-            persisted_run.current_step = "queue_failed"
-            persisted_run.error_message = (
-                "Workflow queue unavailable. Check REDIS_URL "
-                "and the RQ worker."
-            )
-            persisted_run.finished_at = datetime.now(timezone.utc)
-            persisted_run.updated_at = datetime.now(timezone.utc)
-            db.commit()
+            if persisted_run:
+                persisted_run.status = "failed"
+                persisted_run.current_step = "queue_failed"
+                persisted_run.error_message = (
+                    "Workflow queue unavailable. Check REDIS_URL "
+                    "and the RQ worker."
+                )
+                persisted_run.finished_at = datetime.now(timezone.utc)
+                persisted_run.updated_at = datetime.now(timezone.utc)
+                db.commit()
 
+            raise HTTPException(
+                503,
+                "Workflow queue unavailable. Check REDIS_URL and the RQ worker.",
+            ) from exc
+
+        # Redis accepted the job, but the database update did not
+        # complete. Do not mark the workflow failed: the worker may
+        # already be able to execute it. Recovery can use the
+        # deterministic job ID to locate the submitted RQ job.
         raise HTTPException(
             503,
-            "Workflow queue unavailable. Check REDIS_URL and the RQ worker.",
+            "The workflow was submitted but its queue record could not "
+            "be confirmed in the database. Check workflow status before "
+            "retrying.",
         ) from exc
+
 
 
 
