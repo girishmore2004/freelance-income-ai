@@ -63,9 +63,18 @@ def make_run(
 ):
     now = datetime.now(timezone.utc)
 
+    created_at = now - timedelta(minutes=created_minutes_ago)
+
     started_at = None
     if started_minutes_ago is not None:
         started_at = now - timedelta(minutes=started_minutes_ago)
+
+    # The reconciliation service measures staleness from updated_at.
+    # Simulate an old update for stale-workflow tests.
+    if status == "running" and started_minutes_ago is not None:
+        updated_at = started_at
+    else:
+        updated_at = created_at
 
     return SimpleNamespace(
         id=run_id,
@@ -79,9 +88,9 @@ def make_run(
         error_message="",
         attempt_count=0,
         max_attempts=3,
-        created_at=now - timedelta(minutes=created_minutes_ago),
+        created_at=created_at,
         started_at=started_at,
-        updated_at=now,
+        updated_at=updated_at,
         finished_at=None,
     )
 
