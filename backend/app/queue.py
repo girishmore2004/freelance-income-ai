@@ -19,7 +19,10 @@ REDIS_HEALTH_CHECK_INTERVAL_SECONDS = 30
 
 @lru_cache(maxsize=16)
 def _get_queue_for_url(redis_url: str) -> Queue:
-    """Create and cache an RQ queue for a specific Redis URL."""
+    """Create and cache an RQ queue for a Redis URL.
+
+    Failed connections are closed and are never cached.
+    """
 
     if not isinstance(redis_url, str) or not redis_url.strip():
         raise RuntimeError(
@@ -38,19 +41,23 @@ def _get_queue_for_url(redis_url: str) -> Queue:
     try:
         connection.ping()
 
-        return Queue(
+        queue = Queue(
             QUEUE_NAME,
             connection=connection,
             default_timeout=DEFAULT_JOB_TIMEOUT,
         )
 
-    except Exception:
+        return queue
+
+    except Exception as exc:
         try:
             connection.close()
         except Exception:
             pass
 
-        raise
+        raise RuntimeError(
+            "Unable to establish Redis connection for the background queue"
+        ) from exc
 
 
 def get_queue() -> Queue:
@@ -67,9 +74,6 @@ def get_queue() -> Queue:
 
 
 def reset_queue_cache() -> None:
-    """Clear cached queue references.
+    """Clear cached queue references for tests or configuration changes."""
 
-    Use in tests or controlled configuration changes, not during
-    normal worker execution.
-    """
     _get_queue_for_url.cache_clear()
