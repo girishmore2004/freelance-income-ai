@@ -16,5 +16,13 @@
       "binding": "HYPERDRIVE",
       "id": "1875e95a677743fd839e89bc7836e9e7"
     }
-  ]
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "FREELANCE_JOBS",
+        "queue": "freelance-income-ai-jobs"
+      }
+    ]
+  }
 }
