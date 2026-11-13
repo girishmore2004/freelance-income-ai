@@ -13,9 +13,7 @@ from app.core import settings
 
 
 if not settings.redis_url:
-    raise SystemExit(
-        "REDIS_URL must be configured before starting the worker"
-    )
+    raise SystemExit("REDIS_URL must be configured before starting the worker")
 
 
 connection = Redis.from_url(
@@ -34,20 +32,14 @@ except Exception as exc:
     ) from exc
 
 
-# Unique key for every worker process and host.
-HEARTBEAT_KEY = (
-    f"freelance-income-ai:worker:heartbeat:"
-    f"{socket.gethostname()}:{os.getpid()}"
-)
-
+HEARTBEAT_KEY = f"freelance-income-ai:worker:heartbeat:{socket.gethostname()}:{os.getpid()}"
 HEARTBEAT_TTL_SECONDS = 90
-HEARTBEAT_INTERVAL_SECONDS = 25
 
 stop_heartbeat = threading.Event()
 
 
 def publish_heartbeat():
-    """Publish an expiring heartbeat while the worker is alive."""
+    """Publish an expiring heartbeat while this worker process is alive."""
 
     payload = json.dumps(
         {
@@ -61,52 +53,40 @@ def publish_heartbeat():
 
     while not stop_heartbeat.is_set():
         try:
-            connection.set(
-                HEARTBEAT_KEY,
-                payload,
-                ex=HEARTBEAT_TTL_SECONDS,
-            )
+            connection.set(HEARTBEAT_KEY, payload, ex=HEARTBEAT_TTL_SECONDS)
         except Exception:
             # Diagnostics will report a stale or missing heartbeat.
             pass
 
-        stop_heartbeat.wait(HEARTBEAT_INTERVAL_SECONDS)
+        stop_heartbeat.wait(25)
 
 
-def main():
-    """Start the RQ worker and manage its heartbeat lifecycle."""
+heartbeat_thread = threading.Thread(
+    target=publish_heartbeat,
+    name="worker-heartbeat",
+    daemon=True,
+)
 
-    heartbeat_thread = threading.Thread(
-        target=publish_heartbeat,
-        name="worker-heartbeat",
-        daemon=True,
+heartbeat_thread.start()
+
+queues = [
+    Queue(
+        "freelance-income-ai",
+        connection=connection,
     )
+]
 
-    heartbeat_thread.start()
+try:
+    Worker(
+        queues,
+        connection=connection,
+    ).work(logging_level="INFO")
 
-    queues = [
-        Queue(
-            "freelance-income-ai",
-            connection=connection,
-        )
-    ]
+finally:
+    stop_heartbeat.set()
+    heartbeat_thread.join(timeout=2)
 
     try:
-        Worker(
-            queues,
-            connection=connection,
-        ).work(logging_level="INFO")
-
-    finally:
-        stop_heartbeat.set()
-        heartbeat_thread.join(timeout=2)
-
-        try:
-            connection.delete(HEARTBEAT_KEY)
-        except Exception:
-            # Redis may already be unavailable during shutdown.
-            pass
-
-
-if __name__ == "__main__":
-    main()
+        connection.delete(HEARTBEAT_KEY)
+    except Exception:
+        pass
