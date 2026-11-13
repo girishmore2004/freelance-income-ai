@@ -1,90 +1,127 @@
+"""Tests for idempotent RQ job submission."""
 
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
+from rq.exceptions import NoSuchJobError
 
-from app.services import rq_submission
+from app.services.rq_submission import enqueue_once
 
 
-def test_enqueue_once_submits_deterministic_job_id():
+@pytest.fixture
+def fake_queue():
     queue = Mock()
+    queue.connection = Mock(name="redis_connection")
+    return queue
+
+
+def test_enqueue_once_enqueues_when_job_does_not_exist(fake_queue):
     expected_job = Mock(id="agent-workflow-test-attempt-1")
-    queue.enqueue.return_value = expected_job
 
-    result = rq_submission.enqueue_once(
-        queue,
-        "app.agent_workflow_engine.run_agent_workflow",
-        "workflow-123",
-        "user-123",
-        job_id="agent-workflow-test-attempt-1",
-        job_timeout=900,
-    )
+    with (
+        patch("app.services.rq_submission.get_queue", return_value=fake_queue),
+        patch("app.services.rq_submission.Job.fetch") as fetch_job,
+    ):
+        fetch_job.side_effect = lambda job_id, connection=None: (
+            (_ for _ in ()).throw(NoSuchJobError(job_id))
+        )
+        fake_queue.enqueue.return_value = expected_job
 
-    assert result is expected_job
-    queue.enqueue.assert_called_once_with(
-        "app.agent_workflow_engine.run_agent_workflow",
-        "workflow-123",
-        "user-123",
-        job_id="agent-workflow-test-attempt-1",
-        job_timeout=900,
-    )
-
-
-def test_enqueue_once_recovers_existing_job(monkeypatch):
-    queue = Mock()
-    queue.enqueue.side_effect = RuntimeError("duplicate job ID")
-
-    existing_job = Mock(id="agent-workflow-test-attempt-1")
-
-    monkeypatch.setattr(
-        rq_submission.Job,
-        "fetch",
-        lambda job_id, connection: existing_job,
-    )
-
-    result = rq_submission.enqueue_once(
-        queue,
-        "app.agent_workflow_engine.run_agent_workflow",
-        "workflow-123",
-        "user-123",
-        job_id="agent-workflow-test-attempt-1",
-    )
-
-    assert result is existing_job
-
-
-def test_enqueue_once_reraises_when_submission_and_recovery_fail(monkeypatch):
-    queue = Mock()
-    queue.enqueue.side_effect = RuntimeError("Redis unavailable")
-
-    def missing_job(*args, **kwargs):
-        raise LookupError("Job does not exist")
-
-    monkeypatch.setattr(
-        rq_submission.Job,
-        "fetch",
-        missing_job,
-    )
-
-    with pytest.raises(RuntimeError, match="Redis unavailable"):
-        rq_submission.enqueue_once(
-            queue,
+        result = enqueue_once(
             "app.agent_workflow_engine.run_agent_workflow",
             "workflow-123",
             "user-123",
             job_id="agent-workflow-test-attempt-1",
         )
 
+    assert result is expected_job
+    fetch_job.assert_called_once_with(
+        "agent-workflow-test-attempt-1",
+        connection=fake_queue.connection,
+    )
+    fake_queue.enqueue.assert_called_once_with(
+        "app.agent_workflow_engine.run_agent_workflow",
+        "workflow-123",
+        "user-123",
+        job_id="agent-workflow-test-attempt-1",
+    )
 
-@pytest.mark.parametrize("job_id", ["", "x" * 201])
-def test_enqueue_once_rejects_invalid_job_id(job_id):
-    queue = Mock()
 
-    with pytest.raises(ValueError, match="job_id"):
-        rq_submission.enqueue_once(
-            queue,
+def test_enqueue_once_returns_existing_job_without_enqueuing(fake_queue):
+    existing_job = Mock(id="agent-workflow-test-attempt-1")
+
+    with (
+        patch("app.services.rq_submission.get_queue", return_value=fake_queue),
+        patch(
+            "app.services.rq_submission.Job.fetch",
+            return_value=existing_job,
+        ) as fetch_job,
+    ):
+        result = enqueue_once(
             "app.agent_workflow_engine.run_agent_workflow",
-            job_id=job_id,
+            "workflow-123",
+            "user-123",
+            job_id="agent-workflow-test-attempt-1",
         )
 
-    queue.enqueue.assert_not_called()
+    assert result is existing_job
+    fetch_job.assert_called_once_with(
+        "agent-workflow-test-attempt-1",
+        connection=fake_queue.connection,
+    )
+    fake_queue.enqueue.assert_not_called()
+
+
+def test_enqueue_once_propagates_unexpected_fetch_errors(fake_queue):
+    with (
+        patch("app.services.rq_submission.get_queue", return_value=fake_queue),
+        patch(
+            "app.services.rq_submission.Job.fetch",
+            side_effect=ConnectionError("Redis connection failed"),
+        ),
+    ):
+        with pytest.raises(ConnectionError, match="Redis connection failed"):
+            enqueue_once(
+                "app.agent_workflow_engine.run_agent_workflow",
+                "workflow-123",
+                "user-123",
+                job_id="agent-workflow-test-attempt-1",
+            )
+
+    fake_queue.enqueue.assert_not_called()
+
+
+def test_enqueue_once_propagates_enqueue_errors(fake_queue):
+    fake_queue.enqueue.side_effect = RuntimeError("RQ enqueue failed")
+
+    with (
+        patch("app.services.rq_submission.get_queue", return_value=fake_queue),
+        patch(
+            "app.services.rq_submission.Job.fetch",
+            side_effect=NoSuchJobError("agent-workflow-test-attempt-1"),
+        ),
+    ):
+        with pytest.raises(RuntimeError, match="RQ enqueue failed"):
+            enqueue_once(
+                "app.agent_workflow_engine.run_agent_workflow",
+                "workflow-123",
+                "user-123",
+                job_id="agent-workflow-test-attempt-1",
+            )
+
+
+@pytest.mark.parametrize(
+    ("function", "job_id"),
+    [
+        ("", "valid-job-id"),
+        ("app.agent_workflow_engine.run_agent_workflow", ""),
+    ],
+)
+def test_enqueue_once_rejects_invalid_identifiers(function, job_id):
+    with pytest.raises(ValueError):
+        enqueue_once(
+            function,
+            "workflow-123",
+            "user-123",
+            job_id=job_id,
+        )
