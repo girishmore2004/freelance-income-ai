@@ -24,24 +24,24 @@ class FakeQueue:
 
 class FakeScalarResult:
     def __init__(self, rows):
-        self.rows = rows
+        self.rows = list(rows)
 
     def all(self):
         return list(self.rows)
 
 
 class FakeDatabase:
-    """Small SQLAlchemy Session substitute for service unit tests."""
+    """Minimal SQLAlchemy Session test double."""
 
     def __init__(self, rows):
-        self.rows = rows
+        self.rows = list(rows)
         self.last_statement = None
 
     def scalars(self, statement):
         self.last_statement = statement
+
         rows = list(self.rows)
 
-        # Respect SQLAlchemy's LIMIT clause when one is present.
         limit_clause = getattr(statement, "_limit_clause", None)
         limit_value = getattr(limit_clause, "value", None)
 
@@ -94,19 +94,25 @@ def fake_queue(monkeypatch):
 
 
 def get_findings(report):
+    """Return the actual finding records produced by the service."""
     assert isinstance(report, dict)
-    assert "findings" in report
+    assert isinstance(report.get("findings"), list)
     return report["findings"]
 
 
-def get_issue_types(report):
+def get_finding_names(report):
+    """Extract the service's documented 'finding' field."""
     return {
-        item.get("issue") or item.get("classification") or item.get("type")
+        item["finding"]
         for item in get_findings(report)
+        if item.get("finding")
     }
 
 
-def test_missing_rq_job_is_classified_as_missing(monkeypatch, fake_queue):
+def test_missing_rq_job_is_classified_as_missing(
+    monkeypatch,
+    fake_queue,
+):
     db = FakeDatabase([make_run(rq_job_id="missing-job")])
 
     def missing_job(job_id, connection=None):
@@ -116,7 +122,7 @@ def test_missing_rq_job_is_classified_as_missing(monkeypatch, fake_queue):
 
     report = service.inspect_agent_workflows(db, user_id="user-1")
 
-    assert "queue_missing" in get_issue_types(report)
+    assert "queue_missing" in get_finding_names(report)
 
 
 def test_redis_failure_is_not_classified_as_missing(
@@ -131,13 +137,10 @@ def test_redis_failure_is_not_classified_as_missing(
     monkeypatch.setattr(service.Job, "fetch", redis_failure)
 
     report = service.inspect_agent_workflows(db, user_id="user-1")
-    issue_types = get_issue_types(report)
+    findings = get_finding_names(report)
 
-    assert "queue_missing" not in issue_types
-    assert (
-        "inspection_failed" in issue_types
-        or "unknown" in issue_types
-    )
+    assert "queue_missing" not in findings
+    assert "inspection_failed" in findings
 
 
 def test_existing_queued_job_is_not_reported_as_missing(
@@ -154,7 +157,7 @@ def test_existing_queued_job_is_not_reported_as_missing(
 
     report = service.inspect_agent_workflows(db, user_id="user-1")
 
-    assert "queue_missing" not in get_issue_types(report)
+    assert "queue_missing" not in get_finding_names(report)
 
 
 def test_running_workflow_with_missing_job_is_reported(
@@ -177,13 +180,8 @@ def test_running_workflow_with_missing_job_is_reported(
     monkeypatch.setattr(service.Job, "fetch", missing_job)
 
     report = service.inspect_agent_workflows(db, user_id="user-1")
-    issue_types = get_issue_types(report)
 
-    assert (
-        "running_job_missing" in issue_types
-        or "queue_missing" in issue_types
-        or "running_stale" in issue_types
-    )
+    assert "running_job_missing" in get_finding_names(report)
 
 
 def test_workflow_without_rq_job_id_is_reported_as_untracked(
@@ -193,10 +191,13 @@ def test_workflow_without_rq_job_id_is_reported_as_untracked(
 
     report = service.inspect_agent_workflows(db, user_id="user-1")
 
-    assert "untracked" in get_issue_types(report)
+    assert "untracked" in get_finding_names(report)
 
 
-def test_stale_queued_workflow_is_detected(monkeypatch, fake_queue):
+def test_stale_queued_workflow_is_detected(
+    monkeypatch,
+    fake_queue,
+):
     db = FakeDatabase(
         [
             make_run(
@@ -219,15 +220,13 @@ def test_stale_queued_workflow_is_detected(monkeypatch, fake_queue):
         stale_after_minutes=20,
     )
 
-    issue_types = get_issue_types(report)
-
-    assert (
-        "queued_too_long" in issue_types
-        or "stale_queued" in issue_types
-    )
+    assert "queued_too_long" in get_finding_names(report)
 
 
-def test_stale_running_workflow_is_detected(monkeypatch, fake_queue):
+def test_stale_running_workflow_is_detected(
+    monkeypatch,
+    fake_queue,
+):
     db = FakeDatabase(
         [
             make_run(
@@ -250,12 +249,7 @@ def test_stale_running_workflow_is_detected(monkeypatch, fake_queue):
         stale_after_minutes=20,
     )
 
-    issue_types = get_issue_types(report)
-
-    assert (
-        "running_stale" in issue_types
-        or "stale_running" in issue_types
-    )
+    assert "running_stale" in get_finding_names(report)
 
 
 def test_inspection_does_not_mutate_workflow_records(
@@ -275,14 +269,19 @@ def test_inspection_does_not_mutate_workflow_records(
         lambda job_id, connection=None: FakeRQJob("queued"),
     )
 
-    service.inspect_agent_workflows(db, user_id="user-1")
+    report = service.inspect_agent_workflows(db, user_id="user-1")
 
+    assert isinstance(report, dict)
+    assert report.get("mutations_performed") is False
     assert run.status == original_status
     assert run.attempt_count == original_attempt_count
     assert run.error_message == original_error_message
 
 
-def test_inspection_respects_requested_limit(monkeypatch, fake_queue):
+def test_inspection_respects_requested_limit(
+    monkeypatch,
+    fake_queue,
+):
     rows = [
         make_run(
             run_id=f"run-{index}",
