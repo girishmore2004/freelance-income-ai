@@ -3,7 +3,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = "0032_task_dependencies"
-down_revision = "0031_calendar_availability_blocks"
+down_revision = "0031_calendar_blocks"
 branch_labels = None
 depends_on = None
 
