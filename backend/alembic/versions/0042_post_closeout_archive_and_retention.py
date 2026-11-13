@@ -2,8 +2,8 @@
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0042_post_closeout_archive_and_retention"
-down_revision = "0041_closeout_signoff_and_closure"
+revision = "0042_archive_retention"
+down_revision = "0041_closeout_signoff"
 branch_labels = None
 depends_on = None
 
