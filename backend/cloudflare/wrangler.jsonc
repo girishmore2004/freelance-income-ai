@@ -1,12 +1,9 @@
-
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "freelance-income-ai-api",
   "main": "src/main.py",
   "compatibility_date": "2026-11-13",
-  "compatibility_flags": [
-    "python_workers"
-  ],
+  "compatibility_flags": ["python_workers"],
   "workers_dev": true,
   "observability": {
     "enabled": true
