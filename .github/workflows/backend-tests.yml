@@ -1,3 +1,4 @@
+
 name: Backend tests
 
 on:
@@ -39,9 +40,15 @@ jobs:
       TEST_DATABASE_URL: postgresql+psycopg://fia:fia_test_password@localhost:5432/fia_test
       REDIS_URL: redis://localhost:6379/15
       TEST_REDIS_URL: redis://localhost:6379/15
+
       ENVIRONMENT: test
       PUBLIC_REGISTRATION: "true"
       REQUIRE_EMAIL_VERIFICATION: "false"
+
+      # CI-only thresholds. Production defaults are unchanged.
+      RATE_LIMIT_API_PER_MINUTE: "10000"
+      RATE_LIMIT_AUTH_PER_MINUTE: "10000"
+      RATE_LIMIT_AI_PER_MINUTE: "10000"
 
     steps:
       - name: Checkout repository
@@ -81,11 +88,11 @@ jobs:
 
           print("PostgreSQL and Redis are available.")
           PY
-          
+
       - name: Validate Alembic revision identifiers
         working-directory: backend
         run: python scripts/check_migration_ids.py
-        
+
       - name: Apply database migrations
         working-directory: backend
         run: alembic upgrade head
