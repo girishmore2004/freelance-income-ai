@@ -11,7 +11,7 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy import inspect
 
-revision = "0016_project_opportunity_attribution"
+revision = "0016_proj_opp_attr"
 down_revision = "0015_delivery_finance"
 branch_labels = None
 depends_on = None
