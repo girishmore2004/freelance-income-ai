@@ -2,8 +2,8 @@
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0043_archive_bundle_and_supersession"
-down_revision = "0042_post_closeout_archive_and_retention"
+revision = "0043_archive_supersession"
+down_revision = "0042_archive_retention"
 branch_labels = None
 depends_on = None
 
