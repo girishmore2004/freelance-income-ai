@@ -1,7 +1,7 @@
 """Add immutable closeout sign-offs and explicit project closure records."""
 from alembic import op
 import sqlalchemy as sa
-revision = "0041_closeout_signoff_and_closure"
+revision = "0041_closeout_signoff"
 down_revision = "0040_delivery_handover_snapshots"
 branch_labels = None
 depends_on = None
