@@ -1,6 +1,7 @@
 from pathlib import Path
 import importlib.util
-
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 from sqlalchemy import (
     Column,
     DateTime,
@@ -89,13 +90,10 @@ def test_upgrade_does_not_recreate_existing_business_tables(monkeypatch):
     create_baseline_schema(engine)
 
     with engine.begin() as connection:
-        monkeypatch.setattr(
-            migration.op,
-            "get_bind",
-            lambda: connection,
-        )
+        context = MigrationContext.configure(connection)
 
-        migration.upgrade()
+        with Operations.context(context):
+            migration.upgrade()
 
         inspector = inspect(connection)
 
