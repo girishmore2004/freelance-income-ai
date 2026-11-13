@@ -115,13 +115,13 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Validate frontend package metadata
         run: node -e "JSON.parse(require('fs').readFileSync('frontend/package.json', 'utf8'))"
 
       - name: Install frontend dependencies
-        run: cd frontend && npm install --no-audit --no-fund
+        run: cd frontend && npm ci --no-audit --no-fund
 
       - name: Validate production API origin
         working-directory: frontend
@@ -146,10 +146,10 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install frontend dependencies
-        run: cd frontend && npm install --no-audit --no-fund
+        run: cd frontend && npm ci --no-audit --no-fund
 
       - name: Install Playwright Chromium
         run: cd frontend && npx playwright install --with-deps chromium
@@ -195,10 +195,10 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install frontend dependencies
-        run: cd frontend && npm install --no-audit --no-fund
+        run: cd frontend && npm ci --no-audit --no-fund
 
       - name: Audit production npm dependencies
         id: npm-audit
