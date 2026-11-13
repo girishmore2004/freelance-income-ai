@@ -1,6 +1,7 @@
 """Redis and RQ queue connection management."""
 
-from functools import lru_cache
+import threading
+from typing import Dict
 
 from redis import Redis
 from rq import Queue
@@ -9,52 +10,67 @@ from .core import settings
 
 
 QUEUE_NAME = "freelance-income-ai"
-QUEUE_DEFAULT_TIMEOUT = 900
-REDIS_CONNECT_TIMEOUT = 5
-REDIS_SOCKET_TIMEOUT = 5
+DEFAULT_JOB_TIMEOUT = 900
+
+REDIS_CONNECT_TIMEOUT_SECONDS = 5
+REDIS_SOCKET_TIMEOUT_SECONDS = 5
+REDIS_HEALTH_CHECK_INTERVAL_SECONDS = 30
+
+_queue_cache: Dict[str, Queue] = {}
+_queue_cache_lock = threading.RLock()
 
 
-@lru_cache(maxsize=8)
 def _get_queue_for_url(redis_url: str) -> Queue:
-    """Create and cache one healthy RQ queue per Redis URL.
+    """Return a cached RQ queue for a Redis URL.
 
-    The URL is the cache key, so different Redis deployments never share
-    the same connection or Queue instance.
-
-    If the initial Redis health check fails, close the newly created
-    connection before propagating the exception.
+    A Redis connection is created and pinged before it is cached.
+    Connections are isolated by URL so different Redis configurations
+    cannot accidentally share a queue connection.
     """
     if not isinstance(redis_url, str) or not redis_url.strip():
         raise RuntimeError(
             "REDIS_URL is not configured; background queue is unavailable"
         )
 
-    connection = Redis.from_url(
-        redis_url,
-        socket_connect_timeout=REDIS_CONNECT_TIMEOUT,
-        socket_timeout=REDIS_SOCKET_TIMEOUT,
-        health_check_interval=30,
-    )
+    normalized_url = redis_url.strip()
 
-    try:
-        connection.ping()
-    except Exception:
+    with _queue_cache_lock:
+        cached_queue = _queue_cache.get(normalized_url)
+
+        if cached_queue is not None:
+            return cached_queue
+
+        connection = Redis.from_url(
+            normalized_url,
+            socket_connect_timeout=REDIS_CONNECT_TIMEOUT_SECONDS,
+            socket_timeout=REDIS_SOCKET_TIMEOUT_SECONDS,
+            health_check_interval=REDIS_HEALTH_CHECK_INTERVAL_SECONDS,
+        )
+
         try:
-            connection.close()
-        except Exception:
-            pass
-        raise
+            connection.ping()
 
-    return Queue(
-        QUEUE_NAME,
-        connection=connection,
-        default_timeout=QUEUE_DEFAULT_TIMEOUT,
-    )
+            queue = Queue(
+                QUEUE_NAME,
+                connection=connection,
+                default_timeout=DEFAULT_JOB_TIMEOUT,
+            )
+
+        except Exception:
+            try:
+                connection.close()
+            except Exception:
+                pass
+
+            raise
+
+        _queue_cache[normalized_url] = queue
+        return queue
 
 
 def get_queue() -> Queue:
-    """Return the cached, health-checked background queue."""
-    redis_url = settings.redis_url
+    """Return the application's configured background queue."""
+    redis_url = getattr(settings, "redis_url", None)
 
     if not redis_url:
         raise RuntimeError(
@@ -65,17 +81,27 @@ def get_queue() -> Queue:
 
 
 def reset_queue_cache() -> None:
-    """Clear cached queues.
+    """Close cached Redis connections and clear the queue cache.
 
-    Useful when application configuration changes and during tests.
-    Existing Redis connections are closed before the cache is cleared.
+    Intended for test isolation, application shutdown, and controlled
+    connection reconfiguration. Do not call this during normal job
+    submission while workers are using the cached connections.
     """
-    cached_queues = getattr(_get_queue_for_url, "cache_info", None)
+    with _queue_cache_lock:
+        cached_queues = list(_queue_cache.values())
+        _queue_cache.clear()
 
-    if cached_queues is None:
-        _get_queue_for_url.cache_clear()
-        return
+        closed_connections = set()
 
-    # lru_cache does not expose cached values. Clear the cache; Redis
-    # clients will be closed by their normal lifecycle/application shutdown.
-    _get_queue_for_url.cache_clear()
+        for queue in cached_queues:
+            connection = getattr(queue, "connection", None)
+
+            if connection is None or id(connection) in closed_connections:
+                continue
+
+            closed_connections.add(id(connection))
+
+            try:
+                connection.close()
+            except Exception:
+                pass
