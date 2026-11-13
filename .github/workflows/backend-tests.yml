@@ -81,7 +81,11 @@ jobs:
 
           print("PostgreSQL and Redis are available.")
           PY
-
+          
+      - name: Validate Alembic revision identifiers
+        working-directory: backend
+        run: python scripts/check_migration_ids.py
+        
       - name: Apply database migrations
         working-directory: backend
         run: alembic upgrade head
