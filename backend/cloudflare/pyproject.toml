@@ -1,0 +1,15 @@
+
+[project]
+name = "freelance-income-ai-cloudflare"
+version = "0.1.0"
+description = "Cloudflare Python Worker staging adapter for Freelance Income AI"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi",
+]
+
+[dependency-groups]
+dev = [
+    "workers-py",
+    "workers-runtime-sdk",
+]
