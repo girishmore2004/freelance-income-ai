@@ -4,7 +4,12 @@ from fastapi.testclient import TestClient
 import app.main as main
 
 client = TestClient(main.app)
+import pytest
 
+
+@pytest.fixture(autouse=True)
+def enable_registration_for_test(monkeypatch):
+    monkeypatch.setattr(main.settings, "public_registration", True)
 
 def register_user():
     email = f"tenant-v38-{uuid.uuid4().hex}@example.test"
