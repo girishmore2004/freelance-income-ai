@@ -415,7 +415,10 @@ def build_agent_workflow():
     graph = StateGraph(AgentWorkflowState)
     graph.add_node("context_loader", guard_node("context_loader", _load_context, _record_agent_failure))
     graph.add_node("matching", guard_node("matching", _matching_node, _record_agent_failure))
-    graph.add_node("research", guard_node("research", _research_node, _record_agent_failure))
+    graph.add_node(
+    "client_research",
+    guard_node("client_research", _research_node, _record_agent_failure),
+    )
     graph.add_node("delivery", guard_node("delivery", _delivery_node, _record_agent_failure))
     graph.add_node("finance", guard_node("finance", _finance_node, _record_agent_failure))
     graph.add_node("proposal_strategy", guard_node("proposal_strategy", _proposal_strategy_node, _record_agent_failure))
@@ -423,8 +426,8 @@ def build_agent_workflow():
     graph.add_node("planner", guard_node("planner", _planner_node, _record_agent_failure))
     graph.add_edge(START, "context_loader")
     graph.add_edge("context_loader", "matching")
-    graph.add_edge("matching", "research")
-    graph.add_edge("research", "delivery")
+    graph.add_edge("matching", "client_research")
+    graph.add_edge("client_research", "delivery")
     graph.add_edge("delivery", "finance")
     graph.add_edge("finance", "proposal_strategy")
     graph.add_edge("proposal_strategy", "communication")
