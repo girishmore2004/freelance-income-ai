@@ -1,3 +1,4 @@
+
 """API-level regression tests for the human-approved proposal journey.
 
 These tests use the application's configured test database and replace only the
@@ -7,6 +8,7 @@ import uuid
 
 import pytest
 from fastapi.testclient import TestClient
+
 import app.main as main
 
 
@@ -25,12 +27,13 @@ def register_user():
 
 @pytest.fixture
 def deterministic_proposal(monkeypatch):
-    async def fake_proposal_agent(profile, opportunity, proposed_price):
+    async def fake_proposal_agent(profile, opportunity, proposed_price, evidence):
         return (
             "Hello, I can deliver the requested Python automation with clear "
             "milestones, testing, documentation and handover.",
             "test_stub",
         )
+
     monkeypatch.setattr(main, "proposal_agent", fake_proposal_agent)
 
 
@@ -42,6 +45,7 @@ def create_proposal(headers):
         "currency": "INR",
     })
     assert opportunity.status_code == 200, opportunity.text
+
     proposal = client.post("/api/v1/proposals/generate", headers=headers, json={
         "opportunity_id": opportunity.json()["id"],
         "proposed_price": 18000,
@@ -51,7 +55,9 @@ def create_proposal(headers):
     return proposal.json()
 
 
-def test_editing_proposal_invalidates_old_pending_approval_and_requires_new_approval(deterministic_proposal):
+def test_editing_proposal_invalidates_old_pending_approval_and_requires_new_approval(
+    deterministic_proposal,
+):
     owner = register_user()
     proposal = create_proposal(owner)
 
@@ -87,12 +93,14 @@ def test_editing_proposal_invalidates_old_pending_approval_and_requires_new_appr
         f"/api/v1/proposals/{proposal['id']}/request-approval", headers=owner
     )
     assert second_request.status_code == 200
+
     approved = client.post(
         f"/api/v1/approvals/{second_request.json()['id']}/decision",
         headers=owner,
         json={"decision": "approved", "note": "Reviewed the updated price and scope."},
     )
     assert approved.status_code == 200
+
     ready = client.post(
         f"/api/v1/applications/{proposal['id']}/mark-ready", headers=owner
     )
@@ -103,10 +111,12 @@ def test_editing_proposal_invalidates_old_pending_approval_and_requires_new_appr
 def test_rejected_proposal_cannot_be_marked_ready(deterministic_proposal):
     owner = register_user()
     proposal = create_proposal(owner)
+
     request = client.post(
         f"/api/v1/proposals/{proposal['id']}/request-approval", headers=owner
     )
     assert request.status_code == 200
+
     rejected = client.post(
         f"/api/v1/approvals/{request.json()['id']}/decision",
         headers=owner,
@@ -114,6 +124,7 @@ def test_rejected_proposal_cannot_be_marked_ready(deterministic_proposal):
     )
     assert rejected.status_code == 200
     assert rejected.json()["decision"] == "rejected"
+
     assert client.post(
         f"/api/v1/applications/{proposal['id']}/mark-ready", headers=owner
     ).status_code == 403
@@ -123,6 +134,7 @@ def test_proposal_and_approval_are_tenant_scoped(deterministic_proposal):
     owner = register_user()
     other = register_user()
     proposal = create_proposal(owner)
+
     approval = client.post(
         f"/api/v1/proposals/{proposal['id']}/request-approval", headers=owner
     )
@@ -144,9 +156,11 @@ def test_proposal_and_approval_are_tenant_scoped(deterministic_proposal):
     ).status_code == 404
 
 
-
-def test_workflow_resume_requires_approval_for_exact_current_proposal(deterministic_proposal, monkeypatch):
+def test_workflow_resume_requires_approval_for_exact_current_proposal(
+    deterministic_proposal, monkeypatch
+):
     from types import SimpleNamespace
+
     from app.database import SessionLocal
     from app.models import WorkflowRun
 
@@ -155,6 +169,7 @@ def test_workflow_resume_requires_approval_for_exact_current_proposal(determinis
             return SimpleNamespace(id="v30-test-queue-job")
 
     monkeypatch.setattr(main, "get_queue", lambda: FakeQueue())
+
     owner = register_user()
     proposal = create_proposal(owner)
 
@@ -179,6 +194,7 @@ def test_workflow_resume_requires_approval_for_exact_current_proposal(determinis
         f"/api/v1/proposals/{proposal['id']}/request-approval", headers=owner
     )
     assert first_approval.status_code == 200
+
     approved = client.post(
         f"/api/v1/approvals/{first_approval.json()['id']}/decision",
         headers=owner,
@@ -194,13 +210,17 @@ def test_workflow_resume_requires_approval_for_exact_current_proposal(determinis
         "proposed_price": 24000,
     })
     assert edited.status_code == 200
-    stale_resume = client.post(f"/api/v1/workflows/{workflow_id}/resume", headers=owner)
+
+    stale_resume = client.post(
+        f"/api/v1/workflows/{workflow_id}/resume", headers=owner
+    )
     assert stale_resume.status_code == 409
 
     second_approval = client.post(
         f"/api/v1/proposals/{proposal['id']}/request-approval", headers=owner
     )
     assert second_approval.status_code == 200
+
     approved_again = client.post(
         f"/api/v1/approvals/{second_approval.json()['id']}/decision",
         headers=owner,
@@ -208,7 +228,9 @@ def test_workflow_resume_requires_approval_for_exact_current_proposal(determinis
     )
     assert approved_again.status_code == 200
 
-    resumed = client.post(f"/api/v1/workflows/{workflow_id}/resume", headers=owner)
+    resumed = client.post(
+        f"/api/v1/workflows/{workflow_id}/resume", headers=owner
+    )
     assert resumed.status_code == 200
     assert resumed.json()["status"] == "completed"
     assert resumed.json()["external_submission"] == "not_performed"
