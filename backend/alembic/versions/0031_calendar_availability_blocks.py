@@ -6,7 +6,7 @@ Revises: 0030_task_commitment_planning
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0031_calendar_availability_blocks"
+revision = "0031_calendar_blocks"
 down_revision = "0030_task_commitment_planning"
 branch_labels = None
 depends_on = None
