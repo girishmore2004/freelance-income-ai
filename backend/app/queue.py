@@ -1,13 +1,21 @@
 
-"""Shared Redis/RQ queue connection management.
+"""Redis/RQ queue connection manager.
 
-The queue object is cached per REDIS_URL so API requests do not create
-and ping a new Redis connection pool on every enqueue operation.
+Features:
+- Reuses Redis connections within a backend process.
+- Preserves the existing get_queue() interface.
+- Preserves the existing RQ queue name.
+- Validates Redis connectivity when creating a connection.
+- Closes failed connections.
+- Provides an explicit cache reset for tests and shutdown.
+- Avoids exposing Redis credentials in error messages.
 
-The public get_queue() function and RQ queue name remain unchanged.
+This module remains compatible with the existing RQ worker.
+It is not a Cloudflare Queues implementation.
 """
 
-from functools import lru_cache
+import logging
+import threading
 
 from redis import Redis
 from rq import Queue
@@ -15,52 +23,71 @@ from rq import Queue
 from .core import settings
 
 
+logger = logging.getLogger(__name__)
+
 QUEUE_NAME = "freelance-income-ai"
+
 DEFAULT_JOB_TIMEOUT_SECONDS = 900
 REDIS_CONNECT_TIMEOUT_SECONDS = 5
 REDIS_SOCKET_TIMEOUT_SECONDS = 5
 REDIS_HEALTH_CHECK_INTERVAL_SECONDS = 30
 
+# One Redis client and Queue per configured Redis URL per process.
+_queue_cache: dict[str, Queue] = {}
+_cache_lock = threading.RLock()
 
-@lru_cache(maxsize=4)
-def _get_queue_for_url(redis_url: str) -> Queue:
-    """Create and cache one queue/client pair for a Redis URL."""
+
+def _create_queue(redis_url: str) -> Queue:
+    """Create and validate a Redis connection and its RQ queue."""
 
     connection = Redis.from_url(
         redis_url,
         socket_connect_timeout=REDIS_CONNECT_TIMEOUT_SECONDS,
         socket_timeout=REDIS_SOCKET_TIMEOUT_SECONDS,
         health_check_interval=REDIS_HEALTH_CHECK_INTERVAL_SECONDS,
+        retry_on_timeout=True,
     )
 
     try:
         connection.ping()
+
+        return Queue(
+            QUEUE_NAME,
+            connection=connection,
+            default_timeout=DEFAULT_JOB_TIMEOUT_SECONDS,
+        )
+
     except Exception as exc:
-        # Do not include the Redis URL: it may contain credentials.
         try:
             connection.close()
         except Exception:
-            pass
+            logger.warning(
+                "Failed to close Redis connection after initialization error."
+            )
+
+        logger.error(
+            "Unable to initialize the background queue connection."
+        )
 
         raise RuntimeError(
             "Unable to connect to the configured Redis service. "
-            "Check REDIS_URL and Redis availability."
+            "Verify REDIS_URL and Redis availability."
         ) from exc
-
-    return Queue(
-        QUEUE_NAME,
-        connection=connection,
-        default_timeout=DEFAULT_JOB_TIMEOUT_SECONDS,
-    )
 
 
 def get_queue() -> Queue:
     """
     Return the shared RQ queue.
 
-    The function signature is intentionally unchanged because API routes,
-    workflow services and tests already call get_queue().
+    Existing application code should continue calling:
+
+        queue = get_queue()
+        queue.enqueue(...)
+
+    The Redis connection is reused until reset_queue_cache() is called
+    or the application process exits.
     """
+
     redis_url = str(settings.redis_url or "").strip()
 
     if not redis_url:
@@ -68,18 +95,66 @@ def get_queue() -> Queue:
             "REDIS_URL is not configured; background queue is unavailable."
         )
 
-    return _get_queue_for_url(redis_url)
+    with _cache_lock:
+        cached_queue = _queue_cache.get(redis_url)
+
+        if cached_queue is not None:
+            return cached_queue
+
+        queue = _create_queue(redis_url)
+        _queue_cache[redis_url] = queue
+
+        return queue
 
 
 def reset_queue_cache() -> None:
     """
-    Close cached Redis connections and clear the process-level cache.
+    Close all cached Redis connections and clear the queue cache.
 
-    Intended for tests, controlled shutdowns and configuration reloads.
-    Do not call this after every API request.
+    Use this in tests, controlled shutdown hooks, or after deliberately
+    changing Redis configuration.
+
+    Do not call this during normal request processing.
     """
-    cached_queues = list(_get_queue_for_url.cache_info().__dict__.values())
-    # The cache itself is not exposed by functools.lru_cache. Clearing it
-    # is sufficient for normal process shutdown; Redis pools are closed
-    # by the owning process when it exits.
-    _get_queue_for_url.cache_clear()
+
+    with _cache_lock:
+        cached_queues = list(_queue_cache.values())
+        _queue_cache.clear()
+
+    for queue in cached_queues:
+        try:
+            connection = queue.connection
+            connection.close()
+        except Exception:
+            logger.warning(
+                "Unable to close a cached Redis queue connection."
+            )
+
+
+def queue_health_check() -> dict:
+    """
+    Check whether the configured queue is reachable.
+
+    Returns a safe diagnostic response without exposing Redis URLs,
+    usernames, passwords, or connection details.
+    """
+
+    try:
+        queue = get_queue()
+        queue.connection.ping()
+
+        return {
+            "available": True,
+            "queue_name": QUEUE_NAME,
+            "status": "healthy",
+        }
+
+    except Exception:
+        logger.exception("Background queue health check failed.")
+
+        return {
+            "available": False,
+            "queue_name": QUEUE_NAME,
+            "status": "unavailable",
+            "error": "Background queue is unavailable.",
+        }
