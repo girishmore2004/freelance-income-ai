@@ -1,69 +1,182 @@
 
-"""Staging API for Freelance Income AI on Cloudflare Workers.
+"""
+Freelance Income AI
+Cloudflare Python Worker - Staging API
 
-This service verifies Worker deployment and PostgreSQL connectivity
-through the configured Cloudflare Hyperdrive binding.
+Features:
+- FastAPI application
+- Cloudflare Hyperdrive integration
+- Neon PostgreSQL connectivity test
+- Cloudflare Queues producer
+- Deployment and infrastructure health checks
+
+IMPORTANT:
+This is the Cloudflare staging adapter.
+It does not replace the existing full application backend.
 """
 
 import logging
+import uuid
+
+from datetime import datetime, timezone
+from typing import Any
+
+import asyncpg
+
 from fastapi import FastAPI, HTTPException, Request
 from workers import asgi
-import asyncpg
+
+
+# ============================================================
+# LOGGING
+# ============================================================
+
+logging.basicConfig(level=logging.INFO)
 
 logger = logging.getLogger("freelance-income-ai-api")
 
+
+# ============================================================
+# APPLICATION
+# ============================================================
+
+APP_NAME = "Freelance Income AI"
+SERVICE_NAME = "freelance-income-ai-api"
+APP_VERSION = "0.3.0"
+
 app = FastAPI(
-    title="Freelance Income AI API",
-    description="Backend staging and infrastructure verification API",
-    version="0.2.0",
+    title=APP_NAME,
+    description="Cloudflare backend staging and infrastructure API",
+    version=APP_VERSION,
 )
 
 
+# ============================================================
+# CLOUDFLARE BINDING HELPERS
+# ============================================================
+
+def get_worker_environment(request: Request) -> Any:
+    """
+    Retrieve Cloudflare Worker environment bindings.
+    """
+
+    return request.scope.get("env")
+
+
+def get_hyperdrive_binding(request: Request) -> Any:
+    """
+    Retrieve the HYPERDRIVE binding.
+    """
+
+    env = get_worker_environment(request)
+
+    if env is None:
+        return None
+
+    return getattr(env, "HYPERDRIVE", None)
+
+
+def get_queue_binding(request: Request) -> Any:
+    """
+    Retrieve the FREELANCE_JOBS queue binding.
+    """
+
+    env = get_worker_environment(request)
+
+    if env is None:
+        return None
+
+    return getattr(env, "FREELANCE_JOBS", None)
+
+
+# ============================================================
+# ROOT ENDPOINT
+# ============================================================
+
 @app.get("/")
 async def root():
+    """
+    Basic application information.
+    """
+
     return {
-        "application": "Freelance Income AI",
-        "service": "cloudflare-api-staging",
+        "application": APP_NAME,
+        "service": SERVICE_NAME,
+        "version": APP_VERSION,
         "status": "operational",
+        "environment": "staging",
         "production_ready": False,
+        "available_endpoints": [
+            "/",
+            "/health",
+            "/api/v1/deployment/check",
+            "/api/v1/health/database",
+            "/api/v1/queues/test",
+        ],
     }
 
+
+# ============================================================
+# APPLICATION HEALTH
+# ============================================================
 
 @app.get("/health")
 async def health():
+    """
+    Application-level health check.
+    """
+
     return {
         "status": "healthy",
-        "service": "freelance-income-ai-api",
+        "application": APP_NAME,
+        "service": SERVICE_NAME,
+        "version": APP_VERSION,
     }
 
 
+# ============================================================
+# DEPLOYMENT AND BINDING CHECK
+# ============================================================
+
 @app.get("/api/v1/deployment/check")
 async def deployment_check(request: Request):
-    env = request.scope.get("env")
-    hyperdrive_available = (
-        env is not None
-        and getattr(env, "HYPERDRIVE", None) is not None
-    )
+    """
+    Check whether Cloudflare infrastructure bindings exist.
+
+    This checks binding availability only.
+    It does not execute database or queue operations.
+    """
+
+    hyperdrive = get_hyperdrive_binding(request)
+    queue = get_queue_binding(request)
 
     return {
         "status": "staging",
-        "hyperdrive_binding_available": hyperdrive_available,
+        "application": APP_NAME,
+        "hyperdrive_binding_available": hyperdrive is not None,
+        "queue_binding_available": queue is not None,
         "database_query_verified": False,
-        "queue_consumer_configured": False,
+        "queue_message_published": False,
         "production_ready": False,
     }
 
 
+# ============================================================
+# POSTGRESQL / NEON DATABASE HEALTH
+# ============================================================
+
 @app.get("/api/v1/health/database")
 async def database_health(request: Request):
-    """Execute SELECT 1 through Cloudflare Hyperdrive."""
+    """
+    Verify PostgreSQL connectivity through Cloudflare Hyperdrive.
 
-    env = request.scope.get("env")
-    hyperdrive = (
-        getattr(env, "HYPERDRIVE", None)
-        if env is not None
-        else None
-    )
+    Executes:
+        SELECT 1
+
+    Never returns database credentials.
+    """
+
+    hyperdrive = get_hyperdrive_binding(request)
 
     if hyperdrive is None:
         raise HTTPException(
@@ -87,10 +200,15 @@ async def database_health(request: Request):
         result = await connection.fetchval("SELECT 1")
 
         if result != 1:
-            raise RuntimeError("Database health query returned an unexpected result")
+            raise RuntimeError(
+                "Unexpected PostgreSQL health-check result"
+            )
+
+        logger.info("PostgreSQL health check successful")
 
         return {
             "status": "healthy",
+            "application": APP_NAME,
             "database": "connected",
             "provider": "Neon PostgreSQL",
             "connection": "Cloudflare Hyperdrive",
@@ -98,18 +216,21 @@ async def database_health(request: Request):
             "query_result": result,
         }
 
-    except HTTPException:
-        raise
-
     except Exception as exc:
-        logger.exception("Hyperdrive database health check failed")
+        logger.exception(
+            "PostgreSQL Hyperdrive health check failed"
+        )
+
         raise HTTPException(
             status_code=503,
             detail={
                 "status": "unhealthy",
                 "database": "connection_failed",
                 "error_type": type(exc).__name__,
-                "message": "Database connectivity test failed. Check Cloudflare Hyperdrive settings and deployment logs.",
+                "message": (
+                    "PostgreSQL connection test failed. "
+                    "Check Hyperdrive configuration and deployment logs."
+                ),
             },
         ) from exc
 
@@ -118,7 +239,105 @@ async def database_health(request: Request):
             try:
                 await connection.close()
             except Exception:
-                logger.exception("Failed to close database connection")
+                logger.exception(
+                    "Database connection cleanup failed"
+                )
 
+
+# ============================================================
+# CLOUDFLARE QUEUE PRODUCER TEST
+# ============================================================
+
+@app.post("/api/v1/queues/test")
+async def queue_test(request: Request):
+    """
+    Publish a harmless infrastructure test message.
+
+    This endpoint verifies that the backend Worker can publish
+    messages to the freelance-income-ai-jobs queue.
+
+    It does not process financial or user-related jobs.
+    """
+
+    queue = get_queue_binding(request)
+
+    if queue is None:
+        raise HTTPException(
+            status_code=503,
+            detail="FREELANCE_JOBS queue binding is unavailable",
+        )
+
+    job_id = str(uuid.uuid4())
+
+    message = {
+        "event_id": job_id,
+        "event_type": "infrastructure.health_check",
+        "source": SERVICE_NAME,
+        "created_at": datetime.now(
+            timezone.utc
+        ).isoformat(),
+        "payload": {
+            "message": "Cloudflare Queue connectivity test",
+            "test": True,
+        },
+    }
+
+    try:
+        await queue.send(message)
+
+        logger.info(
+            "Queue test message published: %s",
+            job_id,
+        )
+
+        return {
+            "status": "published",
+            "application": APP_NAME,
+            "queue": "freelance-income-ai-jobs",
+            "job_id": job_id,
+            "message": "Test message successfully submitted",
+        }
+
+    except Exception as exc:
+        logger.exception(
+            "Cloudflare Queue publishing failed"
+        )
+
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "status": "failed",
+                "error_type": type(exc).__name__,
+                "message": "Unable to publish queue test message",
+            },
+        ) from exc
+
+
+# ============================================================
+# API INFORMATION
+# ============================================================
+
+@app.get("/api/v1/deployment/info")
+async def deployment_info():
+    """
+    Return staging deployment information.
+    """
+
+    return {
+        "application": APP_NAME,
+        "service": SERVICE_NAME,
+        "version": APP_VERSION,
+        "platform": "Cloudflare Workers",
+        "database_provider": "Neon PostgreSQL",
+        "database_connection": "Cloudflare Hyperdrive",
+        "background_queue": "Cloudflare Queues",
+        "environment": "staging",
+        "production_ready": False,
+    }
+
+
+# ============================================================
+# CLOUDFLARE ASGI ENTRYPOINT
+# ============================================================
 
 Default = asgi.entrypoint(app)
