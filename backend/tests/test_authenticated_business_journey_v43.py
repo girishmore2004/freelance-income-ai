@@ -15,7 +15,7 @@ client = TestClient(main.app)
 
 
 def _register():
-    email = f"v41-{uuid.uuid4().hex}@example.com"
+    email = f"journey-v43-{uuid.uuid4().hex}@example.com"
     response = client.post("/api/v1/auth/register", json={
         "email": email, "password": "StrongPassword123!"
     })
@@ -30,7 +30,7 @@ def test_authenticated_opportunity_to_invoice_lifecycle(monkeypatch):
         lambda profile, opportunity: {"score": 88, "breakdown": {"skills": 88}},
     )
 
-    async def fake_proposal_agent(profile, opportunity, proposed_price):
+    async def fake_proposal_agent(profile, opportunity, proposed_price, evidence):
         return (
             "Hello, I can deliver the requested API integration with tests, "
             "documentation, milestone updates and a final quality review.",
