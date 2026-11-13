@@ -11,66 +11,82 @@ const protectedPages = [
   '/clients',
 ];
 
-const API_LOGIN_PATH = '/api/v1/auth/login';
+const LOGIN_PATH = '/api/v1/auth/login';
 
-function normalizedPath(url: URL): string {
-  return url.pathname.replace(/\/+$/, '');
+function isApiRequest(url: URL): boolean {
+  return url.pathname.includes('/api/v1/');
 }
 
-async function mockLoginFailure(page: Page): Promise<void> {
-  await page.route(
-    (url) => normalizedPath(url) === API_LOGIN_PATH,
-    async (route: Route) => {
-      await route.fulfill({
-        status: 401,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          detail: 'Invalid email or password',
-        }),
-      });
-    }
-  );
+function isLoginRequest(url: URL): boolean {
+  return url.pathname.replace(/\/+$/, '').endsWith(LOGIN_PATH);
 }
 
-async function mockSuccessfulApi(page: Page): Promise<void> {
-  await page.route(
-    (url) => normalizedPath(url).startsWith('/api/v1/'),
-    async (route: Route) => {
-      const path = normalizedPath(new URL(route.request().url()));
+/**
+ * Intercepts API calls independently of the API hostname.
+ * This supports localhost, deployed API domains, and URL prefixes.
+ */
+async function installApiMock(
+  page: Page,
+  loginStatus: number,
+  loginPayload: Record<string, unknown>
+): Promise<{ getLoginRequestCount: () => number }> {
+  let loginRequestCount = 0;
 
-      let payload: unknown = [];
+  await page.route('**/*', async (route: Route) => {
+    const requestUrl = new URL(route.request().url());
 
-      if (path === API_LOGIN_PATH) {
-        payload = {
-          access_token: 'e2e-session-token',
-          token_type: 'bearer',
-        };
-      } else if (path === '/api/v1/profile') {
-        payload = {
-          full_name: 'E2E User',
-          bio: '',
-          skills: [],
-          preferred_work_types: [],
-          preferred_industries: [],
-          dealbreakers: [],
-        };
-      } else if (path === '/api/v1/dashboard') {
-        payload = {
-          opportunities: 0,
-          proposals: 0,
-          pending_approvals: 0,
-          paid_revenue: 0,
-          currency: 'INR',
-        };
-      }
+    if (!isApiRequest(requestUrl)) {
+      await route.continue();
+      return;
+    }
+
+    if (isLoginRequest(requestUrl)) {
+      loginRequestCount += 1;
 
       await route.fulfill({
-        status: 200,
+        status: loginStatus,
         contentType: 'application/json',
-        body: JSON.stringify(payload),
+        body: JSON.stringify(loginPayload),
       });
+
+      return;
     }
-  );
+
+    let payload: unknown = [];
+
+    if (requestUrl.pathname.endsWith('/profile')) {
+      payload = {
+        full_name: 'E2E User',
+        bio: '',
+        skills: [],
+        preferred_work_types: [],
+        preferred_industries: [],
+        dealbreakers: [],
+        hourly_rate: 0,
+        minimum_budget: 5000,
+        weekly_hours: 10,
+        timezone: 'Asia/Kolkata',
+      };
+    } else if (requestUrl.pathname.endsWith('/dashboard')) {
+      payload = {
+        opportunities: 0,
+        proposals: 0,
+        pending_approvals: 0,
+        paid_revenue: 0,
+        currency: 'INR',
+      };
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(payload),
+    });
+  });
+
+  return {
+    getLoginRequestCount: () => loginRequestCount,
+  };
 }
 
 async function fillLoginForm(
@@ -115,31 +131,39 @@ test('landing page exposes sign-in and account creation', async ({
 test('login failure is visible and does not create a local session', async ({
   page,
 }) => {
-  await mockLoginFailure(page);
+  const pageErrors: string[] = [];
+
+  page.on('pageerror', (error) => {
+    pageErrors.push(error.message);
+  });
+
+  const mock = await installApiMock(page, 401, {
+    detail: 'Invalid email or password',
+  });
 
   await page.goto('/');
 
   await fillLoginForm(page, 'incorrect-password');
 
-  const loginResponsePromise = page.waitForResponse((response) => {
-    return normalizedPath(new URL(response.url())) === API_LOGIN_PATH;
-  });
-
   await page.getByRole('button', { name: 'Login' }).click();
 
-  const loginResponse = await loginResponsePromise;
-
-  expect(loginResponse.status()).toBe(401);
+  // Verify that the application actually sent the login request.
+  await expect
+    .poll(() => mock.getLoginRequestCount(), {
+      message: 'The login button should send exactly one login request',
+      timeout: 10000,
+    })
+    .toBe(1);
 
   await expect(
     page.getByText('Invalid email or password', { exact: true })
   ).toBeVisible();
 
-  await expect
-    .poll(() =>
-      page.evaluate(() => localStorage.getItem('fia_token'))
-    )
-    .toBeNull();
+  expect(
+    await page.evaluate(() => localStorage.getItem('fia_token'))
+  ).toBeNull();
+
+  expect(pageErrors).toEqual([]);
 });
 
 for (const path of protectedPages) {
@@ -171,21 +195,23 @@ test('successful login stores a session and opens the authenticated workspace sh
     pageErrors.push(error.message);
   });
 
-  await mockSuccessfulApi(page);
+  const mock = await installApiMock(page, 200, {
+    access_token: 'e2e-session-token',
+    token_type: 'bearer',
+  });
 
   await page.goto('/');
 
   await fillLoginForm(page, 'correct-test-password');
 
-  const loginResponsePromise = page.waitForResponse((response) => {
-    return normalizedPath(new URL(response.url())) === API_LOGIN_PATH;
-  });
-
   await page.getByRole('button', { name: 'Login' }).click();
 
-  const loginResponse = await loginResponsePromise;
-
-  expect(loginResponse.status()).toBe(200);
+  await expect
+    .poll(() => mock.getLoginRequestCount(), {
+      message: 'The login button should send exactly one login request',
+      timeout: 10000,
+    })
+    .toBe(1);
 
   await expect
     .poll(() =>
@@ -198,9 +224,7 @@ test('successful login stores a session and opens the authenticated workspace sh
   ).toBeVisible();
 
   await expect(
-    page.getByText(
-      'Discover · Evaluate · Draft · Approve · Deliver'
-    )
+    page.getByText('Discover · Evaluate · Draft · Approve · Deliver')
   ).toBeVisible();
 
   expect(pageErrors).toEqual([]);
