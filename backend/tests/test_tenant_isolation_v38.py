@@ -12,7 +12,7 @@ def enable_registration_for_test(monkeypatch):
     monkeypatch.setattr(main.settings, "public_registration", True)
 
 def register_user():
-    email = f"tenant-v38-{uuid.uuid4().hex}@example.test"
+    email = f"tenant-v38-{uuid.uuid4().hex}@example.com"
     response = client.post("/api/v1/auth/register", json={
         "email": email, "password": "StrongPassword123!"
     })
