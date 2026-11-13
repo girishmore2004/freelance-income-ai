@@ -23,7 +23,7 @@ openai==1.82.0
 langgraph==1.0.10
 
 pytest==9.0.3
-pytest-asyncio==1.0.0
+pytest-asyncio==1.4.1.post1
 
 reportlab==4.4.1
 pypdf==6.21.4
