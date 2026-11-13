@@ -2,7 +2,7 @@
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0028_marketplace_credential_vault"
+revision = "0028_marketplace_vault"
 down_revision = "0027_opportunity_reviews"
 branch_labels = None
 depends_on = None
