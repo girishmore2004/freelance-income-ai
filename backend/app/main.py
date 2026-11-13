@@ -872,7 +872,7 @@ def login(data: AuthIn, db: Session=Depends(get_db)):
     if settings.require_email_verification and not user.email_verified:
         raise HTTPException(403,"Verify your email address before signing in.")
     if user.mfa_enabled:
-        from jose import jwt
+        import jwt
         db.query(MFAChallenge).filter(
             (MFAChallenge.expires_at < now-timedelta(days=7)) |
             (MFAChallenge.used_at < now-timedelta(days=7))
@@ -892,7 +892,8 @@ def login(data: AuthIn, db: Session=Depends(get_db)):
 
 @app.post("/api/v1/auth/mfa/verify-login")
 def verify_mfa_login(data: MFALoginIn, db: Session=Depends(get_db)):
-    from jose import jwt, JWTError
+    import jwt
+    from jwt.exceptions import InvalidTokenError as JWTError
     try:
         claims=jwt.decode(data.challenge_token,settings.secret_key,algorithms=["HS256"])
     except JWTError:
@@ -1184,7 +1185,7 @@ def revoke_session(session_id:str, user:User=Depends(current_user), db:Session=D
 @app.post("/api/v1/auth/logout")
 def logout(creds=Depends(bearer), user:User=Depends(current_user), db:Session=Depends(get_db)):
     if creds:
-        from jose import jwt
+        import jwt
         claims=jwt.decode(creds.credentials,settings.secret_key,algorithms=["HS256"])
         row=db.scalar(select(AuthSession).where(AuthSession.token_id==claims.get("jti"),AuthSession.user_id==user.id))
         if row and row.revoked_at is None: row.revoked_at=datetime.now(timezone.utc); db.commit()
