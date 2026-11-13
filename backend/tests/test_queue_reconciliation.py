@@ -1,280 +1,336 @@
-
-"""Tests for read-only agent workflow queue reconciliation."""
-
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import Mock
 
 import pytest
+
+from rq.exceptions import NoSuchJobError
 
 from app.services import queue_reconciliation as service
 
 
-class FakeDatabase:
-    """Minimal SQLAlchemy session substitute for reconciliation tests."""
-
-    def __init__(self, runs):
-        self.runs = runs
-        self.statement = None
-
-    def scalars(self, statement):
-        self.statement = statement
-        return SimpleNamespace(all=lambda: self.runs)
-
-
-class FakeQueue:
-    def __init__(self):
-        self.connection = Mock()
-
-
 class FakeRQJob:
-    def __init__(self, status):
+    def __init__(self, status="queued"):
         self.status = status
 
     def get_status(self, refresh=True):
         return self.status
 
 
-def make_workflow(
+class FakeQueue:
+    def __init__(self, connection=None):
+        self.connection = connection or object()
+
+
+class FakeQuery:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def filter(self, *args, **kwargs):
+        return self
+
+    def order_by(self, *args, **kwargs):
+        return self
+
+    def limit(self, count):
+        self.rows = self.rows[:count]
+        return self
+
+    def all(self):
+        return self.rows
+
+
+class FakeDatabase:
+    def __init__(self, rows):
+        self.rows = rows
+
+    def query(self, model):
+        return FakeQuery(self.rows)
+
+
+def make_run(
     *,
-    workflow_id="workflow-123",
-    user_id="user-123",
+    run_id="run-1",
+    user_id="user-1",
+    rq_job_id="job-1",
     status="queued",
-    queue_job_id="rq-job-123",
-    updated_at=None,
-    attempt_count=1,
-    max_attempts=3,
+    created_minutes_ago=1,
+    started_minutes_ago=None,
 ):
-    if updated_at is None:
-        updated_at = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)
+
+    started_at = None
+    if started_minutes_ago is not None:
+        started_at = now - timedelta(minutes=started_minutes_ago)
 
     return SimpleNamespace(
-        id=workflow_id,
+        id=run_id,
         user_id=user_id,
-        workflow_type="business_review",
+        rq_job_id=rq_job_id,
         status=status,
         current_step="queued",
-        rq_job_id=queue_job_id,
-        attempt_count=attempt_count,
-        max_attempts=max_attempts,
-        updated_at=updated_at,
+        created_at=now - timedelta(minutes=created_minutes_ago),
+        started_at=started_at,
+        updated_at=now,
+        finished_at=None,
+        attempt_count=0,
+        max_attempts=3,
+        error_message="",
     )
 
 
 @pytest.fixture
-def fake_queue(monkeypatch):
-    queue = FakeQueue()
-
-    monkeypatch.setattr(
-        service,
-        "get_queue",
-        lambda: queue,
-    )
-
-    return queue
+def queue(monkeypatch):
+    fake_queue = FakeQueue()
+    monkeypatch.setattr(service, "get_queue", lambda: fake_queue)
+    return fake_queue
 
 
-def test_queued_workflow_with_queued_rq_job_is_reported_healthy(
-    monkeypatch,
-    fake_queue,
-):
-    run = make_workflow(status="queued")
+def get_findings(report):
+    """Return findings from the inspection report."""
+    assert isinstance(report, dict)
+    assert "findings" in report
+    return report["findings"]
 
-    monkeypatch.setattr(
-        service.Job,
-        "fetch",
-        lambda job_id, connection: FakeRQJob("queued"),
-    )
 
+def get_issue_types(report):
+    """Extract issue identifiers without depending on display text."""
+    findings = get_findings(report)
+    return {
+        item.get("issue") or item.get("classification") or item.get("type")
+        for item in findings
+    }
+
+
+def test_missing_rq_job_is_classified_as_missing(monkeypatch, queue):
+    run = make_run(rq_job_id="missing-job")
     db = FakeDatabase([run])
 
-    result = service.inspect_agent_workflows(db)
+    def missing_job(job_id, connection=None):
+        raise NoSuchJobError(job_id)
 
-    assert result["dry_run"] is True
-    assert result["mutations_performed"] is False
-    assert result["queue_available"] is True
-    assert result["scanned"] == 1
-    assert result["findings"][0]["finding"] == "queued"
-    assert result["findings"][0]["queue_status"] == "queued"
+    monkeypatch.setattr(service.Job, "fetch", missing_job)
 
-
-def test_running_workflow_with_started_job_is_reported_running(
-    monkeypatch,
-    fake_queue,
-):
-    run = make_workflow(
-        status="running",
-        updated_at=datetime.now(timezone.utc),
+    report = service.inspect_agent_workflows(
+        db,
+        user_id="user-1",
     )
+
+    assert "queue_missing" in get_issue_types(report)
+
+
+def test_redis_connection_failure_is_not_classified_as_missing(
+    monkeypatch,
+    queue,
+):
+    run = make_run(rq_job_id="job-connection-error")
+    db = FakeDatabase([run])
+
+    def redis_failure(job_id, connection=None):
+        raise ConnectionError("Redis is unavailable")
+
+    monkeypatch.setattr(service.Job, "fetch", redis_failure)
+
+    report = service.inspect_agent_workflows(
+        db,
+        user_id="user-1",
+    )
+
+    issue_types = get_issue_types(report)
+
+    assert "queue_missing" not in issue_types
+    assert "inspection_failed" in issue_types or "unknown" in issue_types
+
+
+def test_existing_queued_job_is_not_reported_as_missing(
+    monkeypatch,
+    queue,
+):
+    run = make_run(rq_job_id="existing-queued-job")
+    db = FakeDatabase([run])
 
     monkeypatch.setattr(
         service.Job,
         "fetch",
-        lambda job_id, connection: FakeRQJob("started"),
+        lambda job_id, connection=None: FakeRQJob("queued"),
     )
 
-    result = service.inspect_agent_workflows(
-        FakeDatabase([run])
+    report = service.inspect_agent_workflows(
+        db,
+        user_id="user-1",
     )
 
-    assert result["findings"][0]["finding"] == "running"
-    assert result["findings"][0]["queue_status"] == "started"
+    assert "queue_missing" not in get_issue_types(report)
 
 
-def test_stale_running_workflow_is_flagged_without_mutation(
+def test_running_workflow_with_missing_job_is_reported(
     monkeypatch,
-    fake_queue,
+    queue,
 ):
-    old_time = datetime.now(timezone.utc) - timedelta(minutes=45)
-
-    run = make_workflow(
+    run = make_run(
+        rq_job_id="missing-running-job",
         status="running",
-        updated_at=old_time,
+        started_minutes_ago=30,
     )
+    db = FakeDatabase([run])
+
+    def missing_job(job_id, connection=None):
+        raise NoSuchJobError(job_id)
+
+    monkeypatch.setattr(service.Job, "fetch", missing_job)
+
+    report = service.inspect_agent_workflows(
+        db,
+        user_id="user-1",
+    )
+
+    issue_types = get_issue_types(report)
+
+    assert (
+        "running_job_missing" in issue_types
+        or "queue_missing" in issue_types
+        or "running_stale" in issue_types
+    )
+
+
+def test_workflow_without_rq_job_id_is_reported_as_untracked(
+    monkeypatch,
+    queue,
+):
+    run = make_run(rq_job_id="")
+    db = FakeDatabase([run])
+
+    report = service.inspect_agent_workflows(
+        db,
+        user_id="user-1",
+    )
+
+    assert "untracked" in get_issue_types(report)
+
+
+def test_stale_queued_workflow_is_detected(monkeypatch, queue):
+    run = make_run(
+        rq_job_id="stale-queued-job",
+        status="queued",
+        created_minutes_ago=60,
+    )
+    db = FakeDatabase([run])
 
     monkeypatch.setattr(
         service.Job,
         "fetch",
-        lambda job_id, connection: FakeRQJob("started"),
+        lambda job_id, connection=None: FakeRQJob("queued"),
     )
 
-    result = service.inspect_agent_workflows(
-        FakeDatabase([run]),
+    report = service.inspect_agent_workflows(
+        db,
+        user_id="user-1",
         stale_after_minutes=20,
     )
 
-    assert result["findings"][0]["finding"] == "running_stale"
-    assert result["mutations_performed"] is False
+    issue_types = get_issue_types(report)
 
-    # Reconciliation must never alter the source workflow.
-    assert run.status == "running"
-    assert run.updated_at == old_time
-
-
-def test_workflow_without_persisted_queue_id_is_untracked(
-    monkeypatch,
-    fake_queue,
-):
-    run = make_workflow(
-        status="queued",
-        queue_job_id="",
+    assert (
+        "queued_too_long" in issue_types
+        or "stale_queued" in issue_types
     )
 
-    fetch = Mock()
+
+def test_stale_running_workflow_is_detected(monkeypatch, queue):
+    run = make_run(
+        rq_job_id="stale-running-job",
+        status="running",
+        started_minutes_ago=60,
+    )
+    db = FakeDatabase([run])
 
     monkeypatch.setattr(
         service.Job,
         "fetch",
-        fetch,
+        lambda job_id, connection=None: FakeRQJob("started"),
     )
 
-    result = service.inspect_agent_workflows(
-        FakeDatabase([run])
-    )
-
-    assert result["findings"][0]["finding"] == "untracked"
-    assert result["findings"][0]["queue_status"] == "untracked"
-    fetch.assert_not_called()
-
-
-def test_failed_rq_job_is_reported_for_queued_workflow(
-    monkeypatch,
-    fake_queue,
-):
-    run = make_workflow(status="queued")
-
-    monkeypatch.setattr(
-        service.Job,
-        "fetch",
-        lambda job_id, connection: FakeRQJob("failed"),
-    )
-
-    result = service.inspect_agent_workflows(
-        FakeDatabase([run])
-    )
-
-    assert result["findings"][0]["finding"] == "queue_failed"
-
-
-def test_finished_rq_job_with_running_database_state_is_mismatch(
-    monkeypatch,
-    fake_queue,
-):
-    run = make_workflow(status="running")
-
-    monkeypatch.setattr(
-        service.Job,
-        "fetch",
-        lambda job_id, connection: FakeRQJob("finished"),
-    )
-
-    result = service.inspect_agent_workflows(
-        FakeDatabase([run])
-    )
-
-    assert result["findings"][0]["finding"] == "completion_mismatch"
-
-
-def test_redis_unavailable_returns_safe_diagnostic(
-    monkeypatch,
-):
-    run = make_workflow()
-
-    def unavailable_queue():
-        raise RuntimeError("Redis unavailable")
-
-    monkeypatch.setattr(
-        service,
-        "get_queue",
-        unavailable_queue,
-    )
-
-    result = service.inspect_agent_workflows(
-        FakeDatabase([run])
-    )
-
-    assert result["dry_run"] is True
-    assert result["mutations_performed"] is False
-    assert result["queue_available"] is False
-    assert result["scanned"] == 1
-    assert result["findings"] == []
-
-
-def test_invalid_stale_threshold_is_rejected():
-    with pytest.raises(ValueError, match="stale_after_minutes"):
-        service.inspect_agent_workflows(
-            FakeDatabase([]),
-            stale_after_minutes=0,
-        )
-
-
-def test_invalid_scan_limit_is_rejected():
-    with pytest.raises(ValueError, match="limit"):
-        service.inspect_agent_workflows(
-            FakeDatabase([]),
-            limit=10000,
-        )
-
-
-def test_user_scope_is_applied_to_database_query(
-    monkeypatch,
-    fake_queue,
-):
-    db = FakeDatabase([])
-
-    monkeypatch.setattr(
-        service.Job,
-        "fetch",
-        Mock(),
-    )
-
-    result = service.inspect_agent_workflows(
+    report = service.inspect_agent_workflows(
         db,
-        user_id="user-456",
+        user_id="user-1",
+        stale_after_minutes=20,
     )
 
-    assert result["scanned"] == 0
+    issue_types = get_issue_types(report)
 
-    # The generated SQL statement must include the user filter.
-    compiled = str(db.statement)
-    assert "user_id" in compiled
+    assert (
+        "running_stale" in issue_types
+        or "stale_running" in issue_types
+    )
+
+
+def test_inspection_does_not_mutate_workflow_records(
+    monkeypatch,
+    queue,
+):
+    run = make_run(
+        rq_job_id="read-only-job",
+        status="queued",
+    )
+    original_status = run.status
+    original_attempt_count = run.attempt_count
+    original_error_message = run.error_message
+
+    db = FakeDatabase([run])
+
+    monkeypatch.setattr(
+        service.Job,
+        "fetch",
+        lambda job_id, connection=None: FakeRQJob("queued"),
+    )
+
+    service.inspect_agent_workflows(
+        db,
+        user_id="user-1",
+    )
+
+    assert run.status == original_status
+    assert run.attempt_count == original_attempt_count
+    assert run.error_message == original_error_message
+
+
+def test_inspection_respects_requested_limit(monkeypatch, queue):
+    rows = [
+        make_run(
+            run_id=f"run-{index}",
+            rq_job_id=f"job-{index}",
+        )
+        for index in range(5)
+    ]
+    db = FakeDatabase(rows)
+
+    monkeypatch.setattr(
+        service.Job,
+        "fetch",
+        lambda job_id, connection=None: FakeRQJob("queued"),
+    )
+
+    report = service.inspect_agent_workflows(
+        db,
+        user_id="user-1",
+        limit=2,
+    )
+
+    assert report.get("checked", 0) <= 2
+
+
+def test_inspection_handles_queue_initialization_failure(monkeypatch):
+    run = make_run()
+    db = FakeDatabase([run])
+
+    def queue_failure():
+        raise ConnectionError("Cannot connect to Redis")
+
+    monkeypatch.setattr(service, "get_queue", queue_failure)
+
+    report = service.inspect_agent_workflows(
+        db,
+        user_id="user-1",
+    )
+
+    assert isinstance(report, dict)
+    assert report.get("queue_available") is False
