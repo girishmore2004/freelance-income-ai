@@ -7,7 +7,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = "0017_business_workspace"
-down_revision = "0016_project_opportunity_attribution"
+down_revision = "0016_proj_opp_attr"
 branch_labels = None
 depends_on = None
 
