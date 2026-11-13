@@ -3,7 +3,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = "0044_account_security"
-down_revision = "0043_archive_bundle_and_supersession"
+down_revision = "0043_archive_supersession"
 branch_labels = None
 depends_on = None
 
