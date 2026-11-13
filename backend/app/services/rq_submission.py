@@ -1,42 +1,54 @@
+"""Idempotent submission helpers for RQ-backed workflows."""
 
-"""Idempotent RQ submission helpers."""
+from typing import Any
 
 from rq.job import Job
+from rq.exceptions import NoSuchJobError
+
+from app.queue import get_queue
 
 
 def enqueue_once(
-    queue,
-    function,
-    *args,
+    function: str,
+    *args: Any,
     job_id: str,
-    **kwargs,
-):
-    """
-    Enqueue a job exactly once for a deterministic RQ job ID.
+    **kwargs: Any,
+) -> Job:
+    """Enqueue a job once, using a deterministic RQ job ID.
 
-    If the job ID already exists, return that job. If enqueue fails for
-    another reason, re-raise the original error unless an existing job
-    with the same ID can be recovered.
+    If the job already exists in Redis, return the existing job rather
+    than submitting another copy.
 
-    This prevents duplicate queue records for the same workflow attempt.
-    It does not guarantee exactly-once execution by a worker.
+    Args:
+        function: Import path of the worker function.
+        *args: Positional arguments passed to the worker function.
+        job_id: Stable, deterministic RQ job identifier.
+        **kwargs: Keyword arguments passed to Queue.enqueue.
+
+    Returns:
+        The existing or newly created RQ Job.
+
+    Raises:
+        ValueError: If the function or job ID is invalid.
+        Exception: Redis, queue, or enqueue errors other than a missing
+            RQ job are allowed to propagate to the caller.
     """
-    if not job_id or len(job_id) > 200:
-        raise ValueError("A valid RQ job_id is required.")
+    if not isinstance(function, str) or not function.strip():
+        raise ValueError("function must be a non-empty import path")
+
+    if not isinstance(job_id, str) or not job_id.strip():
+        raise ValueError("job_id must be a non-empty string")
+
+    queue = get_queue()
 
     try:
-        return queue.enqueue(
-            function,
-            *args,
-            job_id=job_id,
-            **kwargs,
-        )
-    except Exception:
-        try:
-            existing = Job.fetch(
-                job_id,
-                connection=queue.connection,
-            )
-            return existing
-        except Exception:
-            raise
+        return Job.fetch(job_id, connection=queue.connection)
+    except NoSuchJobError:
+        pass
+
+    return queue.enqueue(
+        function,
+        *args,
+        job_id=job_id,
+        **kwargs,
+    )
