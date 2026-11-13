@@ -1,0 +1,20 @@
+
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "freelance-income-ai-api",
+  "main": "src/main.py",
+  "compatibility_date": "2026-11-13",
+  "compatibility_flags": [
+    "python_workers"
+  ],
+  "workers_dev": true,
+  "observability": {
+    "enabled": true
+  },
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "1875e95a677743fd839e89bc7836e9e7"
+    }
+  ]
+}
