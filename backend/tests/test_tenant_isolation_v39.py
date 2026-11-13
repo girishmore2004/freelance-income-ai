@@ -9,10 +9,15 @@ from app.models import User, EmailProviderAccount, WorkflowRun, WorkflowCheckpoi
 from app.database import SessionLocal
 
 client = TestClient(main.app)
+import pytest
 
+
+@pytest.fixture(autouse=True)
+def enable_registration_for_test(monkeypatch):
+    monkeypatch.setattr(main.settings, "public_registration", True)
 
 def register_user():
-    email = f"tenant-v39-{uuid.uuid4().hex}@example.test"
+    email = f"tenant-v39-{uuid.uuid4().hex}@example.com"
     response = client.post("/api/v1/auth/register", json={
         "email": email, "password": "StrongPassword123!"
     })
