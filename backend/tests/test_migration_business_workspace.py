@@ -1,5 +1,7 @@
+
 from pathlib import Path
 import importlib.util
+
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import (
@@ -83,20 +85,30 @@ def create_baseline_schema(engine):
     metadata.create_all(engine)
 
 
-def test_upgrade_does_not_recreate_existing_business_tables(monkeypatch):
+def run_migration(migration, connection):
+    """
+    Execute an Alembic migration using a real Operations context.
+
+    Alembic's op proxy requires an active MigrationContext.
+    Patching op.get_bind() alone is insufficient because operations
+    such as create_table() also require the Operations implementation.
+    """
+    context = MigrationContext.configure(connection)
+
+    with Operations.context(context):
+        migration.upgrade()
+
+
+def test_upgrade_does_not_recreate_existing_business_tables():
     migration = load_migration()
     engine = create_engine("sqlite://")
 
     create_baseline_schema(engine)
 
     with engine.begin() as connection:
-        context = MigrationContext.configure(connection)
-
-        with Operations.context(context):
-            migration.upgrade()
+        run_migration(migration, connection)
 
         inspector = inspect(connection)
-
         tables = set(inspector.get_table_names())
 
         assert "business_goals" in tables
@@ -123,7 +135,7 @@ def test_upgrade_does_not_recreate_existing_business_tables(monkeypatch):
         }.issubset(events_indexes)
 
 
-def test_upgrade_creates_missing_business_tables(monkeypatch):
+def test_upgrade_creates_missing_business_tables():
     migration = load_migration()
     engine = create_engine("sqlite://")
 
@@ -138,32 +150,31 @@ def test_upgrade_creates_missing_business_tables(monkeypatch):
     metadata.create_all(engine)
 
     with engine.begin() as connection:
-        monkeypatch.setattr(
-            migration.op,
-            "get_bind",
-            lambda: connection,
-        )
-
-        migration.upgrade()
+        run_migration(migration, connection)
 
         inspector = inspect(connection)
-
         tables = set(inspector.get_table_names())
 
         assert "business_goals" in tables
         assert "business_workspace_events" in tables
 
-        assert {
+        goals_indexes = {
             index["name"]
             for index in inspector.get_indexes("business_goals")
-        } >= {"ix_business_goals_user_id"}
+        }
 
-        assert {
+        events_indexes = {
             index["name"]
             for index in inspector.get_indexes(
                 "business_workspace_events"
             )
-        } >= {
+        }
+
+        assert goals_indexes >= {
+            "ix_business_goals_user_id",
+        }
+
+        assert events_indexes >= {
             "ix_business_workspace_events_user_id",
             "ix_business_workspace_events_event_type",
             "ix_business_workspace_events_created_at",
