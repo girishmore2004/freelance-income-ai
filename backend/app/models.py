@@ -957,6 +957,7 @@ class AgentWorkflowRun(Base):
     state_json: Mapped[str] = mapped_column(Text, default="{}")
     result_json: Mapped[str] = mapped_column(Text, default="{}")
     error_message: Mapped[str] = mapped_column(Text, default="")
+    rq_job_id: Mapped[str] = mapped_column(String(100), default="")
     attempt_count: Mapped[int] = mapped_column(Integer, default=0)
     max_attempts: Mapped[int] = mapped_column(Integer, default=3)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
