@@ -2,13 +2,14 @@
 import postgres from "postgres";
 import type { Env } from "../types";
 
-type SqlClient = ReturnType<typeof postgres>;
-
-let cachedConnectionString: string | undefined;
-let cachedClient: SqlClient | undefined;
-
-export function getDatabase(env: Env): SqlClient {
-  const connectionString = env.HYPERDRIVE?.connectionString;
+export async function checkDatabase(
+  env: Env
+): Promise<{
+  connected: boolean;
+  result: number;
+}> {
+  const connectionString =
+    env.HYPERDRIVE?.connectionString;
 
   if (!connectionString) {
     throw new Error(
@@ -16,45 +17,31 @@ export function getDatabase(env: Env): SqlClient {
     );
   }
 
-  if (
-    cachedClient &&
-    cachedConnectionString === connectionString
-  ) {
-    return cachedClient;
-  }
-
-  cachedClient = postgres(connectionString, {
+  // Hyperdrive maintains the underlying connection pool.
+  // Create a lightweight driver client for this request.
+  const sql = postgres(connectionString, {
     max: 5,
-    idle_timeout: 20,
-    connect_timeout: 10,
-    prepare: false,
     fetch_types: false,
-    ssl: "require"
+    prepare: true,
+    connection: {
+      application_name: "Freelance Income AI Edge API"
+    }
   });
-
-  cachedConnectionString = connectionString;
-
-  return cachedClient;
-}
-
-export async function checkDatabase(
-  env: Env
-): Promise<{
-  connected: boolean;
-  result: number;
-}> {
-  const sql = getDatabase(env);
 
   const rows = await sql<{ value: number }[]>`
     SELECT 1 AS value
   `;
 
-  if (Number(rows[0]?.value) !== 1) {
-    throw new Error("Unexpected database health-check result");
+  const result = Number(rows[0]?.value);
+
+  if (result !== 1) {
+    throw new Error(
+      "Unexpected PostgreSQL health-check result"
+    );
   }
 
   return {
     connected: true,
-    result: 1
+    result
   };
 }
