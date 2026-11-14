@@ -176,11 +176,17 @@ function validatePasswordInput(
   );
 }
 
+
 function generateSalt(rounds: number): Promise<string> {
   return new Promise((resolve, reject) => {
     bcrypt.genSalt(rounds, (error, salt) => {
       if (error) {
         reject(error);
+        return;
+      }
+
+      if (typeof salt !== "string" || salt.length === 0) {
+        reject(new Error("bcrypt did not generate a valid salt."));
         return;
       }
 
@@ -200,6 +206,11 @@ function hashWithSalt(
         return;
       }
 
+      if (typeof hash !== "string" || hash.length === 0) {
+        reject(new Error("bcrypt did not generate a valid hash."));
+        return;
+      }
+
       resolve(hash);
     });
   });
@@ -216,10 +227,16 @@ function comparePassword(
         return;
       }
 
+      if (typeof matched !== "boolean") {
+        reject(new Error("bcrypt returned an invalid comparison result."));
+        return;
+      }
+
       resolve(matched);
     });
   });
 }
+
 
 export async function verifyPassword(
   password: string,
