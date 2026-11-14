@@ -1,6 +1,8 @@
 
 import type { Env } from "./types";
-
+import {
+  handleAuthRoute
+} from "./lib/auth-routes";
 import {
   applyCors,
   handlePreflight
@@ -203,13 +205,21 @@ async function routeRequest(
   }
 
   if (
-    path.startsWith("/api/v1/auth/") &&
-    ["GET", "POST", "PUT", "PATCH", "DELETE"].includes(method)
+    path.startsWith("/api/v1/auth/") ||
+    path === "/api/v1/me"
   ) {
+    const authResponse = await handleAuthRoute(
+      request,
+      env,
+      requestId
+    );
+
+    if (authResponse) return authResponse;
+
     return failure(
-      "AUTHENTICATION_NOT_MIGRATED",
-      "Authentication routes are not yet implemented in this staging API. Continue using the existing production API.",
-      501,
+      "AUTH_ROUTE_NOT_FOUND",
+      "Authentication endpoint not found",
+      404,
       requestId
     );
   }
