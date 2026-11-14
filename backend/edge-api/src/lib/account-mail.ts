@@ -1,110 +1,261 @@
-export interface AccountMailEnv {
-  RESEND_API_KEY?: string;
-  RESEND_FROM_EMAIL?: string;
-  APP_NAME?: string;
+
+import postgres from "postgres";
+import type { Env } from "../types";
+
+export type AccountActionPurpose =
+  | "verify_email"
+  | "password_reset";
+
+export interface AccountActionToken {
+  id: string;
+  user_id: string;
+  purpose: AccountActionPurpose;
+  created_at: Date;
+  expires_at: Date;
+  used_at: Date | null;
 }
 
-export interface AccountEmail {
-  to: string;
-  subject: string;
-  text: string;
+export interface IssuedAccountActionToken {
+  token: string;
+  expiresAt: Date;
 }
 
-export interface AccountMailResult {
-  accepted: boolean;
-  provider: "resend";
-  messageId?: string;
-}
+const TOKEN_BYTES = 48;
+const TOKEN_MIN_LENGTH = 32;
+const TOKEN_MAX_LENGTH = 256;
 
-const RESEND_ENDPOINT = "https://api.resend.com/emails";
+const TOKEN_LIFETIMES = {
+  verify_email: 24 * 60,
+  password_reset: 30
+} as const;
 
-function requiredValue(value: string | undefined, name: string): string {
-  const normalized = value?.trim();
-  if (!normalized) {
-    throw new Error(`Missing email configuration: ${name}`);
-  }
-  return normalized;
-}
-
-function validateEmail(email: string): void {
+function validatePurpose(
+  purpose: string
+): asserts purpose is AccountActionPurpose {
   if (
-    email.length > 320 ||
-    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    purpose !== "verify_email" &&
+    purpose !== "password_reset"
   ) {
-    throw new Error("Invalid recipient email address.");
+    throw new Error("Unsupported account-action token purpose.");
   }
 }
 
-export function accountMailConfigured(env: AccountMailEnv): boolean {
-  return Boolean(
-    env.RESEND_API_KEY?.trim() &&
-    env.RESEND_FROM_EMAIL?.trim(),
-  );
+function validateUserId(userId: string): void {
+  if (
+    typeof userId !== "string" ||
+    userId.length < 1 ||
+    userId.length > 36
+  ) {
+    throw new Error("Invalid user ID.");
+  }
 }
 
 /**
- * Sends a transactional account email through Resend.
- *
- * Important:
- * - This function never logs API keys or message contents.
- * - A non-2xx provider response is treated as a delivery failure.
- * - "accepted" means Resend accepted the request, not that the
- *   recipient's mailbox has received or displayed the email.
+ * Python-compatible secrets.token_urlsafe(48).
+ * Generates 48 cryptographically secure random bytes,
+ * then encodes them using URL-safe Base64 without padding.
  */
-export async function sendAccountEmail(
-  env: AccountMailEnv,
-  message: AccountEmail,
-): Promise<AccountMailResult> {
-  const apiKey = requiredValue(env.RESEND_API_KEY, "RESEND_API_KEY");
-  const from = requiredValue(env.RESEND_FROM_EMAIL, "RESEND_FROM_EMAIL");
+function generateActionToken(): string {
+  const bytes = new Uint8Array(TOKEN_BYTES);
+  crypto.getRandomValues(bytes);
 
-  validateEmail(message.to);
+  let binary = "";
 
-  if (!message.subject.trim() || message.subject.length > 200) {
-    throw new Error("Invalid email subject.");
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
   }
 
-  if (!message.text.trim() || message.text.length > 20_000) {
-    throw new Error("Invalid email message body.");
+  return btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+async function hashActionToken(
+  token: string
+): Promise<string> {
+  if (
+    typeof token !== "string" ||
+    token.length < TOKEN_MIN_LENGTH ||
+    token.length > TOKEN_MAX_LENGTH
+  ) {
+    throw new Error("Invalid account-action token.");
   }
 
-  const response = await fetch(RESEND_ENDPOINT, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from,
-      to: [message.to],
-      subject: message.subject,
-      text: message.text,
-    }),
-  });
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(token)
+  );
 
-  const responseBody = await response.json().catch(() => null) as
-    | { id?: string; message?: string; name?: string }
-    | null;
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
 
-  if (!response.ok) {
-    // Do not include credentials or the full request body in errors.
-    const providerMessage =
-      typeof responseBody?.message === "string"
-        ? responseBody.message.slice(0, 300)
-        : "Email provider rejected the request.";
+function createDatabaseClient(env: Env) {
+  const connectionString =
+    env.HYPERDRIVE?.connectionString;
 
+  if (!connectionString) {
     throw new Error(
-      `Account email delivery failed (${response.status}): ${providerMessage}`,
+      "Hyperdrive database connection is not configured."
     );
   }
 
-  if (!responseBody?.id) {
-    throw new Error("Email provider returned no message ID.");
+  return postgres(connectionString, {
+    max: 1,
+    fetch_types: false,
+    prepare: false,
+    connect_timeout: 10,
+    idle_timeout: 5,
+    connection: {
+      application_name:
+        "Freelance Income AI Edge API - Account Tokens"
+    }
+  });
+}
+
+/**
+ * Issues a new account-action token.
+ *
+ * Matches the original Python implementation:
+ * - 48 random bytes
+ * - URL-safe Base64 without padding
+ * - SHA-256 lowercase hexadecimal digest
+ * - Previous unused tokens for the same user and purpose
+ *   are invalidated.
+ * - Old token records are cleaned up.
+ *
+ * Only the raw token is returned. It is never stored in PostgreSQL.
+ */
+export async function issueAccountActionToken(
+  env: Env,
+  userId: string,
+  purpose: AccountActionPurpose,
+  lifetimeMinutes?: number
+): Promise<IssuedAccountActionToken> {
+  validateUserId(userId);
+  validatePurpose(purpose);
+
+  const lifetime =
+    lifetimeMinutes ?? TOKEN_LIFETIMES[purpose];
+
+  if (
+    !Number.isInteger(lifetime) ||
+    lifetime < 1 ||
+    lifetime > 60 * 24 * 7
+  ) {
+    throw new Error("Invalid account-action token lifetime.");
   }
 
-  return {
-    accepted: true,
-    provider: "resend",
-    messageId: responseBody.id,
-  };
+  const rawToken = generateActionToken();
+  const tokenHash = await hashActionToken(rawToken);
+
+  const now = new Date();
+  const expiresAt = new Date(
+    now.getTime() + lifetime * 60_000
+  );
+
+  const sql = createDatabaseClient(env);
+
+  try {
+    await sql.begin(async (tx) => {
+      // Match the original Python cleanup policy.
+      await tx`
+        DELETE FROM email_action_tokens
+        WHERE
+          expires_at < NOW() - INTERVAL '30 days'
+          OR used_at < NOW() - INTERVAL '30 days'
+      `;
+
+      // Invalidate previous unused tokens for this user/action.
+      await tx`
+        UPDATE email_action_tokens
+        SET used_at = ${now}
+        WHERE
+          user_id = ${userId}
+          AND purpose = ${purpose}
+          AND used_at IS NULL
+      `;
+
+      // The existing SQLAlchemy model defines no database-side
+      // default for the primary key, so generate its UUID here.
+      await tx`
+        INSERT INTO email_action_tokens (
+          id,
+          user_id,
+          token_hash,
+          purpose,
+          created_at,
+          expires_at,
+          used_at
+        )
+        VALUES (
+          ${crypto.randomUUID()},
+          ${userId},
+          ${tokenHash},
+          ${purpose},
+          ${now},
+          ${expiresAt},
+          NULL
+        )
+      `;
+    });
+
+    return {
+      token: rawToken,
+      expiresAt
+    };
+  } finally {
+    await sql.end({ timeout: 5 });
+  }
+}
+
+/**
+ * Atomically consumes an account-action token.
+ *
+ * UPDATE ... RETURNING ensures that two simultaneous requests
+ * cannot successfully consume the same token.
+ *
+ * Expired, used, unknown, and wrong-purpose tokens all return null.
+ */
+export async function consumeAccountActionToken(
+  env: Env,
+  rawToken: string,
+  purpose: AccountActionPurpose
+): Promise<AccountActionToken | null> {
+  validatePurpose(purpose);
+
+  const tokenHash = await hashActionToken(rawToken);
+  const sql = createDatabaseClient(env);
+
+  try {
+    const rows = await sql<AccountActionToken[]>`
+      UPDATE email_action_tokens
+      SET used_at = NOW()
+      WHERE
+        token_hash = ${tokenHash}
+        AND purpose = ${purpose}
+        AND used_at IS NULL
+        AND expires_at > NOW()
+      RETURNING
+        id,
+        user_id,
+        purpose,
+        created_at,
+        expires_at,
+        used_at
+    `;
+
+    return rows[0] ?? null;
+  } finally {
+    await sql.end({ timeout: 5 });
+  }
+}
+
+export function getAccountActionTokenLifetime(
+  purpose: AccountActionPurpose
+): number {
+  validatePurpose(purpose);
+  return TOKEN_LIFETIMES[purpose];
 }
