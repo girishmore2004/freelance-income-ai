@@ -1,8 +1,9 @@
 
 import type { Env } from "./types";
-import {
-  handleAuthRoute
-} from "./lib/auth-routes";
+
+import { handleLoginRoute } from "./lib/login-route";
+import { handleAuthRoute } from "./lib/auth-routes";
+
 import {
   applyCors,
   handlePreflight
@@ -51,6 +52,10 @@ async function routeRequest(
   const path = url.pathname;
   const method = request.method.toUpperCase();
 
+  // --------------------------------------------------
+  // Root endpoint
+  // --------------------------------------------------
+
   if (method === "GET" && path === "/") {
     return success(
       {
@@ -61,7 +66,7 @@ async function routeRequest(
         status: "operational",
         runtime: "cloudflare-workers",
         database: "neon-postgresql-hyperdrive",
-        authentication_migration: "pending",
+        authentication_migration: "partial",
         full_application_migration: "in_progress"
       },
       "API gateway is running",
@@ -69,6 +74,10 @@ async function routeRequest(
       requestId
     );
   }
+
+  // --------------------------------------------------
+  // Health endpoint
+  // --------------------------------------------------
 
   if (method === "GET" && path === "/health") {
     return success(
@@ -83,6 +92,10 @@ async function routeRequest(
     );
   }
 
+  // --------------------------------------------------
+  // Readiness endpoint
+  // --------------------------------------------------
+
   if (method === "GET" && path === "/ready") {
     try {
       const database = await checkDatabase(env);
@@ -90,7 +103,9 @@ async function routeRequest(
       return success(
         {
           status: "ready",
-          database: database.connected ? "connected" : "unavailable",
+          database: database.connected
+            ? "connected"
+            : "unavailable",
           database_query: database.result,
           queue_binding: Boolean(env.FREELANCE_JOBS)
         },
@@ -118,6 +133,10 @@ async function routeRequest(
       );
     }
   }
+
+  // --------------------------------------------------
+  // Database health endpoint
+  // --------------------------------------------------
 
   if (
     method === "GET" &&
@@ -159,6 +178,10 @@ async function routeRequest(
     }
   }
 
+  // --------------------------------------------------
+  // Deployment information
+  // --------------------------------------------------
+
   if (
     method === "GET" &&
     path === "/api/v1/deployment/info"
@@ -171,8 +194,15 @@ async function routeRequest(
         database: "Neon PostgreSQL",
         database_transport: "Hyperdrive",
         queue_enabled: Boolean(env.FREELANCE_JOBS),
-        migration_stage: "phase_1_foundation",
-        authentication_routes_migrated: false,
+        migration_stage: "authentication_partial",
+        authentication: {
+          login_route: "implemented",
+          session_validation: "implemented",
+          logout_routes: "implemented",
+          registration: "pending",
+          mfa_verification: "pending",
+          password_reset: "pending"
+        },
         business_routes_migrated: false,
         production_cutover_allowed: false
       },
@@ -182,6 +212,10 @@ async function routeRequest(
     );
   }
 
+  // --------------------------------------------------
+  // Migration status
+  // --------------------------------------------------
+
   if (
     method === "GET" &&
     path === "/api/v1/migration/status"
@@ -189,20 +223,56 @@ async function routeRequest(
     return success(
       {
         phase: 1,
-        foundation: "in_progress",
-        authentication: "not_migrated",
+        foundation: "implemented",
+        authentication: "partial",
+        authentication_features: {
+          password_verification: "implementation_pending_validation",
+          login: "implemented_pending_testing",
+          session_creation: "implemented_pending_testing",
+          session_validation: "implemented_pending_testing",
+          logout: "implemented_pending_testing",
+          registration: "not_migrated",
+          mfa_verification: "not_migrated",
+          password_reset: "not_migrated"
+        },
         business_modules: "not_migrated",
         ai_modules: "not_migrated",
         document_modules: "not_migrated",
         queues: "binding_configured",
         production_cutover: false,
-        next_phase: "authentication_and_database_schema"
+        next_phase: "authentication_testing_and_mfa"
       },
       "Migration status retrieved",
       200,
       requestId
     );
   }
+
+  // --------------------------------------------------
+  // LOGIN ROUTE
+  //
+  // IMPORTANT:
+  // This must appear before the generic auth handler.
+  // --------------------------------------------------
+
+  if (
+    method === "POST" &&
+    path === "/api/v1/auth/login"
+  ) {
+    const loginResponse = await handleLoginRoute(
+      request,
+      env,
+      requestId
+    );
+
+    if (loginResponse) {
+      return loginResponse;
+    }
+  }
+
+  // --------------------------------------------------
+  // Remaining authentication routes
+  // --------------------------------------------------
 
   if (
     path.startsWith("/api/v1/auth/") ||
@@ -214,7 +284,9 @@ async function routeRequest(
       requestId
     );
 
-    if (authResponse) return authResponse;
+    if (authResponse) {
+      return authResponse;
+    }
 
     return failure(
       "AUTH_ROUTE_NOT_FOUND",
@@ -223,6 +295,10 @@ async function routeRequest(
       requestId
     );
   }
+
+  // --------------------------------------------------
+  // Queue test endpoint
+  // --------------------------------------------------
 
   if (
     method === "POST" &&
@@ -280,8 +356,16 @@ async function routeRequest(
     }
   }
 
+  // --------------------------------------------------
+  // Not found
+  // --------------------------------------------------
+
   return notFound(path, requestId);
 }
+
+// ----------------------------------------------------
+// Cloudflare Worker entry point
+// ----------------------------------------------------
 
 export default {
   async fetch(
