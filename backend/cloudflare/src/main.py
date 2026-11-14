@@ -1,18 +1,13 @@
 
 """
-Freelance Income AI
-Cloudflare Python Worker - Staging API
+Freelance Income AI - Cloudflare Python Worker API adapter.
 
-Features:
-- FastAPI application
-- Cloudflare Hyperdrive integration
-- Neon PostgreSQL connectivity test
-- Cloudflare Queues producer
-- Deployment and infrastructure health checks
+This Worker currently exposes deployment, health, Neon/Hyperdrive and queue
+smoke-test endpoints. It is NOT yet the full Freelance Income AI application
+backend; do not treat this adapter as providing the /api/v1/auth/* routes.
 
-IMPORTANT:
-This is the Cloudflare staging adapter.
-It does not replace the existing full application backend.
+CORS is applied as an outer ASGI wrapper so allowed-origin headers are also
+attached to responses created by the outer ASGI error handling layer.
 """
 
 import logging
@@ -22,32 +17,72 @@ from datetime import datetime, timezone
 from typing import Any
 
 import asyncpg
-
 from fastapi import FastAPI, HTTPException, Request
+from starlette.middleware.cors import CORSMiddleware
 from workers import asgi
 
 
 # ============================================================
-# LOGGING
+# LOGGING AND APPLICATION CONFIGURATION
 # ============================================================
 
 logging.basicConfig(level=logging.INFO)
 
 logger = logging.getLogger("freelance-income-ai-api")
 
-
-# ============================================================
-# APPLICATION
-# ============================================================
-
 APP_NAME = "Freelance Income AI"
 SERVICE_NAME = "freelance-income-ai-api"
-APP_VERSION = "0.3.0"
+APP_VERSION = "0.3.1"
+
+
+# ============================================================
+# CORS CONFIGURATION
+# ============================================================
+
+# Only explicitly trusted browser origins are allowed.
+# Never use "*" with credential-enabled requests.
+
+ALLOWED_ORIGINS = [
+    "https://freelance-income-ai.girishmore097.workers.dev",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
+ALLOWED_METHODS = [
+    "GET",
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
+    "OPTIONS",
+]
+
+ALLOWED_HEADERS = [
+    "Accept",
+    "Authorization",
+    "Content-Type",
+    "Origin",
+    "X-Requested-With",
+]
+
+
+# ============================================================
+# FASTAPI APPLICATION
+# ============================================================
 
 app = FastAPI(
     title=APP_NAME,
-    description="Cloudflare backend staging and infrastructure API",
+    description=(
+        "Cloudflare deployment and infrastructure API for "
+        "Freelance Income AI. The full application API is "
+        "not mounted in this staging adapter yet."
+    ),
     version=APP_VERSION,
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
 )
 
 
@@ -56,18 +91,12 @@ app = FastAPI(
 # ============================================================
 
 def get_worker_environment(request: Request) -> Any:
-    """
-    Retrieve Cloudflare Worker environment bindings.
-    """
-
+    """Return Cloudflare Worker environment bindings."""
     return request.scope.get("env")
 
 
 def get_hyperdrive_binding(request: Request) -> Any:
-    """
-    Retrieve the HYPERDRIVE binding.
-    """
-
+    """Return HYPERDRIVE binding."""
     env = get_worker_environment(request)
 
     if env is None:
@@ -77,10 +106,7 @@ def get_hyperdrive_binding(request: Request) -> Any:
 
 
 def get_queue_binding(request: Request) -> Any:
-    """
-    Retrieve the FREELANCE_JOBS queue binding.
-    """
-
+    """Return FREELANCE_JOBS queue binding."""
     env = get_worker_environment(request)
 
     if env is None:
@@ -93,23 +119,23 @@ def get_queue_binding(request: Request) -> Any:
 # ROOT ENDPOINT
 # ============================================================
 
-@app.get("/")
+@app.get("/", tags=["system"])
 async def root():
-    """
-    Basic application information.
-    """
-
     return {
+        "success": True,
         "application": APP_NAME,
         "service": SERVICE_NAME,
         "version": APP_VERSION,
         "status": "operational",
-        "environment": "staging",
-        "production_ready": False,
+        "environment": "cloudflare-worker",
+        "full_application_api_mounted": False,
         "available_endpoints": [
             "/",
             "/health",
+            "/ready",
+            "/openapi.json",
             "/api/v1/deployment/check",
+            "/api/v1/deployment/info",
             "/api/v1/health/database",
             "/api/v1/queues/test",
         ],
@@ -117,16 +143,13 @@ async def root():
 
 
 # ============================================================
-# APPLICATION HEALTH
+# HEALTH ENDPOINT
 # ============================================================
 
-@app.get("/health")
+@app.get("/health", tags=["system"])
 async def health():
-    """
-    Application-level health check.
-    """
-
     return {
+        "success": True,
         "status": "healthy",
         "application": APP_NAME,
         "service": SERVICE_NAME,
@@ -134,23 +157,36 @@ async def health():
     }
 
 
+@app.get("/ready", tags=["system"])
+async def readiness(request: Request):
+    """Check binding presence, without executing database or queue operations."""
+
+    return {
+        "success": True,
+        "status": "ready",
+        "hyperdrive_binding_available": (
+            get_hyperdrive_binding(request) is not None
+        ),
+        "queue_binding_available": (
+            get_queue_binding(request) is not None
+        ),
+        "database_query_verified": False,
+        "queue_message_published": False,
+    }
+
+
 # ============================================================
-# DEPLOYMENT AND BINDING CHECK
+# DEPLOYMENT DIAGNOSTICS
 # ============================================================
 
-@app.get("/api/v1/deployment/check")
+@app.get("/api/v1/deployment/check", tags=["deployment"])
 async def deployment_check(request: Request):
-    """
-    Check whether Cloudflare infrastructure bindings exist.
-
-    This checks binding availability only.
-    It does not execute database or queue operations.
-    """
 
     hyperdrive = get_hyperdrive_binding(request)
     queue = get_queue_binding(request)
 
     return {
+        "success": True,
         "status": "staging",
         "application": APP_NAME,
         "hyperdrive_binding_available": hyperdrive is not None,
@@ -161,20 +197,30 @@ async def deployment_check(request: Request):
     }
 
 
+@app.get("/api/v1/deployment/info", tags=["deployment"])
+async def deployment_info():
+
+    return {
+        "success": True,
+        "application": APP_NAME,
+        "service": SERVICE_NAME,
+        "version": APP_VERSION,
+        "platform": "Cloudflare Workers",
+        "database_provider": "Neon PostgreSQL",
+        "database_connection": "Cloudflare Hyperdrive",
+        "background_queue": "Cloudflare Queues",
+        "environment": "staging",
+        "full_application_api_mounted": False,
+        "production_ready": False,
+    }
+
+
 # ============================================================
-# POSTGRESQL / NEON DATABASE HEALTH
+# NEON POSTGRESQL / HYPERDRIVE HEALTH
 # ============================================================
 
-@app.get("/api/v1/health/database")
+@app.get("/api/v1/health/database", tags=["health"])
 async def database_health(request: Request):
-    """
-    Verify PostgreSQL connectivity through Cloudflare Hyperdrive.
-
-    Executes:
-        SELECT 1
-
-    Never returns database credentials.
-    """
 
     hyperdrive = get_hyperdrive_binding(request)
 
@@ -204,9 +250,12 @@ async def database_health(request: Request):
                 "Unexpected PostgreSQL health-check result"
             )
 
-        logger.info("PostgreSQL health check successful")
+        logger.info(
+            "PostgreSQL Hyperdrive health check successful"
+        )
 
         return {
+            "success": True,
             "status": "healthy",
             "application": APP_NAME,
             "database": "connected",
@@ -216,7 +265,11 @@ async def database_health(request: Request):
             "query_result": result,
         }
 
+    except HTTPException:
+        raise
+
     except Exception as exc:
+
         logger.exception(
             "PostgreSQL Hyperdrive health check failed"
         )
@@ -229,15 +282,18 @@ async def database_health(request: Request):
                 "error_type": type(exc).__name__,
                 "message": (
                     "PostgreSQL connection test failed. "
-                    "Check Hyperdrive configuration and deployment logs."
+                    "Check Hyperdrive configuration and "
+                    "Cloudflare deployment logs."
                 ),
             },
         ) from exc
 
     finally:
+
         if connection is not None:
             try:
                 await connection.close()
+
             except Exception:
                 logger.exception(
                     "Database connection cleanup failed"
@@ -245,19 +301,11 @@ async def database_health(request: Request):
 
 
 # ============================================================
-# CLOUDFLARE QUEUE PRODUCER TEST
+# CLOUDFLARE QUEUE TEST
 # ============================================================
 
-@app.post("/api/v1/queues/test")
+@app.post("/api/v1/queues/test", tags=["queues"])
 async def queue_test(request: Request):
-    """
-    Publish a harmless infrastructure test message.
-
-    This endpoint verifies that the backend Worker can publish
-    messages to the freelance-income-ai-jobs queue.
-
-    It does not process financial or user-related jobs.
-    """
 
     queue = get_queue_binding(request)
 
@@ -283,6 +331,7 @@ async def queue_test(request: Request):
     }
 
     try:
+
         await queue.send(message)
 
         logger.info(
@@ -291,6 +340,7 @@ async def queue_test(request: Request):
         )
 
         return {
+            "success": True,
             "status": "published",
             "application": APP_NAME,
             "queue": "freelance-income-ai-jobs",
@@ -299,6 +349,7 @@ async def queue_test(request: Request):
         }
 
     except Exception as exc:
+
         logger.exception(
             "Cloudflare Queue publishing failed"
         )
@@ -308,36 +359,37 @@ async def queue_test(request: Request):
             detail={
                 "status": "failed",
                 "error_type": type(exc).__name__,
-                "message": "Unable to publish queue test message",
+                "message": (
+                    "Unable to publish queue test message"
+                ),
             },
         ) from exc
 
 
 # ============================================================
-# API INFORMATION
+# CENTRALIZED CORS
 # ============================================================
 
-@app.get("/api/v1/deployment/info")
-async def deployment_info():
-    """
-    Return staging deployment information.
-    """
+# Wrap the entire FastAPI application.
+# This handles normal responses, FastAPI exceptions and outer errors.
+# Valid OPTIONS preflight requests are handled before endpoint execution.
 
-    return {
-        "application": APP_NAME,
-        "service": SERVICE_NAME,
-        "version": APP_VERSION,
-        "platform": "Cloudflare Workers",
-        "database_provider": "Neon PostgreSQL",
-        "database_connection": "Cloudflare Hyperdrive",
-        "background_queue": "Cloudflare Queues",
-        "environment": "staging",
-        "production_ready": False,
-    }
+cors_app = CORSMiddleware(
+    app=app,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=ALLOWED_METHODS,
+    allow_headers=ALLOWED_HEADERS,
+    expose_headers=[
+        "Content-Disposition",
+        "X-Request-ID",
+    ],
+    max_age=600,
+)
 
 
 # ============================================================
-# CLOUDFLARE ASGI ENTRYPOINT
+# CLOUDFLARE PYTHON WORKER ENTRYPOINT
 # ============================================================
 
-Default = asgi.entrypoint(app)
+Default = asgi.entrypoint(cors_app)
