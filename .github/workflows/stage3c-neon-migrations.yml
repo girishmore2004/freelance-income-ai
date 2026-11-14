@@ -303,3 +303,4 @@ jobs:
           echo "Target: Neon test database"
           echo "Expected revision: ${EXPECTED_ALEMBIC_REVISION}"
           echo "Production database was not configured by this workflow."
+# Stage 3C: Neon migration workflow.
