@@ -116,7 +116,10 @@ function base64UrlDecodeText(value: string): string {
     (character) => character.charCodeAt(0)
   );
 
-  return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  return new TextDecoder("utf-8", {
+  fatal: true,
+  ignoreBOM: false
+}).decode(bytes);
 }
 
 async function hmacKey(env: Env): Promise<CryptoKey> {
