@@ -1,10 +1,11 @@
+
 [project]
 name = "freelance-income-ai-cloudflare"
-version = "0.3.0"
-description = "Cloudflare Python Worker for Freelance Income AI"
+version = "0.4.0"
+description = "Freelance Income AI Cloudflare Python Worker migration foundation"
 requires-python = ">=3.13"
 dependencies = [
-    "fastapi",
+    "fastapi==0.144.0",
     "asyncpg",
 ]
 
