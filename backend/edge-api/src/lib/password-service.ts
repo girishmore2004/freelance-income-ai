@@ -45,8 +45,6 @@ function parsePasswordHash(
     return null;
   }
 
-  // Passlib 1.7.3+ bcrypt_sha256 version 2:
-  // $bcrypt-sha256$v=2,t=2b,r=12$salt$digest
   const v2 = encoded.match(
     /^\$bcrypt-sha256\$v=2,t=(2b),r=(\d{1,2})\$([./A-Za-z0-9]{22})\$([./A-Za-z0-9]{31})$/
   );
@@ -65,8 +63,6 @@ function parsePasswordHash(
     };
   }
 
-  // Older Passlib bcrypt_sha256 version 1:
-  // $bcrypt-sha256$2a,12$salt$digest
   const v1 = encoded.match(
     /^\$bcrypt-sha256\$(2a|2b),(\d{1,2})\$([./A-Za-z0-9]{22})\$([./A-Za-z0-9]{31})$/
   );
@@ -85,10 +81,6 @@ function parsePasswordHash(
     };
   }
 
-  // Legacy bcrypt:
-  // $2a$12$salt+digest
-  // $2b$12$salt+digest
-  // $2y$12$salt+digest
   const legacy = encoded.match(
     /^\$(2a|2b|2y)\$(\d{2})\$([./A-Za-z0-9]{53})$/
   );
@@ -118,11 +110,6 @@ function encodeBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-/**
- * Passlib bcrypt_sha256 v2 prehash:
- * HMAC-SHA256(password, key=salt-as-ASCII)
- * followed by standard Base64 encoding.
- */
 async function passlibV2Prehash(
   password: string,
   salt: string
@@ -147,10 +134,6 @@ async function passlibV2Prehash(
   return encodeBase64(new Uint8Array(digest));
 }
 
-/**
- * Passlib bcrypt_sha256 v1 prehash:
- * plain SHA-256(password), followed by standard Base64.
- */
 async function passlibV1Prehash(
   password: string
 ): Promise<string> {
@@ -176,14 +159,15 @@ function normalizeLegacyBcryptHash(
   variant: "2a" | "2b" | "2y"
 ): string {
   if (variant === "2y") {
-    // $2y$ is the crypt_blowfish name for the compatible bcrypt variant.
     return `$2b$${hash.slice(4)}`;
   }
 
   return hash;
 }
 
-function validatePasswordInput(password: unknown): password is string {
+function validatePasswordInput(
+  password: unknown
+): password is string {
   return (
     typeof password === "string" &&
     password.length > 0 &&
@@ -192,17 +176,51 @@ function validatePasswordInput(password: unknown): password is string {
   );
 }
 
-/**
- * Verifies a password against hashes produced by the original
- * Passlib CryptContext:
- *
- * CryptContext(
- *   schemes=["bcrypt_sha256", "bcrypt"],
- *   deprecated=["bcrypt"]
- * )
- *
- * Invalid and unsupported hashes return false.
- */
+function generateSalt(rounds: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    bcrypt.genSalt(rounds, (error, salt) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve(salt);
+    });
+  });
+}
+
+function hashWithSalt(
+  password: string,
+  salt: string
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    bcrypt.hash(password, salt, (error, hash) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve(hash);
+    });
+  });
+}
+
+function comparePassword(
+  password: string,
+  hash: string
+): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    bcrypt.compare(password, hash, (error, matched) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve(matched);
+    });
+  });
+}
+
 export async function verifyPassword(
   password: string,
   encodedHash: string
@@ -220,7 +238,7 @@ export async function verifyPassword(
         parsed.variant
       );
 
-      return await bcrypt.compare(password, compatibleHash);
+      return await comparePassword(password, compatibleHash);
     }
 
     const prehashed =
@@ -235,7 +253,7 @@ export async function verifyPassword(
       parsed.digest
     );
 
-    return await bcrypt.compare(
+    return await comparePassword(
       prehashed,
       underlyingHash
     );
@@ -244,18 +262,16 @@ export async function verifyPassword(
   }
 }
 
-/**
- * Creates a new Passlib-compatible bcrypt_sha256 v2 hash.
- * This is the format used by the original application's preferred scheme.
- */
 export async function hashPassword(
   password: string
 ): Promise<string> {
   if (!validatePasswordInput(password)) {
-    throw new Error("Password is invalid or exceeds the supported length.");
+    throw new Error(
+      "Password is invalid or exceeds the supported length."
+    );
   }
 
-  const salt = await bcrypt.genSalt(DEFAULT_BCRYPT_ROUNDS, "2b");
+  const salt = await generateSalt(DEFAULT_BCRYPT_ROUNDS);
 
   const saltMatch = salt.match(
     /^\$2b\$\d{2}\$([./A-Za-z0-9]{22})$/
@@ -266,12 +282,13 @@ export async function hashPassword(
   }
 
   const saltValue = saltMatch[1];
+
   const prehashed = await passlibV2Prehash(
     password,
     saltValue
   );
 
-  const bcryptHash = await bcrypt.hash(
+  const bcryptHash = await hashWithSalt(
     prehashed,
     salt
   );
@@ -281,7 +298,9 @@ export async function hashPassword(
   );
 
   if (!result) {
-    throw new Error("Unable to generate a compatible password hash.");
+    throw new Error(
+      "Unable to generate a compatible password hash."
+    );
   }
 
   return (
@@ -290,10 +309,6 @@ export async function hashPassword(
   );
 }
 
-/**
- * Indicates whether the existing hash uses the preferred scheme.
- * This is informational; it does not change the stored hash.
- */
 export function usesPreferredPasswordScheme(
   encodedHash: string
 ): boolean {
