@@ -28,6 +28,7 @@ jobs:
     env:
       EXPECTED_DATABASE: neondb
       EXPECTED_SCHEMA: public
+      EXPECTED_NEON_HOST: ${{ vars.STAGE3C_EXPECTED_NEON_HOST }}
       EXPECTED_ALEMBIC_REVISION: "0046_agent_workflow_rq_job_id"
 
     steps:
@@ -59,7 +60,7 @@ jobs:
         working-directory: backend
         run: python scripts/check_migration_ids.py
 
-      - name: Configure and validate Neon test connection
+      - name: Configure and validate exact Neon test endpoint
         env:
           STAGE3C_DATABASE_URL: ${{ secrets.STAGE3C_DATABASE_URL }}
         run: |
@@ -69,9 +70,13 @@ jobs:
           from urllib.parse import urlsplit, urlunsplit
 
           raw = os.environ.get("STAGE3C_DATABASE_URL", "").strip()
+          expected_host = os.environ.get("EXPECTED_NEON_HOST", "").strip().lower().rstrip(".")
 
           if not raw:
               sys.exit("STAGE3C_DATABASE_URL is missing.")
+
+          if not expected_host:
+              sys.exit("STAGE3C_EXPECTED_NEON_HOST repository variable is missing.")
 
           try:
               parsed = urlsplit(raw)
@@ -79,7 +84,12 @@ jobs:
               if parsed.scheme not in ("postgresql", "postgres"):
                   raise ValueError("Unsupported PostgreSQL URL scheme.")
 
-              if not parsed.hostname or not parsed.hostname.endswith(".neon.tech"):
+              actual_host = (parsed.hostname or "").lower().rstrip(".")
+
+              if not actual_host or actual_host != expected_host:
+                  raise ValueError("Neon endpoint does not match the approved test endpoint.")
+
+              if not actual_host.endswith(".neon.tech"):
                   raise ValueError("Connection host is not a Neon endpoint.")
 
               database_name = parsed.path.lstrip("/").split("/", 1)[0]
@@ -110,13 +120,14 @@ jobs:
                   env_file.write(f"DATABASE_URL={sqlalchemy_url}\n")
                   env_file.write(f"STAGE3C_PG_DSN={psycopg_url}\n")
 
-              print("Neon endpoint and database name validated.")
+              print("Exact Neon test endpoint validated.")
+              print("Database name validated.")
               print("Connection values were not printed.")
 
           except Exception:
               sys.exit(
                   "Connection configuration validation failed. "
-                  "Check the Neon test-branch connection string and database name."
+                  "Check the test-branch hostname, credentials and database name."
               )
           PY
 
@@ -133,6 +144,12 @@ jobs:
           raw = os.environ["STAGE3C_DATABASE_URL"]
           parsed = urlsplit(raw)
 
+          expected_host = os.environ["EXPECTED_NEON_HOST"].strip().lower().rstrip(".")
+          actual_host = (parsed.hostname or "").lower().rstrip(".")
+
+          if not expected_host or actual_host != expected_host:
+              sys.exit("Neon endpoint mismatch. Migration refused.")
+
           dsn = urlunsplit((
               "postgresql",
               parsed.netloc,
@@ -142,6 +159,7 @@ jobs:
           ))
 
           expected_database = os.environ["EXPECTED_DATABASE"]
+          expected_schema = os.environ["EXPECTED_SCHEMA"]
           expected_revision = os.environ["EXPECTED_ALEMBIC_REVISION"]
 
           try:
@@ -155,25 +173,25 @@ jobs:
                       if database_name != expected_database:
                           sys.exit("Unexpected database. Migration refused.")
 
-                      if schema_name != "public":
+                      if schema_name != expected_schema:
                           sys.exit("Unexpected schema. Migration refused.")
 
                       cur.execute("""
                           SELECT COUNT(*)
                           FROM information_schema.tables
-                          WHERE table_schema = 'public'
+                          WHERE table_schema = %s
                             AND table_type = 'BASE TABLE'
-                      """)
+                      """, (expected_schema,))
                       table_count = cur.fetchone()[0]
 
                       cur.execute("""
                           SELECT EXISTS (
                               SELECT 1
                               FROM information_schema.tables
-                              WHERE table_schema = 'public'
+                              WHERE table_schema = %s
                                 AND table_name = 'alembic_version'
                           )
-                      """)
+                      """, (expected_schema,))
                       has_version_table = cur.fetchone()[0]
 
                       if table_count == 0 and not has_version_table:
@@ -231,6 +249,12 @@ jobs:
           raw = os.environ["STAGE3C_DATABASE_URL"]
           parsed = urlsplit(raw)
 
+          expected_host = os.environ["EXPECTED_NEON_HOST"].strip().lower().rstrip(".")
+          actual_host = (parsed.hostname or "").lower().rstrip(".")
+
+          if not expected_host or actual_host != expected_host:
+              sys.exit("Neon endpoint mismatch during final verification.")
+
           dsn = urlunsplit((
               "postgresql",
               parsed.netloc,
@@ -240,6 +264,7 @@ jobs:
           ))
 
           expected = os.environ["EXPECTED_ALEMBIC_REVISION"]
+          expected_schema = os.environ["EXPECTED_SCHEMA"]
 
           try:
               with psycopg.connect(dsn, connect_timeout=20) as conn:
@@ -258,9 +283,9 @@ jobs:
                       cur.execute("""
                           SELECT COUNT(*)
                           FROM information_schema.tables
-                          WHERE table_schema = 'public'
+                          WHERE table_schema = %s
                             AND table_type = 'BASE TABLE'
-                      """)
+                      """, (expected_schema,))
                       table_count = cur.fetchone()[0]
 
                       if table_count <= 1:
@@ -303,4 +328,5 @@ jobs:
           echo "Target: Neon test database"
           echo "Expected revision: ${EXPECTED_ALEMBIC_REVISION}"
           echo "Production database was not configured by this workflow."
+
 # Stage 3C: Neon migration workflow.
