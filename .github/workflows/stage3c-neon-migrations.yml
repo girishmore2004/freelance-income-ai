@@ -1,0 +1,305 @@
+
+name: Stage 3C - Neon Test Database Migrations
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_target:
+        description: "Confirm that STAGE3C_DATABASE_URL points ONLY to stage3c-integration-test"
+        required: true
+        type: choice
+        options:
+          - "NO - do not migrate"
+          - "YES - migrate stage3c-integration-test"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stage3c-neon-test-migrations
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: Validate and migrate isolated Neon test database
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      EXPECTED_DATABASE: neondb
+      EXPECTED_SCHEMA: public
+      EXPECTED_ALEMBIC_REVISION: "0046_agent_workflow_rq_job_id"
+
+    steps:
+      - name: Require explicit test-branch confirmation
+        env:
+          CONFIRM_TARGET: ${{ inputs.confirm_target }}
+        run: |
+          if [ "$CONFIRM_TARGET" != "YES - migrate stage3c-integration-test" ]; then
+            echo "Migration cancelled. Explicit test-branch confirmation is required."
+            exit 1
+          fi
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install original backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt
+
+      - name: Validate original Alembic revision identifiers
+        working-directory: backend
+        run: python scripts/check_migration_ids.py
+
+      - name: Configure and validate Neon test connection
+        env:
+          STAGE3C_DATABASE_URL: ${{ secrets.STAGE3C_DATABASE_URL }}
+        run: |
+          python - <<'PY'
+          import os
+          import sys
+          from urllib.parse import urlsplit, urlunsplit
+
+          raw = os.environ.get("STAGE3C_DATABASE_URL", "").strip()
+
+          if not raw:
+              sys.exit("STAGE3C_DATABASE_URL is missing.")
+
+          try:
+              parsed = urlsplit(raw)
+
+              if parsed.scheme not in ("postgresql", "postgres"):
+                  raise ValueError("Unsupported PostgreSQL URL scheme.")
+
+              if not parsed.hostname or not parsed.hostname.endswith(".neon.tech"):
+                  raise ValueError("Connection host is not a Neon endpoint.")
+
+              database_name = parsed.path.lstrip("/").split("/", 1)[0]
+
+              if database_name != os.environ["EXPECTED_DATABASE"]:
+                  raise ValueError("Unexpected database name.")
+
+              if not parsed.username or not parsed.password:
+                  raise ValueError("Database credentials are missing.")
+
+              sqlalchemy_url = urlunsplit((
+                  "postgresql+psycopg",
+                  parsed.netloc,
+                  parsed.path,
+                  parsed.query,
+                  parsed.fragment,
+              ))
+
+              psycopg_url = urlunsplit((
+                  "postgresql",
+                  parsed.netloc,
+                  parsed.path,
+                  parsed.query,
+                  parsed.fragment,
+              ))
+
+              with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
+                  env_file.write(f"DATABASE_URL={sqlalchemy_url}\n")
+                  env_file.write(f"STAGE3C_PG_DSN={psycopg_url}\n")
+
+              print("Neon endpoint and database name validated.")
+              print("Connection values were not printed.")
+
+          except Exception:
+              sys.exit(
+                  "Connection configuration validation failed. "
+                  "Check the Neon test-branch connection string and database name."
+              )
+          PY
+
+      - name: Verify target database and safe initial state
+        env:
+          STAGE3C_DATABASE_URL: ${{ secrets.STAGE3C_DATABASE_URL }}
+        run: |
+          python - <<'PY'
+          import os
+          import sys
+          from urllib.parse import urlsplit, urlunsplit
+          import psycopg
+
+          raw = os.environ["STAGE3C_DATABASE_URL"]
+          parsed = urlsplit(raw)
+
+          dsn = urlunsplit((
+              "postgresql",
+              parsed.netloc,
+              parsed.path,
+              parsed.query,
+              parsed.fragment,
+          ))
+
+          expected_database = os.environ["EXPECTED_DATABASE"]
+          expected_revision = os.environ["EXPECTED_ALEMBIC_REVISION"]
+
+          try:
+              with psycopg.connect(dsn, connect_timeout=20) as conn:
+                  with conn.cursor() as cur:
+                      cur.execute("""
+                          SELECT current_database(), current_schema()
+                      """)
+                      database_name, schema_name = cur.fetchone()
+
+                      if database_name != expected_database:
+                          sys.exit("Unexpected database. Migration refused.")
+
+                      if schema_name != "public":
+                          sys.exit("Unexpected schema. Migration refused.")
+
+                      cur.execute("""
+                          SELECT COUNT(*)
+                          FROM information_schema.tables
+                          WHERE table_schema = 'public'
+                            AND table_type = 'BASE TABLE'
+                      """)
+                      table_count = cur.fetchone()[0]
+
+                      cur.execute("""
+                          SELECT EXISTS (
+                              SELECT 1
+                              FROM information_schema.tables
+                              WHERE table_schema = 'public'
+                                AND table_name = 'alembic_version'
+                          )
+                      """)
+                      has_version_table = cur.fetchone()[0]
+
+                      if table_count == 0 and not has_version_table:
+                          print("Fresh empty test database confirmed.")
+
+                      elif has_version_table:
+                          cur.execute("""
+                              SELECT version_num
+                              FROM public.alembic_version
+                          """)
+                          versions = [row[0] for row in cur.fetchall()]
+
+                          if versions != [expected_revision]:
+                              sys.exit(
+                                  "Database is not empty and is not at the "
+                                  "expected final revision. Migration refused."
+                              )
+
+                          print("Database is already at the expected revision.")
+                          print("Alembic upgrade can safely run as a no-op.")
+
+                      else:
+                          sys.exit(
+                              "Unexpected existing public tables without "
+                              "a valid Alembic migration state. Migration refused."
+                          )
+
+                      print("Target database and schema checks passed.")
+
+          except SystemExit:
+              raise
+          except Exception:
+              sys.exit(
+                  "Database preflight failed. "
+                  "Check connectivity and Neon test-branch permissions."
+              )
+          PY
+
+      - name: Apply original Alembic migrations
+        working-directory: backend
+        env:
+          ENVIRONMENT: staging
+        run: alembic upgrade head
+
+      - name: Verify final migration revision and pgvector
+        env:
+          STAGE3C_DATABASE_URL: ${{ secrets.STAGE3C_DATABASE_URL }}
+        run: |
+          python - <<'PY'
+          import os
+          import sys
+          from urllib.parse import urlsplit, urlunsplit
+          import psycopg
+
+          raw = os.environ["STAGE3C_DATABASE_URL"]
+          parsed = urlsplit(raw)
+
+          dsn = urlunsplit((
+              "postgresql",
+              parsed.netloc,
+              parsed.path,
+              parsed.query,
+              parsed.fragment,
+          ))
+
+          expected = os.environ["EXPECTED_ALEMBIC_REVISION"]
+
+          try:
+              with psycopg.connect(dsn, connect_timeout=20) as conn:
+                  with conn.cursor() as cur:
+                      cur.execute("""
+                          SELECT version_num
+                          FROM public.alembic_version
+                      """)
+                      revisions = [row[0] for row in cur.fetchall()]
+
+                      if revisions != [expected]:
+                          sys.exit(
+                              "Final Alembic revision verification failed."
+                          )
+
+                      cur.execute("""
+                          SELECT COUNT(*)
+                          FROM information_schema.tables
+                          WHERE table_schema = 'public'
+                            AND table_type = 'BASE TABLE'
+                      """)
+                      table_count = cur.fetchone()[0]
+
+                      if table_count <= 1:
+                          sys.exit(
+                              "Expected application tables were not found."
+                          )
+
+                      cur.execute("""
+                          SELECT EXISTS (
+                              SELECT 1
+                              FROM pg_extension
+                              WHERE extname = 'vector'
+                          )
+                      """)
+                      vector_enabled = cur.fetchone()[0]
+
+                      if not vector_enabled:
+                          sys.exit(
+                              "pgvector extension is not enabled."
+                          )
+
+                      print("Migration verification successful.")
+                      print(f"Final revision: {expected}")
+                      print(f"Public base tables: {table_count}")
+                      print("pgvector extension: enabled")
+
+          except SystemExit:
+              raise
+          except Exception:
+              sys.exit(
+                  "Final database verification failed. "
+                  "Inspect the migration and database logs."
+              )
+          PY
+
+      - name: Migration summary
+        if: success()
+        run: |
+          echo "Stage 3C test database migration completed successfully."
+          echo "Target: Neon test database"
+          echo "Expected revision: ${EXPECTED_ALEMBIC_REVISION}"
+          echo "Production database was not configured by this workflow."
