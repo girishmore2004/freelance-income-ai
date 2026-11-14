@@ -17,31 +17,37 @@ export async function checkDatabase(
     );
   }
 
-  // Hyperdrive maintains the underlying connection pool.
-  // Create a lightweight driver client for this request.
   const sql = postgres(connectionString, {
-    max: 5,
+    max: 1,
     fetch_types: false,
-    prepare: true,
+    prepare: false,
+    connect_timeout: 10,
+    idle_timeout: 5,
     connection: {
       application_name: "Freelance Income AI Edge API"
     }
   });
 
-  const rows = await sql<{ value: number }[]>`
-    SELECT 1 AS value
-  `;
+  try {
+    const rows = await sql<{ value: number }[]>`
+      SELECT 1 AS value
+    `;
 
-  const result = Number(rows[0]?.value);
+    const result = Number(rows[0]?.value);
 
-  if (result !== 1) {
-    throw new Error(
-      "Unexpected PostgreSQL health-check result"
-    );
+    if (result !== 1) {
+      throw new Error(
+        "Unexpected PostgreSQL health-check result"
+      );
+    }
+
+    return {
+      connected: true,
+      result
+    };
+  } finally {
+    await sql.end({
+      timeout: 5
+    });
   }
-
-  return {
-    connected: true,
-    result
-  };
 }
