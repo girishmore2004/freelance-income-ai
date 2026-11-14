@@ -3,7 +3,7 @@ import type { Env } from "./types";
 
 import { handleLoginRoute } from "./lib/login-route";
 import { handleAuthRoute } from "./lib/auth-routes";
-
+import { handleMfaLoginRoute } from "./lib/mfa-login-route";
 import {
   applyCors,
   handlePreflight
@@ -269,7 +269,18 @@ async function routeRequest(
       return loginResponse;
     }
   }
+  if (
+    method === "POST" &&
+    path === "/api/v1/auth/mfa/verify-login"
+  ) {
+    const mfaResponse = await handleMfaLoginRoute(
+      request,
+      env,
+      requestId
+    );
 
+    if (mfaResponse) return mfaResponse;
+  }
   // --------------------------------------------------
   // Remaining authentication routes
   // --------------------------------------------------
