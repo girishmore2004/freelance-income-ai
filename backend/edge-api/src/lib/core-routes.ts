@@ -5,14 +5,14 @@ import { failure, success } from "./response";
 import { scoreOpportunity } from "./scoring";
 import type { ScoreOpportunity, ScoreProfile } from "./scoring";
 
-type Sql = ReturnType<typeof postgres>;
-type Row = Record<string, any>;
+export type Sql = ReturnType<typeof postgres>;
+export type Row = Record<string, any>;
 
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
 
-function database(env: Env): Sql {
+export function database(env: Env): Sql {
   const connectionString = env.HYPERDRIVE?.connectionString;
   if (!connectionString) throw new Error("Hyperdrive database connection is not configured.");
 
@@ -32,12 +32,12 @@ function bearer(request: Request): string | null {
   return match?.[1]?.trim() || null;
 }
 
-function iso(value: unknown): string | null {
+export function iso(value: unknown): string | null {
   if (!value) return null;
   return value instanceof Date ? value.toISOString() : String(value);
 }
 
-function jsonList(value: unknown): string[] {
+export function jsonList(value: unknown): string[] {
   try {
     const parsed = JSON.parse(String(value ?? "[]"));
     return Array.isArray(parsed) ? parsed.map(String) : [];
@@ -55,17 +55,17 @@ function strList(value: unknown, maxItems = 100, maxLen = 200): string[] | null 
     .slice(0, maxItems);
 }
 
-function num(value: unknown): number | null {
+export function num(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 }
 
-function text(value: unknown, max: number, fallback = ""): string {
+export function text(value: unknown, max: number, fallback = ""): string {
   return typeof value === "string" ? value.slice(0, max) : fallback;
 }
 
-async function sha256Hex(value: string): Promise<string> {
+export async function sha256Hex(value: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
@@ -84,7 +84,7 @@ async function proposalFingerprint(
   return sha256Hex(`${content}\nPRICE:${pyPrice(price)}\nCURRENCY:${currency}`);
 }
 
-async function body(request: Request): Promise<Record<string, unknown> | null> {
+export async function body(request: Request): Promise<Record<string, unknown> | null> {
   try {
     const parsed = await request.json();
     return parsed && typeof parsed === "object" && !Array.isArray(parsed)
@@ -93,6 +93,30 @@ async function body(request: Request): Promise<Record<string, unknown> | null> {
   } catch {
     return null;
   }
+}
+
+/** Returns the signed-in user id, or an error Response. */
+export async function requireUser(
+  request: Request,
+  env: Env,
+  requestId: string
+): Promise<string | Response> {
+  const token = bearer(request);
+  if (!token) {
+    return failure("AUTHENTICATION_REQUIRED", "Authentication required", 401, requestId);
+  }
+
+  const authenticated = await authenticateAccessToken(env, token);
+  if (!authenticated) {
+    return failure(
+      "INVALID_OR_EXPIRED_SESSION",
+      "Session is invalid, expired or revoked. Please sign in again.",
+      401,
+      requestId
+    );
+  }
+
+  return authenticated.user.id;
 }
 
 // ---------------------------------------------------------------------------
@@ -118,7 +142,7 @@ function profileOut(p: Row) {
   };
 }
 
-function oppOut(o: Row) {
+export function oppOut(o: Row) {
   let breakdown: unknown = {};
   try {
     breakdown = JSON.parse(String(o.score_breakdown ?? "{}"));
@@ -158,7 +182,7 @@ function oppOut(o: Row) {
   };
 }
 
-function proposalOut(p: Row) {
+export function proposalOut(p: Row) {
   return {
     id: p.id,
     opportunity_id: p.opportunity_id,
@@ -181,7 +205,7 @@ function approvalOut(a: Row) {
   };
 }
 
-async function loadProfile(sql: Sql, userId: string): Promise<Row> {
+export async function loadProfile(sql: Sql, userId: string): Promise<Row> {
   const rows = await sql`SELECT * FROM profiles WHERE user_id = ${userId} LIMIT 1`;
   if (rows[0]) return rows[0];
 
@@ -200,7 +224,7 @@ async function loadProfile(sql: Sql, userId: string): Promise<Row> {
   return (await sql`SELECT * FROM profiles WHERE user_id = ${userId} LIMIT 1`)[0];
 }
 
-function scoreProfile(p: Row): ScoreProfile {
+export function scoreProfile(p: Row): ScoreProfile {
   return {
     skills: jsonList(p.skills),
     minimum_budget: Number(p.minimum_budget),
@@ -215,7 +239,7 @@ function scoreProfile(p: Row): ScoreProfile {
 // proposal drafting (Workers AI when bound, otherwise a safe template)
 // ---------------------------------------------------------------------------
 
-async function draftProposal(
+export async function draftProposal(
   env: Env,
   profile: Row,
   opp: Row,
@@ -292,8 +316,6 @@ async function draftProposal(
 // Lists the dashboard requests that are not built on the edge API yet.
 const EMPTY_LISTS = new Set([
   "/api/v1/workflows",
-  "/api/v1/projects",
-  "/api/v1/invoices",
   "/api/v1/tasks",
   "/api/v1/milestones",
   "/api/v1/research",
@@ -429,7 +451,13 @@ export async function handleCoreRoute(
           (SELECT count(*) FROM proposals WHERE user_id = ${userId}) AS proposals,
           (SELECT count(*) FROM approvals WHERE user_id = ${userId} AND decision = 'pending') AS pending_approvals,
           (SELECT count(*) FROM projects WHERE user_id = ${userId}) AS projects,
-          (SELECT COALESCE(sum(amount), 0) FROM invoices WHERE user_id = ${userId} AND status = 'paid') AS paid_revenue
+          (SELECT COALESCE(sum(amount), 0) FROM invoices WHERE user_id = ${userId} AND status = 'paid') AS paid_revenue,
+          (SELECT COALESCE(sum(amount), 0) FROM invoices WHERE user_id = ${userId} AND status = 'unpaid') AS pending_revenue,
+          (SELECT count(*) FROM opportunities WHERE user_id = ${userId} AND status IN ('new', 'drafted') AND match_score >= 60) AS new_matches,
+          (SELECT count(*) FROM opportunities WHERE user_id = ${userId} AND status = 'ready') AS ready_to_apply,
+          (SELECT count(*) FROM opportunities WHERE user_id = ${userId} AND status IN ('applied', 'replied')) AS waiting_reply,
+          (SELECT count(*) FROM opportunities WHERE user_id = ${userId} AND status = 'won') AS won,
+          (SELECT count(*) FROM projects WHERE user_id = ${userId} AND status = 'active') AS active_projects
       `;
       const profile = await loadProfile(sql, userId);
 
@@ -446,6 +474,12 @@ export async function handleCoreRoute(
           approved_proposals: Number(extra.approved_proposals),
           projects: Number(counts.projects),
           paid_revenue: Number(counts.paid_revenue),
+          pending_revenue: Number(counts.pending_revenue),
+          new_matches: Number(counts.new_matches),
+          ready_to_apply: Number(counts.ready_to_apply),
+          waiting_reply: Number(counts.waiting_reply),
+          won: Number(counts.won),
+          active_projects: Number(counts.active_projects),
           currency: profile.currency || "INR",
           profile_complete:
             jsonList(profile.skills).length > 0 && String(profile.full_name || "").trim().length > 0
@@ -600,6 +634,8 @@ export async function handleCoreRoute(
                 ${`Generated ${mode} proposal for opportunity ${found[0].id}`}, now())
       `;
 
+      await sql`UPDATE opportunities SET status = 'drafted' WHERE id = ${found[0].id} AND user_id = ${userId} AND status = 'new'`;
+
       const saved = await sql`SELECT * FROM proposals WHERE id = ${id} LIMIT 1`;
       return success({ ...proposalOut(saved[0]), mode }, "Proposal draft created", 201, requestId);
     }
@@ -724,6 +760,12 @@ export async function handleCoreRoute(
           WHERE id = ${approval.id}
         `;
         await tx`UPDATE proposals SET status = ${decision} WHERE id = ${proposal.id}`;
+        if (decision === "approved") {
+          await tx`
+            UPDATE opportunities SET status = 'ready'
+            WHERE id = ${proposal.opportunity_id} AND user_id = ${userId} AND status IN ('new', 'drafted')
+          `;
+        }
         return {
           kind: "ok" as const,
           approval: (await tx`SELECT * FROM approvals WHERE id = ${approval.id}`)[0]
