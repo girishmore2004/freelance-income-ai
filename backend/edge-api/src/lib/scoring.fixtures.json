@@ -1,0 +1,321 @@
+[
+ {
+  "profile": {
+   "skills": [
+    "Python",
+    "RAG",
+    "FastAPI",
+    "LangChain"
+   ],
+   "minimum_budget": 5000,
+   "weekly_hours": 10,
+   "dealbreakers": [
+    "unpaid"
+   ],
+   "preferred_work_types": [
+    "fixed",
+    "hourly"
+   ],
+   "preferred_industries": []
+  },
+  "opp": {
+   "title": "RAG chatbot",
+   "description": "Build a RAG chatbot in Python with FastAPI. Deliverables: API, tests, docs and milestone plan. Build a RAG chatbot in Python with FastAPI. Deliverables: API, tests, docs and milestone plan. Build a RAG chatbot in Python with FastAPI. Deliverables: API, tests, docs and milestone plan. ",
+   "required_skills": [
+    "python",
+    "rag",
+    "docker"
+   ],
+   "budget_min": null,
+   "budget_max": 8000,
+   "deadline": "",
+   "job_type": "unknown",
+   "industry": "",
+   "estimated_hours": null,
+   "competition_level": "unknown",
+   "client_rating": null,
+   "client_reviews": null,
+   "client_payment_verified": null
+  },
+  "score": 67,
+  "breakdown": {
+   "points": {
+    "skill_fit": 23,
+    "budget_fit": 20,
+    "client_quality": 8,
+    "deadline_feasibility": 5,
+    "competition_level": 5,
+    "scope_clarity": 6
+   },
+   "notes": {
+    "matched_skills": [
+     "python",
+     "rag"
+    ],
+    "missing_skills": [
+     "docker"
+    ],
+    "client_quality_note": "Neutral: no client verification data supplied",
+    "deadline_data_complete": false,
+    "competition_data_source": "unknown; neutral score used",
+    "budget_data_available": true,
+    "dealbreaker_matches": [],
+    "manual_review_required": false,
+    "eligible_by_profile_rules": true,
+    "eligibility_warnings": []
+   }
+  }
+ },
+ {
+  "profile": {
+   "skills": [
+    "Python",
+    "RAG",
+    "FastAPI",
+    "LangChain"
+   ],
+   "minimum_budget": 5000,
+   "weekly_hours": 10,
+   "dealbreakers": [
+    "unpaid"
+   ],
+   "preferred_work_types": [
+    "fixed",
+    "hourly"
+   ],
+   "preferred_industries": []
+  },
+  "opp": {
+   "title": "Cheap job",
+   "description": "Need python script, unpaid trial first please.",
+   "required_skills": [],
+   "budget_min": null,
+   "budget_max": 1500,
+   "deadline": "",
+   "job_type": "contract",
+   "industry": "",
+   "estimated_hours": null,
+   "competition_level": "high",
+   "client_rating": null,
+   "client_reviews": null,
+   "client_payment_verified": null
+  },
+  "score": 61,
+  "breakdown": {
+   "points": {
+    "skill_fit": 35,
+    "budget_fit": 6,
+    "client_quality": 8,
+    "deadline_feasibility": 5,
+    "competition_level": 4,
+    "scope_clarity": 3
+   },
+   "notes": {
+    "matched_skills": [
+     "python"
+    ],
+    "missing_skills": [],
+    "client_quality_note": "Neutral: no client verification data supplied",
+    "deadline_data_complete": false,
+    "competition_data_source": "provided opportunity metadata",
+    "budget_data_available": true,
+    "dealbreaker_matches": [
+     "unpaid"
+    ],
+    "manual_review_required": true,
+    "eligible_by_profile_rules": false,
+    "eligibility_warnings": [
+     "Work type is outside your stated preferences",
+     "Listed budget is below your minimum"
+    ]
+   }
+  }
+ },
+ {
+  "profile": {
+   "skills": [
+    "Python",
+    "RAG",
+    "FastAPI",
+    "LangChain"
+   ],
+   "minimum_budget": 5000,
+   "weekly_hours": 10,
+   "dealbreakers": [
+    "unpaid"
+   ],
+   "preferred_work_types": [
+    "fixed",
+    "hourly"
+   ],
+   "preferred_industries": []
+  },
+  "opp": {
+   "title": "Rated",
+   "description": "Create a LangChain agent that will provide summaries for support tickets.",
+   "required_skills": [],
+   "budget_min": 6000,
+   "budget_max": null,
+   "deadline": "2099-01-01",
+   "job_type": "unknown",
+   "industry": "",
+   "estimated_hours": 20,
+   "competition_level": "low",
+   "client_rating": 4.5,
+   "client_reviews": 12,
+   "client_payment_verified": true
+  },
+  "score": 94,
+  "breakdown": {
+   "points": {
+    "skill_fit": 35,
+    "budget_fit": 20,
+    "client_quality": 14,
+    "deadline_feasibility": 10,
+    "competition_level": 10,
+    "scope_clarity": 5
+   },
+   "notes": {
+    "matched_skills": [
+     "langchain"
+    ],
+    "missing_skills": [],
+    "client_quality_note": "Based only on supplied client fields; verify source independently",
+    "deadline_data_complete": true,
+    "competition_data_source": "provided opportunity metadata",
+    "budget_data_available": true,
+    "dealbreaker_matches": [],
+    "manual_review_required": false,
+    "eligible_by_profile_rules": true,
+    "eligibility_warnings": []
+   }
+  }
+ },
+ {
+  "profile": {
+   "skills": [
+    "Python",
+    "RAG",
+    "FastAPI",
+    "LangChain"
+   ],
+   "minimum_budget": 5000,
+   "weekly_hours": 10,
+   "dealbreakers": [
+    "unpaid"
+   ],
+   "preferred_work_types": [
+    "fixed",
+    "hourly"
+   ],
+   "preferred_industries": [
+    "healthcare"
+   ]
+  },
+  "opp": {
+   "title": "No data",
+   "description": "short text here ok",
+   "required_skills": [],
+   "budget_min": null,
+   "budget_max": null,
+   "deadline": "",
+   "job_type": "unknown",
+   "industry": "fintech",
+   "estimated_hours": null,
+   "competition_level": "unknown",
+   "client_rating": null,
+   "client_reviews": null,
+   "client_payment_verified": null
+  },
+  "score": 49,
+  "breakdown": {
+   "points": {
+    "skill_fit": 18,
+    "budget_fit": 10,
+    "client_quality": 8,
+    "deadline_feasibility": 5,
+    "competition_level": 5,
+    "scope_clarity": 3
+   },
+   "notes": {
+    "matched_skills": [],
+    "missing_skills": [],
+    "client_quality_note": "Neutral: no client verification data supplied",
+    "deadline_data_complete": false,
+    "competition_data_source": "unknown; neutral score used",
+    "budget_data_available": false,
+    "dealbreaker_matches": [],
+    "manual_review_required": true,
+    "eligible_by_profile_rules": true,
+    "eligibility_warnings": [
+     "Industry is outside your stated preferences"
+    ]
+   }
+  }
+ },
+ {
+  "profile": {
+   "skills": [
+    "Python",
+    "RAG",
+    "FastAPI",
+    "LangChain"
+   ],
+   "minimum_budget": 5000,
+   "weekly_hours": 10,
+   "dealbreakers": [
+    "unpaid"
+   ],
+   "preferred_work_types": [
+    "fixed",
+    "hourly"
+   ],
+   "preferred_industries": []
+  },
+  "opp": {
+   "title": "Half",
+   "description": "python fastapi rag langchain build",
+   "required_skills": [],
+   "budget_min": null,
+   "budget_max": 2500,
+   "deadline": "2099-01-01",
+   "job_type": "unknown",
+   "industry": "",
+   "estimated_hours": 3,
+   "competition_level": "unknown",
+   "client_rating": 2.5,
+   "client_reviews": 0,
+   "client_payment_verified": null
+  },
+  "score": 73,
+  "breakdown": {
+   "points": {
+    "skill_fit": 35,
+    "budget_fit": 10,
+    "client_quality": 8,
+    "deadline_feasibility": 10,
+    "competition_level": 5,
+    "scope_clarity": 5
+   },
+   "notes": {
+    "matched_skills": [
+     "fastapi",
+     "langchain",
+     "python",
+     "rag"
+    ],
+    "missing_skills": [],
+    "client_quality_note": "Based only on supplied client fields; verify source independently",
+    "deadline_data_complete": true,
+    "competition_data_source": "unknown; neutral score used",
+    "budget_data_available": true,
+    "dealbreaker_matches": [],
+    "manual_review_required": true,
+    "eligible_by_profile_rules": false,
+    "eligibility_warnings": [
+     "Listed budget is below your minimum"
+    ]
+   }
+  }
+ }
+]
