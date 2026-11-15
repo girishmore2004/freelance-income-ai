@@ -5,6 +5,8 @@ import { handleAuthRoute } from "./lib/auth-routes";
 import { handleMfaLoginRoute } from "./lib/mfa-login-route";
 import { handleRegisterRoute } from "./lib/register-route";
 import { handleCoreRoute } from "./lib/core-routes";
+import { handleWorkflowRoute } from "./lib/workflow-routes";
+import { runScheduledDiscovery } from "./lib/discovery-agent";
 import {
   applyCors,
   handlePreflight
@@ -342,6 +344,16 @@ async function routeRequest(
     return coreResponse;
   }
 
+  const workflowResponse = await handleWorkflowRoute(
+    request,
+    env,
+    requestId
+  );
+
+  if (workflowResponse) {
+    return workflowResponse;
+  }
+
   if (
     method === "POST" &&
     path === "/api/v1/queues/test"
@@ -410,6 +422,16 @@ async function routeRequest(
 // ----------------------------------------------------
 
 export default {
+  // Cron Trigger: the AI looks for new work and drafts proposals
+  // for the best matches. Nothing is ever sent without approval.
+  async scheduled(
+    _controller: ScheduledController,
+    env: Env,
+    ctx: ExecutionContext
+  ): Promise<void> {
+    ctx.waitUntil(runScheduledDiscovery(env));
+  },
+
   async fetch(
     request: Request,
     env: Env
