@@ -1,9 +1,9 @@
-
 import type { Env } from "./types";
 
 import { handleLoginRoute } from "./lib/login-route";
 import { handleAuthRoute } from "./lib/auth-routes";
 import { handleMfaLoginRoute } from "./lib/mfa-login-route";
+import { handleRegisterRoute } from "./lib/register-route";
 import {
   applyCors,
   handlePreflight
@@ -254,6 +254,21 @@ async function routeRequest(
   // IMPORTANT:
   // This must appear before the generic auth handler.
   // --------------------------------------------------
+
+  if (
+    method === "POST" &&
+    path === "/api/v1/auth/register"
+  ) {
+    const registerResponse = await handleRegisterRoute(
+      request,
+      env,
+      requestId
+    );
+
+    if (registerResponse) {
+      return registerResponse;
+    }
+  }
 
   if (
     method === "POST" &&
