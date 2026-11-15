@@ -4,6 +4,7 @@ import { handleLoginRoute } from "./lib/login-route";
 import { handleAuthRoute } from "./lib/auth-routes";
 import { handleMfaLoginRoute } from "./lib/mfa-login-route";
 import { handleRegisterRoute } from "./lib/register-route";
+import { handleCoreRoute } from "./lib/core-routes";
 import {
   applyCors,
   handlePreflight
@@ -325,6 +326,21 @@ async function routeRequest(
   // --------------------------------------------------
   // Queue test endpoint
   // --------------------------------------------------
+
+  // --------------------------------------------------
+  // Core product routes: profile, dashboard, opportunities,
+  // proposals, approvals
+  // --------------------------------------------------
+
+  const coreResponse = await handleCoreRoute(
+    request,
+    env,
+    requestId
+  );
+
+  if (coreResponse) {
+    return coreResponse;
+  }
 
   if (
     method === "POST" &&
