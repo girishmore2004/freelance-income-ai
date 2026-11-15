@@ -1,4 +1,3 @@
-
 export interface HyperdriveBinding {
   connectionString: string;
 }
@@ -34,6 +33,8 @@ export interface Env {
 
   HYPERDRIVE: HyperdriveBinding;
   FREELANCE_JOBS?: QueueProducer;
+  AI?: { run(model: string, input: unknown): Promise<unknown> };
+  WORKERS_AI_MODEL?: string;
 
   // Authentication secrets must be configured as Cloudflare secrets.
   JWT_SECRET?: string;
