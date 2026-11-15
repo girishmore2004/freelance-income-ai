@@ -19,6 +19,11 @@
     "PUBLIC_REGISTRATION": "false",
     "REQUIRE_EMAIL_VERIFICATION": "false"
   },
+  "triggers": {
+    "crons": [
+      "0 */6 * * *"
+    ]
+  },
   "ai": {
     "binding": "AI"
   },
