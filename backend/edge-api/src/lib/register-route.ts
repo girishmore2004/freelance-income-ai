@@ -1,0 +1,201 @@
+import postgres from "postgres";
+import type { Env } from "../types";
+import { hashPassword } from "./password-service";
+import { createAccessSession } from "./session-service";
+import { failure, success } from "./response";
+
+function database(env: Env) {
+  const connectionString = env.HYPERDRIVE?.connectionString;
+
+  if (!connectionString) {
+    throw new Error("Hyperdrive database connection is not configured.");
+  }
+
+  return postgres(connectionString, {
+    max: 1,
+    fetch_types: false,
+    prepare: false,
+    connect_timeout: 10,
+    idle_timeout: 5,
+    connection: {
+      application_name: "Freelance Income AI Edge API - Register"
+    }
+  });
+}
+
+function validate(
+  body: unknown
+): { email: string; password: string } | null {
+  if (!body || typeof body !== "object") return null;
+
+  const { email, password } = body as Record<string, unknown>;
+
+  if (typeof email !== "string" || typeof password !== "string") {
+    return null;
+  }
+
+  const normalized = email.trim().toLowerCase();
+
+  if (
+    normalized.length < 5 ||
+    normalized.length > 255 ||
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)
+  ) {
+    return null;
+  }
+
+  // Same limits as the original FastAPI RegisterIn schema.
+  if (password.length < 12 || password.length > 128) return null;
+
+  return { email: normalized, password };
+}
+
+/**
+ * POST /api/v1/auth/register
+ * Port of the FastAPI register route for the no-email-verification case.
+ * Returns null when the request is not a register request.
+ */
+export async function handleRegisterRoute(
+  request: Request,
+  env: Env,
+  requestId: string
+): Promise<Response | null> {
+  const url = new URL(request.url);
+
+  if (
+    url.pathname !== "/api/v1/auth/register" ||
+    request.method.toUpperCase() !== "POST"
+  ) {
+    return null;
+  }
+
+  if (env.PUBLIC_REGISTRATION?.trim().toLowerCase() !== "true") {
+    return failure(
+      "REGISTRATION_DISABLED",
+      "Public registration is disabled",
+      403,
+      requestId
+    );
+  }
+
+  if (env.REQUIRE_EMAIL_VERIFICATION?.trim().toLowerCase() === "true") {
+    return failure(
+      "EMAIL_DELIVERY_NOT_AVAILABLE",
+      "Email verification is not available on the edge API yet. Set REQUIRE_EMAIL_VERIFICATION to false.",
+      503,
+      requestId
+    );
+  }
+
+  let body: unknown;
+
+  try {
+    body = await request.json();
+  } catch {
+    return failure(
+      "INVALID_REQUEST_BODY",
+      "A valid JSON request body is required.",
+      400,
+      requestId
+    );
+  }
+
+  const input = validate(body);
+
+  if (!input) {
+    return failure(
+      "INVALID_REGISTER_INPUT",
+      "Provide a valid email and a password of 12 to 128 characters.",
+      422,
+      requestId
+    );
+  }
+
+  const sql = database(env);
+
+  try {
+    const passwordHash = await hashPassword(input.password);
+    const userId = crypto.randomUUID();
+    const profileId = crypto.randomUUID();
+
+    const created = await sql.begin(async (tx) => {
+      const existing = await tx`
+        SELECT id FROM users WHERE email = ${input.email} LIMIT 1
+      `;
+
+      if (existing.length > 0) return false;
+
+      await tx`
+        INSERT INTO users (
+          id, email, password_hash, created_at, email_verified,
+          mfa_enabled, mfa_secret_encrypted, failed_login_attempts
+        ) VALUES (
+          ${userId}, ${input.email}, ${passwordHash}, now(), true,
+          false, '', 0
+        )
+      `;
+
+      await tx`
+        INSERT INTO profiles (
+          id, user_id, full_name, headline, bio, skills, services,
+          portfolio_links, minimum_budget, currency, weekly_hours,
+          hourly_rate, timezone, preferred_work_types,
+          preferred_industries, dealbreakers
+        ) VALUES (
+          ${profileId}, ${userId}, '', '', '', '[]', '[]',
+          '[]', 5000, 'INR', 10,
+          0, 'Asia/Kolkata', '["fixed", "hourly"]',
+          '[]', '[]'
+        )
+      `;
+
+      return true;
+    });
+
+    if (!created) {
+      // Do not reveal whether the address is already registered.
+      return success(
+        {
+          status: "verification_required",
+          message:
+            "If the address can be registered, a verification email will be sent."
+        },
+        "Request received",
+        200,
+        requestId
+      );
+    }
+
+    const session = await createAccessSession(env, userId);
+
+    return success(
+      {
+        status: "authenticated",
+        access_token: session.accessToken,
+        token_type: session.tokenType,
+        expires_at: session.expiresAt
+      },
+      "Account created",
+      201,
+      requestId
+    );
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "auth.register_failed",
+        request_id: requestId,
+        error_type: error instanceof Error ? error.name : "UnknownError",
+        error_message: error instanceof Error ? error.message : "unknown"
+      })
+    );
+
+    return failure(
+      "REGISTER_TEMPORARILY_UNAVAILABLE",
+      "Unable to create the account right now. Please try again later.",
+      503,
+      requestId
+    );
+  } finally {
+    await sql.end({ timeout: 5 });
+  }
+}
