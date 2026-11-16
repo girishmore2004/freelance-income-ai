@@ -6,6 +6,8 @@ import { handleMfaLoginRoute } from "./lib/mfa-login-route";
 import { handleRegisterRoute } from "./lib/register-route";
 import { handleCoreRoute } from "./lib/core-routes";
 import { handleWorkflowRoute } from "./lib/workflow-routes";
+import { handleApplyRoute } from "./lib/apply-routes";
+import { runScheduledReplySync } from "./lib/apply-agent";
 import { runScheduledDiscovery } from "./lib/discovery-agent";
 import {
   applyCors,
@@ -334,6 +336,16 @@ async function routeRequest(
   // proposals, approvals
   // --------------------------------------------------
 
+  const applyResponse = await handleApplyRoute(
+    request,
+    env,
+    requestId
+  );
+
+  if (applyResponse) {
+    return applyResponse;
+  }
+
   const coreResponse = await handleCoreRoute(
     request,
     env,
@@ -430,6 +442,7 @@ export default {
     ctx: ExecutionContext
   ): Promise<void> {
     ctx.waitUntil(runScheduledDiscovery(env));
+    ctx.waitUntil(runScheduledReplySync(env));
   },
 
   async fetch(
