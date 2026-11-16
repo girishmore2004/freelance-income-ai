@@ -6,6 +6,18 @@ An AI-assisted freelancing platform that **finds work for you, prepares everythi
 AI finds → AI scores → AI drafts → YOU approve → you apply → track → win → deliver → get paid
 ```
 
+## Live URLs
+
+| | URL |
+|---|---|
+| **Frontend (open this)** | https://freelance-income-ai.girishmore097.workers.dev |
+| **Backend API** | https://freelance-income-ai-api-edge.girishmore097.workers.dev |
+| API base path | `/api/v1` (for example `/api/v1/dashboard`) |
+
+The frontend's build variable `NEXT_PUBLIC_API_URL` must equal the backend URL, and the backend's `CORS_ORIGINS` must equal the frontend URL.
+
+---
+
 Everything runs on **Cloudflare** (frontend Worker + edge API Worker) with a **Neon Postgres** database. No other host is needed.
 
 ---
@@ -29,6 +41,20 @@ The agent runs when you press **Find work now** and automatically every 6 hours 
 - A proposal is approved only if it is unchanged since approval was requested (sha256 fingerprint of content, price and currency).
 - Marketplaces that forbid scraping (Upwork, Fiverr, LinkedIn) are **not** scraped.
 - Remotive and Jobicy are public APIs. Their canonical job URLs and attribution are kept.
+
+---
+
+## 1b. Where projects come from
+
+| Source | Kind | Access | Notes |
+|---|---|---|---|
+| **Freelancer.com** | Real bid-able projects with budgets | Official API | Optional secret `FREELANCER_TOKEN` (sent as `freelancer-oauth-v1`) if the API asks for one. |
+| **Hacker News** "Freelancer? Seeking freelancer?" | Direct client posts | Algolia API | Only top-level "SEEKING FREELANCER" posts are kept. |
+| **Reddit r/forhire** | Small client posts | Public JSON listing | Only `[Hiring]` posts are kept. Reddit may block some servers, which only disables this source. |
+| Remotive, Jobicy, RemoteOK, Himalayas | Job boards | Public APIs | Only freelance/contract/part-time listings pass (full-time only if you list it). Turn them all off with `INCLUDE_JOB_BOARDS="false"`. Links back and credit are kept. |
+| Any other lead (Upwork, Fiverr, LinkedIn, Guru, PeoplePerHour) | Marketplaces | **Not scraped** (their terms forbid it) | Browse them yourself and add the lead with **Add opportunity**. The AI scores it and drafts the proposal. |
+
+Each source runs on its own. If one fails, the others still work, and the run summary in the Agents tab shows which one failed.
 
 ---
 
@@ -79,7 +105,9 @@ backend/edge-api/            (branch cloudflare-edge-api-phase1)
   src/lib/register-route.ts  POST /auth/register
   src/lib/core-routes.ts     Profile, dashboard, opportunities, proposals, approvals
   src/lib/workflow-routes.ts Discovery, pipeline status, projects, tasks, invoices
-  src/lib/discovery-agent.ts Remotive/Jobicy fetch, filter, score, auto-draft
+  src/lib/discovery-agent.ts Runs all sources, filters, scores, auto-drafts
+  src/lib/project-sources.ts Freelancer.com, Hacker News, Reddit, RemoteOK, Himalayas
+  src/lib/source-utils.ts    Shared fetch + HTML cleanup + lead type
   src/lib/scoring.ts         Deterministic 0-100 opportunity score
   src/lib/response.ts        {success, data, message} envelope helpers
 
@@ -110,6 +138,8 @@ Variables (`wrangler.jsonc` → `vars`):
 | `PUBLIC_REGISTRATION` | `true` to allow sign-up, `false` to close it |
 | `REQUIRE_EMAIL_VERIFICATION` | `false` (registration needs this) |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `720` (max 30 days) |
+| `INCLUDE_JOB_BOARDS` | optional, `false` = project sources only |
+| `FREELANCER_TOKEN` | optional secret for the Freelancer.com API |
 
 Bindings: `HYPERDRIVE`, `AI` (Workers AI), queue `FREELANCE_JOBS`, cron `0 */6 * * *`.
 
@@ -167,7 +197,7 @@ Discovery stores a job only if at least 1 skill matches and the score is **45+**
 ```bash
 cd backend/edge-api
 npm install
-npm run check      # tsc + vitest (18 tests: password, scoring, discovery)
+npm run check      # tsc + vitest (22 tests: password, scoring, discovery, project sources)
 npx wrangler dev
 
 cd frontend
@@ -212,4 +242,4 @@ Check **Cloudflare → Worker → Observability** for `core.route_failed`, `work
 
 ## Credits
 
-Job data from [Remotive](https://remotive.com) and [Jobicy](https://jobicy.com).
+Lead data from [Freelancer.com](https://www.freelancer.com), [Hacker News](https://news.ycombinator.com), [Reddit r/forhire](https://www.reddit.com/r/forhire), [Remotive](https://remotive.com), [Jobicy](https://jobicy.com), [RemoteOK](https://remoteok.com) and [Himalayas](https://himalayas.app). Please keep the links back to the original listings.
