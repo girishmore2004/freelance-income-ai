@@ -30,13 +30,17 @@ Everything runs on **Cloudflare** (frontend Worker + edge API Worker) with a **N
 | 2. Find work | AI | The discovery agent reads free public job feeds (Remotive, Jobicy), keeps only jobs that match your skills and work type, and scores each 0-100. |
 | 3. Draft | AI | For strong matches (score 60+), a proposal is drafted automatically using Workers AI. |
 | 4. Approve | You | Review, edit, and approve the proposal. Editing after a request invalidates the old approval. |
-| 5. Apply & track | You | Copy the proposal, apply on the original job page, then mark the job: applied, replied, won, lost, skipped. |
-| 6. Deliver | You | Marking a job **won** creates a project with 5 starter tasks. |
-| 7. Get paid | You | Record invoices and mark them paid. The dashboard shows pending revenue. |
+| 5. Send | Agent | You tap **Approve & send**. The agent sends it: a Freelancer.com bid through the official API, or an email from your Gmail when the lead lists a contact email. Other leads show a Copy proposal button and a link to the original page. |
+| 6. Replies | Agent + You | The agent reads replies (every 6 hours or on **Check for replies now**), labels each one (interested, question, negotiating, rejected), summarises it and suggests a reply. You edit it and tap **Send reply**. |
+| 7. Deliver | You | Marking a job **won** creates a project with 5 starter tasks. |
+| 8. Get paid | You | Record invoices and mark them paid. The dashboard shows pending revenue. |
 
 The agent runs when you press **Find work now** and automatically every 6 hours (cron). It uses one search term per run (rotating through your skills) to stay inside the public APIs' rate limits.
 
 ### Safety rules
+- The agent sends only proposals you approved, and only once per proposal. A limit of 10 applications per 24 hours protects your reputation.
+- Replies are suggested, never sent without your tap.
+- Upwork, Fiverr and LinkedIn are never automated.
 - No external action happens without approval.
 - A proposal is approved only if it is unchanged since approval was requested (sha256 fingerprint of content, price and currency).
 - Marketplaces that forbid scraping (Upwork, Fiverr, LinkedIn) are **not** scraped.
@@ -107,6 +111,8 @@ backend/edge-api/            (branch cloudflare-edge-api-phase1)
   src/lib/workflow-routes.ts Discovery, pipeline status, projects, tasks, invoices
   src/lib/discovery-agent.ts Runs all sources, filters, scores, auto-drafts
   src/lib/project-sources.ts Freelancer.com, Hacker News, Reddit, RemoteOK, Himalayas
+  src/lib/apply-agent.ts     Gmail + Freelancer sending, reply reading, AI reply labels
+  src/lib/apply-routes.ts    Send, applications, replies, Gmail connect routes
   src/lib/source-utils.ts    Shared fetch + HTML cleanup + lead type
   src/lib/scoring.ts         Deterministic 0-100 opportunity score
   src/lib/response.ts        {success, data, message} envelope helpers
@@ -148,7 +154,19 @@ Bindings: `HYPERDRIVE`, `AI` (Workers AI), queue `FREELANCE_JOBS`, cron `0 */6 *
 ### 4.4 Frontend Worker (branch `main`)
 Set build variable `NEXT_PUBLIC_API_URL` to the edge API URL, e.g. `https://freelance-income-ai-api-edge.<account>.workers.dev`. It is a build-time variable, so **rebuild** after changing it.
 
-### 4.5 First use
+### 4.5 Auto-apply and replies (one-time setup)
+1. **Database:** run `apply_tables.sql` once in the Neon SQL Editor (3 new tables).
+2. **Gmail (sends emails and reads replies, no domain needed):**
+   1. Open https://console.cloud.google.com, create a project, and enable the **Gmail API**.
+   2. APIs & Services → OAuth consent screen: User type **External**, add your Gmail as a **test user**.
+   3. Credentials → Create credentials → **OAuth client ID** → type *Web application*. Under *Authorized redirect URIs* add exactly:
+      `https://freelance-income-ai-api-edge.girishmore097.workers.dev/api/v1/integrations/gmail/callback`
+   4. Copy the Client ID and Client Secret into the API Worker (**Settings → Variables and Secrets**, runtime) as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
+   5. In the app open the **Replies** tab and press **Connect Gmail**.
+   Note: while the Google app is in *Testing* status, Google expires the connection after 7 days and you must press Connect Gmail again. Setting the consent screen to *In production* removes that limit (Google shows an "unverified app" warning that you can accept for your own account).
+3. **Freelancer.com (optional, for automatic bids):** create an access token in your Freelancer.com developer settings and add it as the runtime secret `FREELANCER_TOKEN`.
+
+### 4.6 First use
 1. Open the frontend, create an account (password **12-128 characters**).
 2. Fill the Profile tab (the sidebar shows a profile-strength meter).
 3. Press **Find work now** on Home.
@@ -172,6 +190,8 @@ All responses use `{ success, data, message }`. All routes except auth need `Aut
 | Projects | `GET/POST /projects`, `PATCH /projects/:id`, `PATCH /tasks/:id` |
 | Invoices | `GET/POST /invoices`, `PATCH /invoices/:id` |
 | Agents | `GET /agents/runs` |
+| Send & replies | `POST /proposals/:id/send`, `GET /applications`, `POST /applications/sync`, `POST /applications/:id/reply` |
+| Connections | `GET /integrations/status`, `GET /integrations/gmail/connect`, `GET /integrations/gmail/callback`, `POST /integrations/gmail/disconnect` |
 
 Not-yet-ported features (workflows, research, emails, notifications, portfolio, etc.) return empty lists so the UI never errors.
 
@@ -197,7 +217,7 @@ Discovery stores a job only if at least 1 skill matches and the score is **45+**
 ```bash
 cd backend/edge-api
 npm install
-npm run check      # tsc + vitest (22 tests: password, scoring, discovery, project sources)
+npm run check      # tsc + vitest (26 tests)
 npx wrangler dev
 
 cd frontend
@@ -217,6 +237,8 @@ npx tsc --noEmit -p .
 | Login succeeds but dashboard is blank | Old `page.tsx` deployed. The frontend builds from `main`, so commit it there. |
 | 401 on every request | Session expired. The app now signs you out and asks you to log in again. |
 | "Exceeded CPU" in logs | Free-plan CPU limit. Run discovery less often. |
+| Gmail connect says failed | The redirect URI in Google Cloud must match the backend URL exactly, and your Gmail must be a test user. |
+| Replies not showing | Press Check for replies now. Gmail connections in Testing status expire after 7 days. |
 | Few or no matches | Add more skills to your profile; each run searches one skill term. |
 
 Check **Cloudflare → Worker → Observability** for `core.route_failed`, `workflow.route_failed`, `proposal.ai_failed`.
@@ -233,7 +255,7 @@ Check **Cloudflare → Worker → Observability** for `core.route_failed`, `work
 
 ## 10. Roadmap
 
-- Telegram alerts for strong matches
+- Telegram alerts when a client replies
 - Client research and price suggestions
 - Email follow-ups
 - Porting remaining features from `backend/app`
