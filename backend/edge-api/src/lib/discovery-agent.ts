@@ -9,37 +9,43 @@ import {
 } from "./core-routes";
 import type { Row, Sql } from "./core-routes";
 import { scoreOpportunity } from "./scoring";
+import { fetchJson, normalizeType, parseDate, stripHtml } from "./source-utils";
+import type { NormalizedJob } from "./source-utils";
+import { fromFreelancer, fromHackerNews, fromHimalayas, fromReddit, fromRemoteOk } from "./project-sources";
+
+export { parseDate };
+export type { NormalizedJob };
+
+const PROJECT_SOURCES = [
+  ["freelancer", fromFreelancer],
+  ["hackernews", fromHackerNews],
+  ["reddit", fromReddit]
+] as const;
+const JOB_BOARD_SOURCES = [
+  ["remotive", (term: string) => fromRemotive(term)],
+  ["jobicy", (term: string) => fromJobicy(term)],
+  ["remoteok", fromRemoteOk],
+  ["himalayas", fromHimalayas]
+] as const;
+const ALL_SOURCE_NAMES = [...PROJECT_SOURCES, ...JOB_BOARD_SOURCES].map(([name]) => name);
 
 /**
  * Discovery agent.
  *
- * Reads only official public job APIs (Remotive and Jobicy). It never logs in
- * to a marketplace and never submits anything. Both providers ask for a link
- * back to the original listing, so source_url always keeps their URL.
+ * Project sources (Freelancer.com, Hacker News, Reddit r/forhire) plus
+ * optional job boards (Remotive, Jobicy, RemoteOK, Himalayas; turn them off
+ * with INCLUDE_JOB_BOARDS="false"). Public APIs and feeds only. It never logs
+ * in to a marketplace and never submits anything. Source URLs always point
+ * back to the original listing.
  *
- * Request budget (provider guidance):
- *   Remotive: about 4 requests a day  -> one search per run, runs >= 5h apart
- *   Jobicy:   at most once an hour    -> one search per run
+ * Request budget: one search per run, runs >= 5h apart (Remotive allows
+ * about 4 requests a day, Jobicy at most hourly).
  */
 
 export const MIN_HOURS_BETWEEN_RUNS = 5;
 const MAX_NEW_PER_RUN = 25;
 const MIN_SCORE = 45;
 const FETCH_LIMIT = 40;
-const FETCH_TIMEOUT_MS = 8000;
-
-export interface NormalizedJob {
-  source: "remotive" | "jobicy";
-  external_id: string;
-  title: string;
-  company: string;
-  description: string;
-  url: string;
-  job_type: string;
-  industry: string;
-  location: string;
-  published_at: Date | null;
-}
 
 export interface DiscoveryResult {
   ran: boolean;
@@ -66,54 +72,6 @@ const TECH_VOCAB = new Set(
     "c# c++ dotnet .net scala elixir solidity web3 selenium playwright jest cypress figma"
   ).split(" ")
 );
-
-function stripHtml(html: string): string {
-  return String(html ?? "")
-    .slice(0, 12000)
-    .replace(/<(br|\/p|\/li|\/h[1-6]|\/div)\s*\/?>/gi, "\n")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;|&rsquo;|&lsquo;/g, "'")
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n\s*\n+/g, "\n")
-    .trim()
-    .slice(0, 6000);
-}
-
-function normalizeType(value: unknown): string {
-  const raw = Array.isArray(value) ? String(value[0] ?? "") : String(value ?? "");
-  return raw.trim().toLowerCase().replace(/[\s-]+/g, "_");
-}
-
-export function parseDate(value: unknown): Date | null {
-  if (!value) return null;
-  const raw = String(value);
-  const date = new Date(/(z|[+-]\d\d:?\d\d)$/i.test(raw) ? raw : raw + "Z");
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
-async function fetchJson(url: string): Promise<any> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-
-  try {
-    const response = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        Accept: "application/json",
-        "User-Agent": "FreelanceIncomeAI/1.0 (personal job search; low request rate)"
-      }
-    });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return await response.json();
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 export async function fromRemotive(term: string): Promise<NormalizedJob[]> {
   const data = await fetchJson(
@@ -167,7 +125,7 @@ export function workTypeOk(job: NormalizedJob, preferred: string[]): boolean {
   const wants = new Set(preferred.map((t) => t.toLowerCase().replace(/[\s-]+/g, "_")));
   const type = job.job_type;
 
-  if (type === "freelance" || type === "contract" || type === "part_time") return true;
+  if (type === "project" || type === "freelance" || type === "contract" || type === "part_time") return true;
   if (type === "full_time") return wants.has("full_time") || wants.has("fulltime");
   if (type === "internship") return wants.has("internship");
 
@@ -180,6 +138,11 @@ export function detectTech(job: NormalizedJob): string[] {
     t.replace(/^[.\-]+|[.\-]+$/g, "")
   );
   const unique: string[] = [];
+
+  for (const tag of job.tags ?? []) {
+    const t = tag.trim().toLowerCase();
+    if (TECH_VOCAB.has(t) && !unique.includes(t)) unique.push(t);
+  }
 
   for (const token of found) {
     if (TECH_VOCAB.has(token) && !unique.includes(token)) unique.push(token);
@@ -245,26 +208,29 @@ export async function runDiscovery(
   const sources: Array<{ name: string; fetched: number; error?: string }> = [];
   let jobs: NormalizedJob[] = [];
 
-  for (const [name, fn] of [
-    ["remotive", fromRemotive],
-    ["jobicy", fromJobicy]
-  ] as const) {
-    try {
-      const list = await fn(term);
-      sources.push({ name, fetched: list.length });
-      jobs = jobs.concat(list);
-    } catch (error) {
+  const wanted = [
+    ...PROJECT_SOURCES.map(([name, fn]) => [name, (t: string) => fn(t, env)] as const),
+    ...(env.INCLUDE_JOB_BOARDS === "false" ? [] : JOB_BOARD_SOURCES)
+  ];
+
+  const settled = await Promise.allSettled(wanted.map(([, fn]) => fn(term)));
+  settled.forEach((outcome, index) => {
+    const name = wanted[index][0];
+    if (outcome.status === "fulfilled") {
+      sources.push({ name, fetched: outcome.value.length });
+      jobs = jobs.concat(outcome.value);
+    } else {
       sources.push({
         name,
         fetched: 0,
-        error: error instanceof Error ? error.message : "request failed"
+        error: outcome.reason instanceof Error ? outcome.reason.message : "request failed"
       });
     }
-  }
+  });
 
   const known = await sql`
     SELECT source, external_id, source_fingerprint FROM opportunities
-    WHERE user_id = ${userId} AND (source = 'remotive' OR source = 'jobicy')
+    WHERE user_id = ${userId} AND source IN ${sql(ALL_SOURCE_NAMES as unknown as string[])}
     LIMIT 20000
   `;
   const knownIds = new Set(known.map((r) => `${r.source}:${r.external_id}`));
@@ -308,13 +274,13 @@ export async function runDiscovery(
       title: job.title,
       description: job.description,
       required_skills: required,
-      budget_min: null,
-      budget_max: null,
+      budget_min: job.budget_min ?? null,
+      budget_max: job.budget_max ?? null,
       deadline: "",
       job_type: job.job_type || "unknown",
       industry: job.industry,
       estimated_hours: null,
-      competition_level: "unknown",
+      competition_level: job.competition ?? "unknown",
       client_rating: null,
       client_reviews: null,
       client_payment_verified: null
@@ -340,8 +306,8 @@ export async function runDiscovery(
       ) VALUES (
         ${crypto.randomUUID()}, ${userId}, ${job.source}, ${job.external_id}, ${job.title.slice(0, 300)},
         ${job.company.slice(0, 200)}, ${job.description}, ${job.url.slice(0, 1200)},
-        NULL, NULL, 'USD', ${JSON.stringify(required)}, '', ${job.job_type || "unknown"},
-        ${job.industry.slice(0, 100)}, NULL, 'unknown', NULL, NULL, NULL, 'new',
+        ${job.budget_min ?? null}, ${job.budget_max ?? null}, ${job.currency || "USD"}, ${JSON.stringify(required)}, '', ${job.job_type || "unknown"},
+        ${job.industry.slice(0, 100)}, NULL, ${job.competition ?? "unknown"}, NULL, NULL, NULL, 'new',
         ${score}, ${JSON.stringify(breakdown)}, ${print}, now(), now(), ${job.published_at},
         0, ${JSON.stringify([job.source])}, now()
       )
