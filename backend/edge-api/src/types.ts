@@ -35,6 +35,8 @@ export interface Env {
   FREELANCE_JOBS?: QueueProducer;
   AI?: { run(model: string, input: unknown): Promise<unknown> };
   WORKERS_AI_MODEL?: string;
+  FREELANCER_TOKEN?: string;
+  INCLUDE_JOB_BOARDS?: string;
 
   // Authentication secrets must be configured as Cloudflare secrets.
   JWT_SECRET?: string;
