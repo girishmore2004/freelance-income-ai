@@ -8,11 +8,6 @@ export default defineConfig({
 
   fullyParallel: true,
 
-  // CI runs against the Next.js dev server. All pages share lib/api-client.ts,
-  // so compiling one page while another is open triggers a dev-server reload
-  // that detaches form inputs mid-test. One worker in CI avoids that race.
-  workers: process.env.CI ? 1 : undefined,
-
   forbidOnly: Boolean(process.env.CI),
 
   retries: process.env.CI ? 1 : 0,
@@ -29,10 +24,16 @@ export default defineConfig({
   webServer: process.env.PLAYWRIGHT_BASE_URL
     ? undefined
     : {
-        command: 'npm run dev',
+        // CI tests a production build: no dev-server hot reloads (which
+        // detached form inputs mid-test once all pages shared
+        // lib/api-client.ts), and it is what actually ships. With
+        // output: 'standalone', `next start` only logs a warning and still
+        // serves the build (packages/next/src/server/next.ts). Local runs keep
+        // the faster dev server.
+        command: process.env.CI ? 'npm run build && npm run start -- --port 3000' : 'npm run dev',
         url: baseURL,
         reuseExistingServer: !process.env.CI,
-        timeout: 120_000,
+        timeout: process.env.CI ? 300_000 : 120_000,
 
         // Keep mocked API calls on the same origin as the frontend.
         env: {
