@@ -12,6 +12,7 @@ import { handleReviewRoute } from "./lib/review-routes";
 import { handleFinanceRoute } from "./lib/finance-routes";
 import { handlePlanRoute } from "./lib/plan-routes";
 import { handleAgentRoute } from "./lib/agents";
+import { handleAssistantRoute } from "./lib/assistant-routes";
 import { enforceRateLimit } from "./lib/rate-limit";
 import { applySessionCookies } from "./lib/auth-context";
 import { handleMfaLoginRoute } from "./lib/mfa-login-route";
@@ -395,6 +396,16 @@ async function routeRequest(
   // Core product routes: profile, dashboard, opportunities,
   // proposals, approvals
   // --------------------------------------------------
+
+  const assistantResponse = await handleAssistantRoute(
+    request,
+    env,
+    requestId
+  );
+
+  if (assistantResponse) {
+    return assistantResponse;
+  }
 
   const agentResponse = await handleAgentRoute(
     request,
