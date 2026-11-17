@@ -3,7 +3,7 @@ import { authenticateRequest } from "./auth-context";
 import type { AuthenticatedSession } from "./session-service";
 import { createAccessSession } from "./session-service";
 import { body, database } from "./core-routes";
-import type { Sql } from "./core-routes";
+import type { Queryable, Sql } from "./core-routes";
 import { failure, success } from "./response";
 import { hashPassword, verifyPassword } from "./password-service";
 import {
@@ -66,7 +66,7 @@ function mfaKey(env: Env): string | null {
   return env.JWT_SECRET?.trim() || null;
 }
 
-async function revokeAllSessions(sql: Sql, userId: string): Promise<void> {
+async function revokeAllSessions(sql: Queryable, userId: string): Promise<void> {
   await sql`UPDATE auth_sessions SET revoked_at = NOW() WHERE user_id = ${userId} AND revoked_at IS NULL`;
   await sql`UPDATE mfa_challenges SET used_at = NOW() WHERE user_id = ${userId} AND used_at IS NULL`;
 }
