@@ -90,7 +90,9 @@ describe("Match and Shortlist (C2) scoring", () => {
   it("shows only safe card fields", () => {
     const card = freelancerCard(candidate("h", { full_name: "  " }), NOW);
     expect(card.display_name).toBe("Freelancer");
-    expect(Object.keys(card).sort()).toEqual(["currency", "display_name", "headline", "hourly_rate", "newcomer", "services", "skills", "timezone", "user_id", "weekly_hours"]);
+    expect(Object.keys(card).sort()).toEqual(["currency", "display_name", "headline", "hourly_rate", "newcomer", "rating", "services", "skills", "timezone", "user_id", "weekly_hours"]);
+    expect(card.rating).toBeNull();
+    expect(freelancerCard(candidate("i", { rating_avg: "4.666", rating_count: 3 }), NOW).rating).toEqual({ average: 4.7, count: 3 });
   });
 
   it("reserves up to two places for strong newcomers and labels them", () => {

@@ -14,6 +14,8 @@ import {
   OPEN_PROPOSAL_STATUSES,
   contractActions,
   contractVersionOut,
+  hasPendingChange,
+  lockedMilestoneErrors,
   proposalOut,
   termsHash,
   validateProposal,
@@ -119,7 +121,7 @@ export async function handleHiringRoute(
   const proposal = path.match(/^\/api\/v1\/listing-proposals\/([\w-]{1,64})(?:\/(withdraw|status|offer))?$/);
   const listingProposals = path.match(/^\/api\/v1\/listings\/([\w-]{1,64})\/proposals$/);
   const contracts = path === "/api/v1/contracts";
-  const contract = path.match(/^\/api\/v1\/contracts\/([\w-]{1,64})(?:\/(accept|versions|decline|withdraw))?$/);
+  const contract = path.match(/^\/api\/v1\/contracts\/([\w-]{1,64})(?:\/(accept|versions|decline|withdraw|reject-change))?$/);
 
   const known =
     (propose !== null && method === "POST") ||
@@ -388,11 +390,25 @@ export async function handleHiringRoute(
         return await respondWithContract(sql, contractId, userId, action === "decline" ? "Offer declined" : "Offer withdrawn", 200, requestId);
       }
 
+      if (action === "reject-change") {
+        const done = await sql.begin(async (tx) => {
+          const locked = (await tx<ContractRow[]>`SELECT * FROM contracts WHERE id = ${contractId} FOR UPDATE`)[0];
+          if (!locked || !hasPendingChange(locked)) return false;
+          await tx`UPDATE contracts SET current_version = ${locked.agreed_version!}, updated_at = now() WHERE id = ${contractId}`;
+          await recordContractEvent(tx, contractId, userId, side.party, "change.rejected", { version: locked.current_version });
+          return true;
+        });
+        if (!done) return failure("NO_PENDING_CHANGE", "There is no proposed change to reject.", 409, requestId);
+        return await respondWithContract(sql, contractId, userId, "Change rejected. The agreed terms still apply.", 200, requestId);
+      }
+
       if (action === "accept") {
         const version = Number(payload.version);
         const result = await sql.begin(async (tx) => {
           const locked = (await tx<ContractRow[]>`SELECT * FROM contracts WHERE id = ${contractId} FOR UPDATE`)[0];
-          if (!locked || locked.status !== "offered") return { code: "CLOSED" as const };
+          const changeOrder = locked ? hasPendingChange(locked) : false;
+          if (locked && locked.status === "active" && !changeOrder) return { code: "NOTHING_PENDING" as const };
+          if (!locked || (locked.status !== "offered" && !changeOrder)) return { code: "CLOSED" as const };
           if (version !== locked.current_version) return { code: "STALE" as const, current: locked.current_version };
           const current = await contractVersion(tx, locked);
           if (!current) return { code: "CLOSED" as const };
@@ -409,18 +425,28 @@ export async function handleHiringRoute(
             await tx`UPDATE contracts SET updated_at = now() WHERE id = ${contractId}`;
             return { code: "WAITING" as const };
           }
-          await tx`UPDATE contracts SET status = 'active', activated_at = now(), updated_at = now() WHERE id = ${contractId}`;
+          if (changeOrder) {
+            await tx`UPDATE contracts SET agreed_version = ${version}, updated_at = now() WHERE id = ${contractId}`;
+            await recordContractEvent(tx, contractId, null, "system", "change.accepted", { version });
+            return { code: "CHANGED" as const };
+          }
+          await tx`UPDATE contracts SET status = 'active', activated_at = now(), agreed_version = ${version}, updated_at = now() WHERE id = ${contractId}`;
           await tx`UPDATE listing_proposals SET status = 'hired', updated_at = now() WHERE id = ${locked.proposal_id}`;
           await tx`UPDATE project_listings SET status = 'hiring', updated_at = now() WHERE id = ${locked.listing_id} AND status IN ('published', 'paused')`;
           await recordContractEvent(tx, contractId, null, "system", "contract.activated", { version });
           return { code: "ACTIVE" as const };
         });
         if (result.code === "CLOSED") return failure("CONTRACT_CLOSED", "This offer is no longer open.", 409, requestId);
+        if (result.code === "NOTHING_PENDING") return failure("NO_PENDING_CHANGE", "There are no new terms to accept. The agreed terms apply.", 409, requestId);
         if (result.code === "STALE") return failure("VERSION_CONFLICT", `The terms changed (now version ${result.current}). Review them before accepting.`, 409, requestId);
         if (result.code === "ALREADY") return failure("ALREADY_ACCEPTED", "You already accepted these terms.", 409, requestId);
         return await respondWithContract(
           sql, contractId, userId,
-          result.code === "ACTIVE" ? "Both parties accepted. The contract is active." : "Accepted. Waiting for the other party.",
+          result.code === "ACTIVE"
+            ? "Both parties accepted. The contract is active."
+            : result.code === "CHANGED"
+              ? "Both parties accepted the change. The new terms now apply."
+              : "Accepted. Waiting for the other party.",
           200, requestId
         );
       }
@@ -435,17 +461,33 @@ export async function handleHiringRoute(
       const hash = await termsHash(terms.value);
       const result = await sql.begin(async (tx) => {
         const locked = (await tx<ContractRow[]>`SELECT * FROM contracts WHERE id = ${contractId} FOR UPDATE`)[0];
-        if (!locked || locked.status !== "offered") return { code: "CLOSED" as const };
+        if (!locked || (locked.status !== "offered" && locked.status !== "active")) return { code: "CLOSED" as const };
         if (baseVersion !== locked.current_version) return { code: "STALE" as const, current: locked.current_version };
         const current = await contractVersion(tx, locked);
         if (current && current.content_hash === hash) return { code: "UNCHANGED" as const };
-        const next = locked.current_version + 1;
+        if (locked.status === "active") {
+          const agreedRow = (await tx<ContractVersionRow[]>`
+            SELECT * FROM contract_versions WHERE contract_id = ${contractId} AND version = ${locked.agreed_version ?? locked.current_version} LIMIT 1
+          `)[0];
+          const delivered = (await tx<{ milestone_index: number }[]>`
+            SELECT DISTINCT milestone_index FROM milestone_submissions WHERE contract_id = ${contractId}
+          `).map((r) => Number(r.milestone_index));
+          const lockErrors = agreedRow ? lockedMilestoneErrors(contractVersionOut(agreedRow).milestones, terms.value.milestones, delivered) : {};
+          if (Object.keys(lockErrors).length) return { code: "LOCKED" as const, errors: lockErrors };
+        }
+        // Version numbers only grow: a rejected change keeps its number in the history.
+        const maxRow = (await tx<{ max: number | null }[]>`SELECT max(version)::int AS max FROM contract_versions WHERE contract_id = ${contractId}`)[0];
+        const next = Math.max(locked.current_version, Number(maxRow?.max ?? 0)) + 1;
         await insertContractVersion(tx, contractId, next, terms.value, hash, side.party, userId);
         await tx`UPDATE contracts SET current_version = ${next}, updated_at = now() WHERE id = ${contractId}`;
-        await recordContractEvent(tx, contractId, userId, side.party, "terms.proposed", { version: next, total_minor: terms.value.total_minor });
+        await recordContractEvent(tx, contractId, userId, side.party, locked.status === "active" ? "change.proposed" : "terms.proposed", {
+          version: next,
+          total_minor: terms.value.total_minor
+        });
         return { code: "OK" as const };
       });
-      if (result.code === "CLOSED") return failure("CONTRACT_CLOSED", "Terms can only change while the offer is open.", 409, requestId);
+      if (result.code === "CLOSED") return failure("CONTRACT_CLOSED", "Terms can only change while the offer is open or the contract is active.", 409, requestId);
+      if (result.code === "LOCKED") return failure("INVALID_TERMS", "Delivered milestones cannot be changed.", 422, requestId, [result.errors]);
       if (result.code === "STALE") return failure("VERSION_CONFLICT", `The terms changed (now version ${result.current}). Reload and try again.`, 409, requestId);
       if (result.code === "UNCHANGED") return failure("UNCHANGED", "These are the current terms. Accept them instead.", 409, requestId);
       return await respondWithContract(sql, contractId, userId, "New terms proposed. The other party must accept them.", 201, requestId);
@@ -482,8 +524,13 @@ async function respondWithContract(sql: Sql, contractId: string, userId: string,
       client_name: header?.organization_name ?? "",
       project_title: header?.title ?? "",
       current_version: row.current_version,
+      agreed_version: row.agreed_version ?? null,
+      pending_change: hasPendingChange(row),
       activated_at: row.activated_at ? new Date(row.activated_at).toISOString() : null,
+      completed_at: row.completed_at ? new Date(row.completed_at).toISOString() : null,
       terms: contractVersionOut(version),
+      // While a change is pending, the agreed (still binding) terms are shown separately.
+      agreed_terms: hasPendingChange(row) ? (history.map((v) => contractVersionOut(v)).find((v) => v.version === row.agreed_version) ?? null) : null,
       versions: history.map((v) => contractVersionOut(v)),
       allowed_actions: contractActions(row, version, side.party, side.canManage),
       // Funding is not implemented; it stays unavailable regardless of flags until Phase 4 is approved and built.

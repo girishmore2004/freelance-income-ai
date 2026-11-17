@@ -34,6 +34,9 @@ export interface CandidateRow {
   timezone: string;
   dealbreakers: string;
   user_created_at: Date | string;
+  /** Revealed client reviews (optional: only the matching queries load them). */
+  rating_avg?: number | string | null;
+  rating_count?: number | string | null;
 }
 
 export interface ListingForMatch {
@@ -69,6 +72,8 @@ export interface FreelancerCard {
   weekly_hours: number | null;
   timezone: string;
   newcomer: boolean;
+  /** Average of revealed client reviews; null until the first one. Not used for ranking. */
+  rating: { average: number; count: number } | null;
 }
 
 export interface Match {
@@ -119,7 +124,8 @@ export function freelancerCard(row: CandidateRow, now: Date): FreelancerCard {
     currency: row.currency || "INR",
     weekly_hours: row.weekly_hours,
     timezone: row.timezone,
-    newcomer: isNewcomer(row.user_created_at, now)
+    newcomer: isNewcomer(row.user_created_at, now),
+    rating: Number(row.rating_count ?? 0) > 0 ? { average: Math.round(Number(row.rating_avg) * 10) / 10, count: Number(row.rating_count) } : null
   };
 }
 

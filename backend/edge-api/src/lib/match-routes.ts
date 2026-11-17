@@ -56,10 +56,18 @@ const MATCHABLE_STATUSES = ["draft", "in_review", "published", "hiring", "paused
 async function visibleCandidates(sql: Queryable, excludeOrganizationId: string): Promise<CandidateRow[]> {
   return sql<CandidateRow[]>`
     SELECT p.user_id, p.full_name, p.headline, p.skills, p.services, p.minimum_budget, p.hourly_rate,
-           p.currency, p.weekly_hours, p.timezone, p.dealbreakers, u.created_at AS user_created_at
+           p.currency, p.weekly_hours, p.timezone, p.dealbreakers, u.created_at AS user_created_at,
+           rt.rating_avg, rt.rating_count
     FROM profiles p
     JOIN users u ON u.id = p.user_id
     JOIN user_roles r ON r.user_id = p.user_id AND r.role = 'freelancer' AND r.status = 'active'
+    LEFT JOIN LATERAL (
+      SELECT avg(rv.rating)::float AS rating_avg, count(*)::int AS rating_count
+      FROM contract_reviews rv JOIN contracts ct ON ct.id = rv.contract_id
+      WHERE ct.freelancer_user_id = p.user_id AND rv.reviewer_party = 'client'
+        AND (ct.completed_at < now() - interval '14 days'
+             OR EXISTS (SELECT 1 FROM contract_reviews rf WHERE rf.contract_id = ct.id AND rf.reviewer_party = 'freelancer'))
+    ) rt ON true
     WHERE p.marketplace_visible = true
       AND NOT EXISTS (
         SELECT 1 FROM organization_memberships m
@@ -73,10 +81,18 @@ async function visibleCandidates(sql: Queryable, excludeOrganizationId: string):
 async function visibleCandidate(sql: Queryable, freelancerUserId: string): Promise<CandidateRow | null> {
   const rows = await sql<CandidateRow[]>`
     SELECT p.user_id, p.full_name, p.headline, p.skills, p.services, p.minimum_budget, p.hourly_rate,
-           p.currency, p.weekly_hours, p.timezone, p.dealbreakers, u.created_at AS user_created_at
+           p.currency, p.weekly_hours, p.timezone, p.dealbreakers, u.created_at AS user_created_at,
+           rt.rating_avg, rt.rating_count
     FROM profiles p
     JOIN users u ON u.id = p.user_id
     JOIN user_roles r ON r.user_id = p.user_id AND r.role = 'freelancer' AND r.status = 'active'
+    LEFT JOIN LATERAL (
+      SELECT avg(rv.rating)::float AS rating_avg, count(*)::int AS rating_count
+      FROM contract_reviews rv JOIN contracts ct ON ct.id = rv.contract_id
+      WHERE ct.freelancer_user_id = p.user_id AND rv.reviewer_party = 'client'
+        AND (ct.completed_at < now() - interval '14 days'
+             OR EXISTS (SELECT 1 FROM contract_reviews rf WHERE rf.contract_id = ct.id AND rf.reviewer_party = 'freelancer'))
+    ) rt ON true
     WHERE p.user_id = ${freelancerUserId} AND p.marketplace_visible = true
     LIMIT 1
   `;

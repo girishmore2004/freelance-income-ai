@@ -205,6 +205,8 @@ export interface ContractRow {
   created_at: Date;
   updated_at: Date;
   activated_at: Date | null;
+  completed_at?: Date | null;
+  agreed_version?: number | null;
 }
 
 export interface ContractVersionRow {
@@ -256,15 +258,46 @@ export function contractVersionOut(v: ContractVersionRow) {
   };
 }
 
+/** True while an active contract has a proposed change (newer version) not yet accepted by both. */
+export function hasPendingChange(contract: ContractRow): boolean {
+  return contract.status === "active" && contract.agreed_version !== null && contract.agreed_version !== undefined && contract.current_version !== contract.agreed_version;
+}
+
 /** What the viewing party may do right now. */
 export function contractActions(contract: ContractRow, version: ContractVersionRow, party: Party, canManage: boolean): string[] {
-  if (contract.status !== "offered") return [];
-  const actions: string[] = [];
-  const mineAccepted = party === "client" ? version.client_accepted_at !== null : version.freelancer_accepted_at !== null;
   const mayAct = party === "freelancer" || canManage;
   if (!mayAct) return [];
-  if (!mineAccepted) actions.push("accept");
-  actions.push("propose_changes");
-  actions.push(party === "freelancer" ? "decline" : "withdraw");
-  return actions;
+  const mineAccepted = party === "client" ? version.client_accepted_at !== null : version.freelancer_accepted_at !== null;
+  if (contract.status === "offered") {
+    const actions: string[] = [];
+    if (!mineAccepted) actions.push("accept");
+    actions.push("propose_changes");
+    actions.push(party === "freelancer" ? "decline" : "withdraw");
+    return actions;
+  }
+  if (contract.status === "active") {
+    if (!hasPendingChange(contract)) return ["propose_changes"];
+    const actions: string[] = [];
+    if (!mineAccepted) actions.push("accept");
+    actions.push("propose_changes", "reject_change");
+    return actions;
+  }
+  return [];
+}
+
+/**
+ * Change orders may not rewrite work that was already delivered: a milestone
+ * with any delivery keeps its position, title and amount.
+ */
+export function lockedMilestoneErrors(agreed: ContractMilestone[], proposed: ContractMilestone[], deliveredIndexes: number[]): Record<string, string> {
+  const errors: Record<string, string> = {};
+  for (const i of deliveredIndexes) {
+    const before = agreed[i];
+    const after = proposed[i];
+    if (!before) continue;
+    if (!after || after.title !== before.title || after.amount_minor !== before.amount_minor) {
+      errors[`milestones.${i}.title`] = `Milestone ${i + 1} ("${before.title}") already has a delivery; keep its title and amount.`;
+    }
+  }
+  return errors;
 }

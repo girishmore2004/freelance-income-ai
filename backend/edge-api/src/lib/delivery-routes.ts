@@ -124,7 +124,7 @@ async function sideOf(sql: Queryable, userId: string, contract: ContractRow): Pr
 async function agreedTerms(sql: Queryable, contract: ContractRow): Promise<ContractVersionRow | null> {
   return (
     (await sql<ContractVersionRow[]>`
-      SELECT * FROM contract_versions WHERE contract_id = ${contract.id} AND version = ${contract.current_version} LIMIT 1
+      SELECT * FROM contract_versions WHERE contract_id = ${contract.id} AND version = ${contract.agreed_version ?? contract.current_version} LIMIT 1
     `)[0] ?? null
   );
 }
@@ -268,7 +268,7 @@ export async function handleDeliveryRoute(
         if (latest && latest.status !== "revision_requested") return { code: "WRONG_STATE" as const, state: latest.status };
         await tx`
           INSERT INTO milestone_submissions (id, contract_id, milestone_index, contract_version, status, note, links_json, submitted_by, submitted_at)
-          VALUES (${crypto.randomUUID()}, ${locked.id}, ${index}, ${locked.current_version}, 'submitted', ${note}, ${JSON.stringify(links)}, ${userId}, now())
+          VALUES (${crypto.randomUUID()}, ${locked.id}, ${index}, ${locked.agreed_version ?? locked.current_version}, 'submitted', ${note}, ${JSON.stringify(links)}, ${userId}, now())
         `;
         await recordContractEvent(tx, locked.id, userId, "freelancer", "milestone.submitted", { milestone: index, title: agreed.milestones[index].title });
         await tx`UPDATE contracts SET updated_at = now() WHERE id = ${locked.id}`;

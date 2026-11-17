@@ -69,7 +69,8 @@ describe("contract terms", () => {
     expect(contractActions(contract, clientProposed, "client", true)).toEqual(["propose_changes", "withdraw"]);
     expect(contractActions(contract, clientProposed, "client", false)).toEqual([]);
     expect(contractActions(contract, clientProposed, "freelancer", true)).toEqual(["accept", "propose_changes", "decline"]);
-    expect(contractActions({ status: "active" } as ContractRow, clientProposed, "freelancer", true)).toEqual([]);
+    expect(contractActions({ status: "active", current_version: 1, agreed_version: 1 } as ContractRow, clientProposed, "freelancer", true)).toEqual(["propose_changes"]);
+    expect(contractActions({ status: "declined" } as ContractRow, clientProposed, "freelancer", true)).toEqual([]);
   });
 });
 
