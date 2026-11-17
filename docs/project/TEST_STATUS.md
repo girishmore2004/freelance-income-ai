@@ -1,5 +1,8 @@
 # Test Status
 
+## Phase 8 batch 1 — GitHub CI (verified)
+Green on the first push. `main` @ ecd5e6a: 1 skipped   2 skipped   38 passed (21.3s)   39 passed (14.8s) 550 passed, 6 warnings in 16.21s Edge API CI 242/242.
+
 ## Phase 8 batch 1 — 2026-11-17 IST (release 5.59.0)
 - Edge API: **242 passed, 0 failed** (new `public.test.ts` 3: decided values only, "not decided" fees, unavailable parts before migrations, GET-only, no login). Against PostgreSQL the route returned the free plan, `fees: not_decided`, `payments_live: false`.
 - Frontend: typecheck 0 errors (`/how-it-works`, `/pricing`, `/safety`, `/help`, links on the sign-in card, `e2e/public.spec.ts` with 2 journeys).
