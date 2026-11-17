@@ -1,13 +1,15 @@
 import type { Env } from "../types";
 import type { Sql } from "./core-routes";
 import { FLAGS, isEnabled } from "./flags";
+import { AGENT_FOR_OPERATION, agentEnabled } from "./agents";
 
 /**
  * Every Edge AI model call goes through here first (Master Plan 3.13; finding:
  * no global spend cap, and Edge calls bypassed the Python per-user quotas).
  *
  * Checks, in order (any failure => caller uses its deterministic fallback):
- *   1. Flag `ai.generation` (and FEATURE_FLAGS_OFF kill switch).
+ *   1. Flag `ai.generation` (and FEATURE_FLAGS_OFF kill switch), then the
+ *      registry switch of the agent that owns the operation (agent_definitions).
  *   2. Per-user daily and monthly call quotas, counted across BOTH services
  *      from `ai_usage_events`. Limits come from the user's plan (`user_plans` →
  *      `plans`, migration 0057; no row = the `free` plan) and fall back to the
@@ -108,6 +110,9 @@ export async function reserveAiCall(env: Env, sql: Sql, call: AiCallRequest): Pr
     if (!env.AI) return { allowed: false, reason: "disabled", message: "No AI provider is configured." };
     if (!(await isEnabled(env, sql, FLAGS.aiGeneration, true))) {
       return { allowed: false, reason: "disabled", message: "AI generation is switched off by the platform." };
+    }
+    if (!(await agentEnabled(sql, AGENT_FOR_OPERATION[call.operation]))) {
+      return { allowed: false, reason: "disabled", message: "This AI agent is switched off by the platform. A template was used instead." };
     }
 
     const limits = aiLimits(env);
