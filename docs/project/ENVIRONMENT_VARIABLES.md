@@ -23,7 +23,7 @@ Set in Cloudflare → Workers & Pages → *Worker* → Settings → Variables an
 | `FEATURE_FLAGS_OFF` | Variable | Optional | Emergency kill switch, e.g. `ai.generation` or `*`. |
 | `APP_VERSION` | Variable (wrangler) | — | `5.46.0` |
 
-Bindings added in `wrangler.jsonc`: queue **consumer** for `freelance-income-ai-jobs` (DLQ `freelance-income-ai-jobs-dlq`).
+Bindings in `wrangler.jsonc` (5.48.0): rate limiters `AUTH_RATE_LIMITER` (namespace 1001, 20/60 s) and `API_RATE_LIMITER` (namespace 1002, 300/60 s) — no dashboard setup needed; queue **consumer** for `freelance-income-ai-jobs` (DLQ `freelance-income-ai-jobs-dlq`).
 
 ## Frontend Worker `freelance-income-ai`
 
