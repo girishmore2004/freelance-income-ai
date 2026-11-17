@@ -1,6 +1,6 @@
 {
   "name": "freelance-income-ai",
-  "version": "5.45.0",
+  "version": "5.47.0",
   "private": true,
   "scripts": {
     "dev": "next dev -H 0.0.0.0",
@@ -15,7 +15,8 @@
     "predeploy": "npm run check:production",
     "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
-    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
+    "test:unit": "node --experimental-strip-types --no-warnings --test lib/api-client.test.mts"
   },
   "dependencies": {
     "next": "16.4.6",
