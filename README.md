@@ -1,6 +1,6 @@
 # Freelance Income AI
 
-An AI-assisted freelancing platform that **finds work for you, prepares everything, and waits for your approval**. You stay the final decision-maker. Nothing is sent to a client without you approving it.
+An AI-assisted freelancing platform that **finds work for you, prepare everything, and waits for your approval**. You stay the final decision-maker. Nothing is sent to a client without you approving it.
 
 ```
 AI finds → AI scores → AI drafts → YOU approve → you apply → track → win → deliver → get paid
