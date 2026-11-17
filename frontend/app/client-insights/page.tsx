@@ -1,17 +1,17 @@
 'use client';
 import {useEffect,useState} from 'react';
-const API=process.env.NEXT_PUBLIC_API_URL||'http://localhost:8000';
+import {API_BASE as API,authFetch,useSessionToken} from '@/lib/api-client';
 type Client={id:string;name:string;company?:string};
 type Data=Record<string,any>;
 export default function ClientInsightsPage(){
- const [token,setToken]=useState(''),[clients,setClients]=useState<Client[]>([]),[clientId,setClientId]=useState('');
+ const [token,setToken]=useSessionToken(),[clients,setClients]=useState<Client[]>([]),[clientId,setClientId]=useState('');
  const [insights,setInsights]=useState<Data|null>(null),[profit,setProfit]=useState<Data|null>(null),[costs,setCosts]=useState<Data[]>([]);
  const [form,setForm]=useState({project_id:'',category:'software',description:'',amount:'',currency:'INR',cost_date:new Date().toISOString().slice(0,10),evidence_reference:''});
  const [projects,setProjects]=useState<Data[]>([]),[message,setMessage]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false);
- async function req(path:string,method='GET',body?:Data){const r=await fetch(API+path,{method,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});const j=await r.json().catch(()=>({detail:'Invalid response'}));if(!r.ok)throw new Error(j.detail||'Request failed');return j}
+ async function req(path:string,method='GET',body?:Data){const r=await authFetch(API+path,{method,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});const j=await r.json().catch(()=>({detail:'Invalid response'}));if(!r.ok)throw new Error(j.detail||'Request failed');return j}
  async function loadClients(){const [c,p]=await Promise.all([req('/api/v1/clients'),req('/api/v1/projects')]);setClients(c);setProjects(p);if(!clientId&&c.length)setClientId(c[0].id)}
  async function loadClient(id:string){if(!id)return;setBusy(true);setError('');try{const [i,p,c]=await Promise.all([req(`/api/v1/clients/${id}/insights`),req(`/api/v1/clients/${id}/profitability`),req(`/api/v1/clients/${id}/costs`)]);setInsights(i);setProfit(p);setCosts(c)}catch(e:any){setError(e.message)}finally{setBusy(false)}}
- useEffect(()=>{setToken(localStorage.getItem('fia_token')||'')},[]);
+ 
  useEffect(()=>{if(token)loadClients().catch(e=>setError(e.message))},[token]);
  useEffect(()=>{if(token&&clientId)loadClient(clientId)},[token,clientId]);
  async function saveCost(){setBusy(true);setError('');setMessage('');try{await req(`/api/v1/clients/${clientId}/costs`,'POST',{...form,amount:Number(form.amount),project_id:form.project_id||null});setMessage('Direct cost saved. Refreshing client profitability.');setForm(v=>({...v,description:'',amount:'',evidence_reference:''}));await loadClient(clientId)}catch(e:any){setError(e.message)}finally{setBusy(false)}}
