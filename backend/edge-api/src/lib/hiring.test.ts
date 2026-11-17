@@ -192,7 +192,8 @@ describe("hiring routes", () => {
     const response = await call(deps, "POST", "/api/v1/listing-proposals/P1/offer", { terms: TERMS });
     expect(response!.status).toBe(201);
     const inserts = fake.queries.filter((q) => q.text.startsWith("INSERT INTO contract") || q.text.startsWith("UPDATE listing_proposals SET status = 'offered'"));
-    expect(inserts).toHaveLength(3);
+    expect(inserts).toHaveLength(4);
+    expect(inserts.map((q) => q.text.match(/^(?:INSERT INTO|UPDATE) (\w+)/)![1])).toEqual(["contracts", "contract_versions", "listing_proposals", "contract_events"]);
     expect(inserts.every((q) => q.inTransaction)).toBe(true);
     const version = fake.queries.find((q) => q.text.startsWith("INSERT INTO contract_versions"))!;
     expect(version.values).toContain(3_200_000);

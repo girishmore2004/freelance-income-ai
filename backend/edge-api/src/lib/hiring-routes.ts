@@ -8,6 +8,7 @@ import { FLAGS, isEnabled } from "./flags";
 import { canManageOrganization, loadRoles, organizationForMember } from "./identity";
 import type { ListingRow, VersionRow } from "./listings";
 import { freelancerCard } from "./matching";
+import { recordContractEvent } from "./contract-events";
 import type { CandidateRow } from "./matching";
 import {
   OPEN_PROPOSAL_STATUSES,
@@ -277,6 +278,7 @@ export async function handleHiringRoute(
         `;
         await insertContractVersion(tx, contractId, 1, terms.value, hash, "client", userId);
         await tx`UPDATE listing_proposals SET status = 'offered', decided_at = now(), updated_at = now() WHERE id = ${row.id}`;
+        await recordContractEvent(tx, contractId, userId, "client", "offer.sent", { version: 1, total_minor: terms.value.total_minor });
         return { code: "OK" as const };
       });
       if (result.code === "CLOSED") return failure("PROPOSAL_CLOSED", "This proposal can no longer receive an offer.", 409, requestId);
@@ -379,6 +381,7 @@ export async function handleHiringRoute(
           if (!updated[0]) return false;
           // The proposal can receive a new offer.
           await tx`UPDATE listing_proposals SET status = 'shortlisted', updated_at = now() WHERE id = ${updated[0].proposal_id} AND status = 'offered'`;
+          await recordContractEvent(tx, contractId, userId, side.party, action === "decline" ? "offer.declined" : "offer.withdrawn");
           return true;
         });
         if (!done) return failure("CONTRACT_CLOSED", "Only open offers can be declined or withdrawn.", 409, requestId);
@@ -401,6 +404,7 @@ export async function handleHiringRoute(
             await tx`UPDATE contract_versions SET freelancer_accepted_at = now() WHERE contract_id = ${contractId} AND version = ${version}`;
           }
           const otherAccepted = side.party === "client" ? current.freelancer_accepted_at : current.client_accepted_at;
+          await recordContractEvent(tx, contractId, userId, side.party, "terms.accepted", { version });
           if (!otherAccepted) {
             await tx`UPDATE contracts SET updated_at = now() WHERE id = ${contractId}`;
             return { code: "WAITING" as const };
@@ -408,6 +412,7 @@ export async function handleHiringRoute(
           await tx`UPDATE contracts SET status = 'active', activated_at = now(), updated_at = now() WHERE id = ${contractId}`;
           await tx`UPDATE listing_proposals SET status = 'hired', updated_at = now() WHERE id = ${locked.proposal_id}`;
           await tx`UPDATE project_listings SET status = 'hiring', updated_at = now() WHERE id = ${locked.listing_id} AND status IN ('published', 'paused')`;
+          await recordContractEvent(tx, contractId, null, "system", "contract.activated", { version });
           return { code: "ACTIVE" as const };
         });
         if (result.code === "CLOSED") return failure("CONTRACT_CLOSED", "This offer is no longer open.", 409, requestId);
@@ -437,6 +442,7 @@ export async function handleHiringRoute(
         const next = locked.current_version + 1;
         await insertContractVersion(tx, contractId, next, terms.value, hash, side.party, userId);
         await tx`UPDATE contracts SET current_version = ${next}, updated_at = now() WHERE id = ${contractId}`;
+        await recordContractEvent(tx, contractId, userId, side.party, "terms.proposed", { version: next, total_minor: terms.value.total_minor });
         return { code: "OK" as const };
       });
       if (result.code === "CLOSED") return failure("CONTRACT_CLOSED", "Terms can only change while the offer is open.", 409, requestId);
