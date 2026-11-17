@@ -7,6 +7,13 @@ import { reserveAiCall, settleAiCall } from "./ai-governor";
 import type { ScoreOpportunity, ScoreProfile } from "./scoring";
 
 export type Sql = ReturnType<typeof postgres>;
+/**
+ * Anything that can run a query: a connection (`Sql`) or the `tx` handle
+ * inside `sql.begin(...)`. In postgres >= 3.4.8 `TransactionSql` is no longer
+ * a subtype of `Sql`, so helpers that only run queries (and never call
+ * `begin`/`end`) must accept this type to be usable inside transactions.
+ */
+export type Queryable = postgres.Sql | postgres.TransactionSql;
 export type Row = Record<string, any>;
 
 // ---------------------------------------------------------------------------
