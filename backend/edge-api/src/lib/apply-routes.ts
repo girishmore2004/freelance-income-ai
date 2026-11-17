@@ -7,6 +7,7 @@ import {
   findContactEmail,
   freelancerBid,
   gmailAuthUrl,
+  gmailConfigurationProblem,
   gmailSend,
   googleConfigured,
   makeState,
@@ -90,9 +91,8 @@ export async function handleApplyRoute(request: Request, env: Env, requestId: st
     }
 
     if (path === "/api/v1/integrations/gmail/connect" && method === "GET") {
-      if (!googleConfigured(env)) {
-        return failure("GMAIL_NOT_CONFIGURED", "Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to the API Worker first.", 503, requestId);
-      }
+      const problem = gmailConfigurationProblem(env);
+      if (problem) return failure("GMAIL_NOT_CONFIGURED", problem, 503, requestId);
       return success({ url: gmailAuthUrl(env, redirectUri, await makeState(env, userId)) }, "Open this link", 200, requestId);
     }
 
@@ -111,10 +111,10 @@ export async function handleApplyRoute(request: Request, env: Env, requestId: st
         return failure("NOT_APPROVED", "Approve this proposal first. The agent only sends approved proposals.", 409, requestId);
       }
 
-      const dup = await sql`SELECT 1 FROM applications WHERE proposal_id = ${proposal.id} AND status IN ('sent','replied') LIMIT 1`;
+      const dup = await sql`SELECT 1 FROM applications WHERE proposal_id = ${proposal.id} AND status IN ('sending','sent','replied') LIMIT 1`;
       if (dup.length) return failure("ALREADY_SENT", "This proposal was already sent.", 409, requestId);
 
-      const today = await sql`SELECT count(*) AS c FROM applications WHERE user_id = ${userId} AND created_at > now() - interval '24 hours'`;
+      const today = await sql`SELECT count(*) AS c FROM applications WHERE user_id = ${userId} AND created_at > now() - interval '24 hours' AND status <> 'failed'`;
       if (Number(today[0].c) >= DAILY_APPLICATION_CAP) {
         return failure("DAILY_LIMIT", `Daily limit of ${DAILY_APPLICATION_CAP} applications reached. This protects your reputation.`, 429, requestId);
       }
@@ -123,39 +123,28 @@ export async function handleApplyRoute(request: Request, env: Env, requestId: st
       const opp = opps[0];
       if (!opp) return failure("NOT_FOUND", "Opportunity not found", 404, requestId);
 
-      let channel = "manual";
+      // 1. Decide the channel without any external side effect.
+      let channel: "freelancer" | "email" | "manual" = "manual";
       let recipient = "";
-      let threadId = "";
-      let externalRef = "";
-      let extra: Record<string, unknown> = {};
-
-      try {
-        if (opp.source === "freelancer" && env.FREELANCER_TOKEN) {
-          const price =
-            Number(payload.price) ||
-            Number(proposal.proposed_price) ||
-            (opp.budget_min && opp.budget_max ? (Number(opp.budget_min) + Number(opp.budget_max)) / 2 : 0);
-          if (!price) {
-            return failure("PRICE_REQUIRED", "Set a price on the proposal first. Freelancer.com bids need an amount.", 422, requestId);
-          }
-          const days = Math.min(Math.max(Number(payload.days) || 7, 1), 90);
-          const sent = await freelancerBid(env, String(opp.external_id), price, days, String(proposal.content));
-          channel = "freelancer";
-          externalRef = sent.bidId;
-          extra = { project_id: String(opp.external_id), bidder_id: sent.bidderId };
-        } else {
-          const to = text(payload.to, 320) || findContactEmail(`${opp.description}\n${opp.title}`) || "";
-          const hasGmail = (await sql`SELECT 1 FROM integrations WHERE user_id = ${userId} AND provider = 'gmail'`).length > 0;
-          if (to && hasGmail) {
-            const sent = await gmailSend(env, sql, userId, to, `Proposal: ${String(opp.title).slice(0, 150)}`, String(proposal.content));
-            channel = "email";
-            recipient = to;
-            threadId = sent.threadId;
-            externalRef = sent.id;
-          }
+      let price = 0;
+      let days = 7;
+      if (opp.source === "freelancer" && env.FREELANCER_TOKEN) {
+        price =
+          Number(payload.price) ||
+          Number(proposal.proposed_price) ||
+          (opp.budget_min && opp.budget_max ? (Number(opp.budget_min) + Number(opp.budget_max)) / 2 : 0);
+        if (!price) {
+          return failure("PRICE_REQUIRED", "Set a price on the proposal first. Freelancer.com bids need an amount.", 422, requestId);
         }
-      } catch (error) {
-        return failure("SEND_FAILED", error instanceof Error ? error.message : "Sending failed", 502, requestId);
+        days = Math.min(Math.max(Number(payload.days) || 7, 1), 90);
+        channel = "freelancer";
+      } else {
+        const to = text(payload.to, 320) || findContactEmail(`${opp.description}\n${opp.title}`) || "";
+        const hasGmail = (await sql`SELECT 1 FROM integrations WHERE user_id = ${userId} AND provider = 'gmail'`).length > 0;
+        if (to && hasGmail) {
+          channel = "email";
+          recipient = to;
+        }
       }
 
       if (channel === "manual") {
@@ -166,19 +155,58 @@ export async function handleApplyRoute(request: Request, env: Env, requestId: st
         return success({ channel: "manual", url: opp.source_url, reason, proposal: proposal.content }, "Manual apply needed", 200, requestId);
       }
 
+      // 2. Reserve the send. The partial unique index uq_applications_live_proposal
+      //    (migration 0047) guarantees one live send per proposal, so a double
+      //    click or a retried request cannot send twice.
+      const applicationId = crypto.randomUUID();
+      try {
+        await sql`
+          INSERT INTO applications (id, user_id, opportunity_id, proposal_id, channel, status, recipient, extra, created_at)
+          VALUES (${applicationId}, ${userId}, ${opp.id}, ${proposal.id}, ${channel}, 'sending', ${recipient}, '{}', now())
+        `;
+      } catch (error) {
+        if ((error as { code?: string } | null)?.code === "23505") {
+          return failure("ALREADY_SENT", "This proposal is already being sent or was sent.", 409, requestId);
+        }
+        throw error;
+      }
+
+      // 3. Perform the external send, then record the outcome.
+      let threadId = "";
+      let externalRef = "";
+      let extra: Record<string, unknown> = {};
+      try {
+        if (channel === "freelancer") {
+          const sent = await freelancerBid(env, String(opp.external_id), price, days, String(proposal.content));
+          externalRef = sent.bidId;
+          extra = { project_id: String(opp.external_id), bidder_id: sent.bidderId };
+        } else {
+          const sent = await gmailSend(env, sql, userId, recipient, `Proposal: ${String(opp.title).slice(0, 150)}`, String(proposal.content));
+          threadId = sent.threadId;
+          externalRef = sent.id;
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Sending failed";
+        await sql`
+          UPDATE applications SET status = 'failed', extra = ${JSON.stringify({ error: message.slice(0, 300) })}
+          WHERE id = ${applicationId}
+        `;
+        return failure("SEND_FAILED", message, 502, requestId);
+      }
+
       await sql`
-        INSERT INTO applications (id, user_id, opportunity_id, proposal_id, channel, status, recipient, external_ref, thread_id, extra, sent_at, created_at)
-        VALUES (${crypto.randomUUID()}, ${userId}, ${opp.id}, ${proposal.id}, ${channel}, 'sent', ${recipient}, ${externalRef},
-                ${threadId}, ${JSON.stringify(extra)}, now(), now())
+        UPDATE applications SET status = 'sent', external_ref = ${externalRef}, thread_id = ${threadId},
+          extra = ${JSON.stringify(extra)}, sent_at = now()
+        WHERE id = ${applicationId}
       `;
-      await sql`UPDATE proposals SET status = 'sent' WHERE id = ${proposal.id}`;
-      await sql`UPDATE opportunities SET status = 'applied' WHERE id = ${opp.id}`;
+      await sql`UPDATE proposals SET status = 'sent' WHERE id = ${proposal.id} AND user_id = ${userId}`;
+      await sql`UPDATE opportunities SET status = 'applied' WHERE id = ${opp.id} AND user_id = ${userId}`;
       await sql`
         INSERT INTO agent_runs (id, user_id, agent_name, status, summary, created_at)
         VALUES (${crypto.randomUUID()}, ${userId}, 'apply_agent', 'completed',
                 ${`Sent via ${channel}${recipient ? " to " + recipient : ""}: "${String(opp.title).slice(0, 80)}"`}, now())
       `;
-      return success({ channel, recipient }, `Sent via ${channel}`, 200, requestId);
+      return success({ channel, recipient, application_id: applicationId }, `Sent via ${channel}`, 200, requestId);
     }
 
     // ---- list applications with replies --------------------------------
@@ -233,7 +261,7 @@ export async function handleApplyRoute(request: Request, env: Env, requestId: st
 
       try {
         if (app.channel === "email") {
-          const last = await sql`SELECT * FROM application_messages WHERE application_id = ${app.id} AND direction = 'in' ORDER BY received_at DESC LIMIT 1`;
+          const last = await sql`SELECT * FROM application_messages WHERE application_id = ${app.id} AND user_id = ${userId} AND direction = 'in' ORDER BY received_at DESC LIMIT 1`;
           if (!last[0]) return failure("NO_REPLY_YET", "There is no client message to answer yet", 409, requestId);
           const ref = String(last[0].message_ref || "");
           await gmailSend(env, sql, userId, app.recipient, `Re: Proposal: ${String(app.title).slice(0, 140)}`, content, {
