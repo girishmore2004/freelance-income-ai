@@ -36,12 +36,15 @@ const TOKEN_ISSUING = new Set(['/api/v1/auth/login', '/api/v1/auth/register', '/
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string | null;
+  /** Edge `error.details` (for validation: [{ field: message }]). */
+  readonly details: unknown[];
 
-  constructor(message: string, status: number, code: string | null) {
+  constructor(message: string, status: number, code: string | null, details: unknown[] = []) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
+    this.details = details;
   }
 }
 
@@ -146,9 +149,9 @@ export async function api<T = any>(path: string, method = 'GET', body?: Json | F
 
   const json = (await response.json().catch(() => ({ detail: 'Invalid server response' }))) as Json;
   if (!response.ok) {
-    const error = json.error as { code?: string } | null | undefined;
+    const error = json.error as { code?: string; details?: unknown } | null | undefined;
     const message = String(json.detail || json.message || 'Request failed');
-    throw new ApiError(message, response.status, error?.code ?? null);
+    throw new ApiError(message, response.status, error?.code ?? null, Array.isArray(error?.details) ? error.details : []);
   }
   if (json && json.success === true && 'data' in json) {
     const data = json.data as unknown;
