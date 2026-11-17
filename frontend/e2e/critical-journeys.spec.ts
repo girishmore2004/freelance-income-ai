@@ -1,4 +1,3 @@
-
 import { test, expect, type Page, type Route } from '@playwright/test';
 
 const protectedPages = [
@@ -26,12 +25,36 @@ async function installApiMock(
   page: Page,
   loginStatus: number,
 ): Promise<void> {
+  // Like the real API: no session until a login succeeds. In cookie mode the
+  // page asks GET /api/v1/me whether a session exists, so /me must return 401
+  // for signed-out visitors (a 200 here made the page skip the login form).
+  let signedIn = false;
+
   await page.route('**/api/v1/**', async (route: Route) => {
     const requestUrl = new URL(route.request().url());
     const path = requestUrl.pathname.replace(/\/+$/, '');
 
+    if (path === '/api/v1/me') {
+      await route.fulfill(
+        signedIn
+          ? {
+              status: 200,
+              contentType: 'application/json',
+              body: JSON.stringify({ id: 'e2e-user', email: 'e2e@example.test', email_verified: true, roles: ['freelancer'] }),
+            }
+          : {
+              status: 401,
+              contentType: 'application/json',
+              body: JSON.stringify({ detail: 'Authentication required' }),
+            },
+      );
+
+      return;
+    }
+
     if (path === LOGIN_PATH) {
       const successful = loginStatus >= 200 && loginStatus < 300;
+      signedIn = successful;
 
       await route.fulfill({
         status: loginStatus,
