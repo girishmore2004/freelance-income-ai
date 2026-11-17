@@ -1,11 +1,11 @@
 'use client';
 import {useEffect,useMemo,useState} from 'react';
+import {API_BASE as API,authFetch,useSessionToken} from '@/lib/api-client';
 
-const API=process.env.NEXT_PUBLIC_API_URL||'http://localhost:8000';
 type Row=Record<string,any>;
 
 export default function PaymentsPage(){
- const [token,setToken]=useState('');
+ const [token,setToken]=useSessionToken();
  const [data,setData]=useState<Row>({by_currency:{},invoices:[]});
  const [invoiceId,setInvoiceId]=useState('');
  const [eventType,setEventType]=useState('receipt');
@@ -17,7 +17,7 @@ export default function PaymentsPage(){
  const [message,setMessage]=useState('');
  const [error,setError]=useState('');
  async function req(path:string,method='GET',body?:Row){
-  const r=await fetch(API+path,{method,headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},...(body?{body:JSON.stringify(body)}:{})});
+  const r=await authFetch(API+path,{method,headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},...(body?{body:JSON.stringify(body)}:{})});
   const j=await r.json().catch(()=>({detail:'Invalid response'}));
   if(!r.ok)throw new Error(j.detail||'Request failed');
   return j;
@@ -28,7 +28,7 @@ export default function PaymentsPage(){
   setData(result);
   if(!invoiceId&&result.invoices?.length)setInvoiceId(result.invoices[0].id);
  }
- useEffect(()=>{setToken(localStorage.getItem('fia_token')||'')},[]);
+ 
  useEffect(()=>{if(token)load().catch(e=>setError(e.message))},[token]);
  const selected=useMemo(()=>data.invoices?.find((x:Row)=>x.id===invoiceId),[data,invoiceId]);
  async function submit(){
