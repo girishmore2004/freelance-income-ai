@@ -1,4 +1,5 @@
 import type { Env } from "../types";
+import { notifyUsers, organizationManagers } from "./notify";
 import type { AuthenticatedSession } from "./session-service";
 import { authenticateRequest } from "./auth-context";
 import { body, database } from "./core-routes";
@@ -293,6 +294,16 @@ export async function handleMatchRoute(
       if (result.code === "NOT_FOUND") return failure("NOT_FOUND", "Invitation not found", 404, requestId);
       if (result.code === "ALREADY_ANSWERED") return failure("ALREADY_ANSWERED", `You already ${result.status} this invitation.`, 409, requestId);
       if (result.code === "LISTING_CLOSED") return failure("LISTING_CLOSED", "This project is no longer taking proposals.", 409, requestId);
+      const invitedListing = (await sql<{ organization_id: string }[]>`SELECT organization_id FROM project_listings WHERE id = ${result.invitation.listing_id} LIMIT 1`)[0];
+      if (invitedListing) {
+        await notifyUsers(sql, await organizationManagers(sql, invitedListing.organization_id), {
+          kind: `invitation.${response === "accept" ? "accepted" : "declined"}`,
+          title: response === "accept" ? "A freelancer accepted your invitation" : "A freelancer declined your invitation",
+          message: response === "accept" ? "Their proposal will appear under Proposals." : "You can invite someone else from Find freelancers.",
+          link: "/client/projects",
+          dedupe: `invitation-response:${result.invitation.id}`
+        });
+      }
       return success(
         invitationOut(result.invitation),
         response === "accept" ? "Invitation accepted. You can now send a proposal for this project." : "Invitation declined",
@@ -501,6 +512,13 @@ export async function handleMatchRoute(
       return failure("LIMIT_REACHED", `A listing can have at most ${MAX_INVITATIONS_PER_LISTING} invitations.`, 409, requestId);
     }
     if (result.code === "DUPLICATE") return failure("ALREADY_INVITED", "This freelancer has already been invited.", 409, requestId);
+    await notifyUsers(sql, [freelancerId], {
+      kind: "invitation.received",
+      title: `${org.name} invited you to propose on a project`,
+      message: message || "Open Projects to see the invitation.",
+      link: "/projects",
+      dedupe: `invitation:${result.invitation.id}:${new Date(result.invitation.created_at).getTime()}`
+    });
     return success(
       { ...invitationOut(result.invitation), freelancer: freelancerCard(candidate, deps.now()) },
       "Invitation sent",

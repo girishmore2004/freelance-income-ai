@@ -16,6 +16,7 @@ import { handleAssistantRoute } from "./lib/assistant-routes";
 import { handleTrustRoute } from "./lib/trust-routes";
 import { handlePublicRoute } from "./lib/public-routes";
 import { handlePaymentRoute } from "./lib/payment-routes";
+import { handleNotificationRoute } from "./lib/notify";
 import { releasePendingApprovals } from "./lib/payments";
 import { enforceRateLimit } from "./lib/rate-limit";
 import { applySessionCookies } from "./lib/auth-context";
@@ -400,6 +401,16 @@ async function routeRequest(
   // Core product routes: profile, dashboard, opportunities,
   // proposals, approvals
   // --------------------------------------------------
+
+  const notificationResponse = await handleNotificationRoute(
+    request,
+    env,
+    requestId
+  );
+
+  if (notificationResponse) {
+    return notificationResponse;
+  }
 
   const paymentResponse = await handlePaymentRoute(
     request,

@@ -339,7 +339,6 @@ const EMPTY_LISTS = new Set([
   "/api/v1/research/assessments",
   "/api/v1/portfolio/documents",
   "/api/v1/sources",
-  "/api/v1/notifications",
   "/api/v1/emails",
   "/api/v1/email-drafts",
   "/api/v1/follow-ups",

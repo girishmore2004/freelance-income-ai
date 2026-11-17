@@ -1,4 +1,5 @@
 import type { Env } from "../types";
+import { notifyUsers, organizationManagers } from "./notify";
 import type { AuthenticatedSession } from "./session-service";
 import { authenticateRequest } from "./auth-context";
 import { body, database } from "./core-routes";
@@ -192,6 +193,16 @@ export async function handleTrustRoute(request: Request, env: Env, requestId: st
         return true;
       });
       if (!done) return failure("NOT_IN_REVIEW", "This listing is not waiting for review.", 409, requestId);
+      const decided = (await sql<{ organization_id: string }[]>`SELECT organization_id FROM project_listings WHERE id = ${listingDecision[1]} LIMIT 1`)[0];
+      if (decided) {
+        await notifyUsers(sql, await organizationManagers(sql, decided.organization_id), {
+          kind: `listing.${decision === "approve" ? "approved" : "returned"}`,
+          title: decision === "approve" ? "Your project was approved and published" : "Your project needs changes before publishing",
+          message: decision === "approve" ? "Freelancers can now see it and send proposals." : note,
+          link: "/client/projects",
+          dedupe: `moderation:${listingDecision[1]}:${decision}:${Date.now()}`
+        });
+      }
       return success({ id: listingDecision[1], decision }, decision === "approve" ? "Listing approved and published" : "Listing returned to the client", 200, requestId);
     }
 
@@ -233,6 +244,14 @@ export async function handleTrustRoute(request: Request, env: Env, requestId: st
         return { code: "OK" as const, hidden };
       });
       if (result.code === "CLOSED") return failure("REPORT_CLOSED", "This report is already resolved.", 409, requestId);
+      const reporter = (await sql<{ reporter_user_id: string | null }[]>`SELECT reporter_user_id FROM reports WHERE id = ${reportDecision[1]} LIMIT 1`)[0];
+      await notifyUsers(sql, [reporter?.reporter_user_id], {
+        kind: "report.resolved",
+        title: "Your report was reviewed",
+        message: decision === "action" ? "Thank you. Staff took action." : "Thank you. Staff reviewed it and took no action.",
+        link: "/projects",
+        dedupe: `report:${reportDecision[1]}`
+      });
       return success({ id: reportDecision[1], decision, listing_hidden: result.hidden }, decision === "action" ? (result.hidden ? "Report actioned; listing hidden pending review" : "Report actioned") : "Report dismissed", 200, requestId);
     }
 

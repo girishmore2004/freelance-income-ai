@@ -1,4 +1,5 @@
 import type { Env } from "../types";
+import { notifyUsers, organizationManagers } from "./notify";
 import type { AuthenticatedSession } from "./session-service";
 import { authenticateRequest } from "./auth-context";
 import { body, database } from "./core-routes";
@@ -238,6 +239,8 @@ export async function handleDeliveryRoute(
         INSERT INTO contract_messages (id, contract_id, sender_user_id, sender_party, body, created_at)
         VALUES (${id}, ${contract.id}, ${userId}, ${side.party}, ${text}, now())
       `;
+      const recipients = side.party === "client" ? [contract.freelancer_user_id] : await organizationManagers(sql, contract.organization_id);
+      await notifyUsers(sql, recipients, { kind: "message.received", title: "New message on your contract", message: text.slice(0, 200), link: `/contracts#${contract.id}`, dedupe: `message:${id}` });
       return success({ id, from: side.party, mine: true, body: text }, "Message sent", 201, requestId);
     }
 

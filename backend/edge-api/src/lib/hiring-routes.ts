@@ -1,4 +1,5 @@
 import type { Env } from "../types";
+import { notifyUsers, organizationManagers } from "./notify";
 import type { AuthenticatedSession } from "./session-service";
 import { authenticateRequest } from "./auth-context";
 import { body, database } from "./core-routes";
@@ -180,6 +181,13 @@ export async function handleHiringRoute(
       if (listing.invitation_id) {
         await sql`UPDATE listing_invitations SET status = 'accepted', responded_at = COALESCE(responded_at, now()) WHERE id = ${listing.invitation_id} AND status = 'pending'`;
       }
+      await notifyUsers(sql, await organizationManagers(sql, listing.organization_id), {
+        kind: "proposal.received",
+        title: "You received a new proposal",
+        message: "Open Client projects → Proposals to review it.",
+        link: "/client/projects",
+        dedupe: `proposal:${inserted[0].id}`
+      });
       return success(proposalOut(inserted[0]), "Proposal sent", 201, requestId);
     }
 
@@ -260,6 +268,13 @@ export async function handleHiringRoute(
           RETURNING *
         `;
         if (!updated[0]) return failure("PROPOSAL_CLOSED", "This proposal can no longer change.", 409, requestId);
+        await notifyUsers(sql, [updated[0].freelancer_user_id], {
+          kind: `proposal.${next}`,
+          title: decision === "shortlist" ? "Your proposal was shortlisted" : "Your proposal was not selected",
+          message: decision === "shortlist" ? "The client may send you an offer." : "Keep going — new projects are posted every day.",
+          link: "/projects",
+          dedupe: `proposal-decision:${updated[0].id}:${next}`
+        });
         return success(proposalOut(updated[0]), decision === "shortlist" ? "Shortlisted" : "Declined", 200, requestId);
       }
 
