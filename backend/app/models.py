@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import String, Text, DateTime, Float, Integer, ForeignKey, Boolean, UniqueConstraint, Index, func, text as sql_text
+from sqlalchemy import String, Text, DateTime, Float, Integer, ForeignKey, Boolean, UniqueConstraint, Index, CheckConstraint, func, text as sql_text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import JSON
 from pgvector.sqlalchemy import Vector
@@ -1133,3 +1133,79 @@ class FeatureFlag(Base):
     owner: Mapped[str] = mapped_column(String(80), nullable=False, default="", server_default="")
     updated_by: Mapped[str] = mapped_column(String(80), nullable=False, default="", server_default="")
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now, server_default=func.now(), nullable=False)
+
+
+# ---------------------------------------------------------------------------
+# Identity: roles, organisations, memberships (migration 0050, Phase 1).
+# Owned by the Edge API (/api/v1/me, /api/v1/organizations).
+# ---------------------------------------------------------------------------
+
+USER_ROLE_VALUES = ("freelancer", "client", "admin", "support", "moderator", "finance")
+PUBLIC_ROLE_VALUES = ("freelancer", "client")
+
+
+class UserRole(Base):
+    """One row per role a user holds.
+
+    Public roles (freelancer, client) are self-activated. Internal roles
+    (admin, support, moderator, finance) are granted only by staff and are
+    never assignable through public endpoints.
+    """
+    __tablename__ = "user_roles"
+    __table_args__ = (
+        UniqueConstraint("user_id", "role", name="uq_user_roles_user_role"),
+        CheckConstraint("role IN ('freelancer', 'client', 'admin', 'support', 'moderator', 'finance')", name="ck_user_roles_role"),
+        CheckConstraint("status IN ('active', 'inactive', 'suspended')", name="ck_user_roles_status"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    role: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active", server_default="active")
+    granted_by: Mapped[str] = mapped_column(String(80), nullable=False, default="self", server_default="self")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now, server_default=func.now(), nullable=False)
+
+
+class Organization(Base):
+    """A client account: an individual or a company that hires freelancers.
+
+    Billing identity lives here so that projects, agreements and invoices can
+    later belong to the organisation rather than to one person.
+    """
+    __tablename__ = "organizations"
+    __table_args__ = (
+        CheckConstraint("kind IN ('individual', 'company')", name="ck_organizations_kind"),
+        CheckConstraint("status IN ('active', 'suspended', 'closed')", name="ck_organizations_status"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False, default="individual", server_default="individual")
+    industry: Mapped[str] = mapped_column(String(120), nullable=False, default="", server_default="")
+    website: Mapped[str] = mapped_column(String(300), nullable=False, default="", server_default="")
+    country: Mapped[str] = mapped_column(String(2), nullable=False, default="IN", server_default="IN")
+    preferred_language: Mapped[str] = mapped_column(String(20), nullable=False, default="en", server_default="en")
+    billing_name: Mapped[str] = mapped_column(String(200), nullable=False, default="", server_default="")
+    billing_email: Mapped[str] = mapped_column(String(320), nullable=False, default="", server_default="")
+    billing_address: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    tax_id: Mapped[str] = mapped_column(String(40), nullable=False, default="", server_default="")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active", server_default="active")
+    # Audit only; ownership is the "owner" membership. SET NULL so deleting an account is never blocked.
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now, server_default=func.now(), nullable=False)
+
+
+class OrganizationMembership(Base):
+    """A user's membership of an organisation (owner, admin or member)."""
+    __tablename__ = "organization_memberships"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "user_id", name="uq_org_membership"),
+        CheckConstraint("role IN ('owner', 'admin', 'member')", name="ck_org_membership_role"),
+        CheckConstraint("status IN ('active', 'invited', 'removed')", name="ck_org_membership_status"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True, nullable=False)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    role: Mapped[str] = mapped_column(String(20), nullable=False, default="member", server_default="member")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active", server_default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
