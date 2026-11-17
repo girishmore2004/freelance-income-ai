@@ -105,6 +105,11 @@ Set build variable `NEXT_PUBLIC_AUTH_MODE=cookie`, redeploy, sign in, and confir
 2. Deploy Edge (5.55.0), then the frontend. Account → "Plan and AI usage" shows today's and this month's AI drafts.
 3. Admin (`/finance` → "Plans and AI credits"): create draft plans with limits (prices are D-14 and stay empty), Activate, give a plan to a user by email, grant AI credits (each grant is applied once).
 
+## Phase 6 batch 1 (release 5.56.0): agent registry
+1. Neon backup branch → "Stage 3C Neon migrations" (expects `0058_agent_registry`). Check: `SELECT status, count(*) FROM agent_definitions GROUP BY status;` → live 4, partial 4, planned 17, blocked 3.
+2. Deploy Edge (5.56.0), then the frontend. Sidebar → **AI agents** shows the catalogue and your agent activity.
+3. Emergency stop for one agent (admin): `/ai-agents` → **Switch off** (its AI calls use templates until switched on). The global stop is still `FEATURE_FLAGS_OFF=ai.generation`.
+
 ## Rollback
 - Edge or frontend: Cloudflare → Worker → **Deployments** → previous version → **Rollback**. If you roll the Edge API back, re-attach the old consumer to the queue.
 - Database: see DATABASE_MIGRATION_STATUS.md (5.45 code runs on the 0049 schema).

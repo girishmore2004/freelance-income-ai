@@ -1614,3 +1614,26 @@ class AICreditLedger(Base):
     created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
 
+
+class AgentDefinition(Base):
+    """Governed agent registry entry (migration 0058): Master Plan catalogue with honest build status."""
+    __tablename__ = "agent_definitions"
+    __table_args__ = (
+        CheckConstraint("side IN ('freelancer', 'client', 'platform')", name="ck_agent_definitions_side"),
+        CheckConstraint("autonomy_ceiling IN ('A0', 'A1', 'A2', 'A3', 'A4')", name="ck_agent_definitions_ceiling"),
+        CheckConstraint("status IN ('live', 'partial', 'planned', 'blocked')", name="ck_agent_definitions_status"),
+    )
+    code: Mapped[str] = mapped_column(String(4), primary_key=True)
+    name: Mapped[str] = mapped_column(String(80), nullable=False)
+    side: Mapped[str] = mapped_column(String(20), nullable=False)
+    purpose: Mapped[str] = mapped_column(String(400), nullable=False)
+    autonomy_ceiling: Mapped[str] = mapped_column(String(2), nullable=False)
+    human_gate: Mapped[str] = mapped_column(String(200), nullable=False)
+    tools_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
+    runtime_names_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    updated_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+

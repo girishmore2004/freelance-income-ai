@@ -1,12 +1,13 @@
 # Database Migration Status
 
-Chain head: **`0057_plans_credits`** (57 revisions, single head — verified by `tests/test_system_diagnostics_v542.py`). Neon staging was last migrated to 0046 (per workflow pin).
+Chain head: **`0058_agent_registry`** (58 revisions, single head — verified by `tests/test_system_diagnostics_v542.py`). Neon staging was last migrated to 0046 (per workflow pin).
 
 | Revision | Change | Type | Downgrade |
 |---|---|---|---|
 | 0047_edge_apply_tables | Captures `integrations`, `applications`, `application_messages` used by the Edge API; adds missing columns to hand-made tables; unique `(user_id, provider)`, unique `(user_id, external_id)`, partial unique "one live send per proposal"; `integrations.id` DB default | Additive; stops with a clear message if duplicates exist | Removes indexes only; keeps tables and data |
 | 0048_queue_job_reliability | `background_jobs`: `idempotency_key` (unique), `attempts`, `payload_json`, `source`, `dead_lettered_at`; index `(status, created_at)` | Additive | Drops added columns/indexes |
 | 0051_native_project_listings | `project_categories` (8 seeded from the Master Plan; only `website_development` enabled), `project_listings` (status/visibility/moderation check constraints, indexes for org lists and the marketplace), `project_listing_versions` (immutable, unique per listing+version, money in minor units, budget range check) | Additive + seed | Drops the three tables |
+| 0058_agent_registry | `agent_definitions` (28 seeded agents, side/ceiling/status checks, `enabled` switch); index `agent_runs(user_id, created_at)` | Additive + seed | Drops the table and the index |
 | 0057_plans_credits | `plans` (price optional, limit/interval/status checks; seeds only `free` = 20/day, 300/month, price 0), `user_plans` (one per user), `ai_credit_ledger` (signed deltas ≠ 0, unique reason+ref) | Additive + seed | Drops the three tables |
 | 0056_ledger_foundation | `ledger_accounts` (unique code+currency, kind/owner checks), `ledger_entries` (unique idempotency key, sandbox/live mode, optional contract, reversal link), `ledger_lines` (debit/credit, amount > 0), `fee_schedules` (0–3000 bps, minimum ≥ 0, draft/approved/retired; **not seeded**); PostgreSQL only: deferred balance trigger and append-only triggers | Additive | Drops triggers, functions and the four tables (ledger data is lost — export first if any exists) |
 | 0055_change_orders_reviews | `contracts.agreed_version` (backfilled = current_version for active/completed); `contract_reviews` (unique contract+party, rating 1–5, party check) | Additive + backfill | Drops the table and the column |
@@ -19,8 +20,8 @@ Chain head: **`0057_plans_credits`** (57 revisions, single head — verified by 
 ## Safe deployment order
 1. **Back up** Neon (create a branch named `pre-0047-2026-11` from `main` in Neon → Branches). Branch creation is instant and is the rollback point.
 2. Optional dry run: run the migration workflow against the backup branch first.
-3. Run GitHub Action **"Stage 3C Neon migrations"** in `freelance-income-ai` (type the confirmation text). It expects `0057_plans_credits`.
-4. Deploy the Edge API (5.55.0 needs 0047–0057 before `marketplace.client_side` is switched on; AI keeps working on Worker limits if 0057 is not applied yet).
+3. Run GitHub Action **"Stage 3C Neon migrations"** in `freelance-income-ai` (type the confirmation text). It expects `0058_agent_registry`.
+4. Deploy the Edge API (5.56.0 needs 0047–0058 before `marketplace.client_side` is switched on; AI keeps working on Worker limits if 0057 is not applied yet).
 5. Deploy the frontend.
 
 If 0047 stops with "existing rows contain duplicates", nothing was committed: inspect the listed rows in Neon's SQL Editor, keep the correct one, then rerun.
@@ -31,7 +32,7 @@ If 0047 stops with "existing rows contain duplicates", nothing was committed: in
 
 ## Verification queries (Neon SQL Editor)
 ```sql
-SELECT version_num FROM alembic_version;                       -- 0057_plans_credits
+SELECT version_num FROM alembic_version;                       -- 0058_agent_registry
 SELECT slug, enabled FROM project_categories ORDER BY sort_order; -- only website_development = true
 SELECT role, count(*) FROM user_roles GROUP BY role;            -- freelancer = number of users
 SELECT key, enabled FROM feature_flags ORDER BY key;            -- payments.live = false

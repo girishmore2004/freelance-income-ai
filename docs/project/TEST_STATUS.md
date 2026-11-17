@@ -1,5 +1,14 @@
 # Test Status
 
+## Phase 6 batch 1 — 2026-11-17 IST (release 5.56.0)
+- Edge API: **226 passed, 0 failed** (new `agents.test.ts` 5: operation→agent map, registry tolerance, governor refusal for a disabled agent with no usage row written, catalogue in both shapes without internal runtime names, run labelling and filtered query, admin-only switch).
+- PostgreSQL 16 with the 0058 DDL and the 28 seeded agents (4 live, 4 partly built, 17 planned, 3 blocked): catalogue ordered freelancer → client → platform; legacy `/agents/registry` shape; my runs labelled (`match_shortlist` → C2) and filtered by agent; non-admin toggle 404; invalid value 422; switching F4 off made the real governor refuse `proposal_draft` (template used) while C1 stayed allowed; switched back on.
+- Frontend: typecheck 0 errors (`/ai-agents` page, sidebar link, `e2e/agents.spec.ts`, `/ai-agents` in sign-in guard checks).
+- Python: `tests/test_agent_registry_v558.py` (4 tests: catalogue codes F1–F12/C1–C7/P1–P9, valid ceilings/status/gates, planned/blocked agents claim no runtime names, money agents blocked and nothing above A3) compiled; runs in CI.
+
+## Phase 5 batch 1 — GitHub CI (verified)
+Green on the first push. `main` @ b262099: pytest 542 passed; Playwright 30 passed / 2 skipped (bearer), 31 passed / 1 skipped (cookie). Edge API CI 221/221.
+
 ## Phase 5 batch 1 — 2026-11-17 IST (release 5.55.0)
 - Edge API: **221 passed, 0 failed** (new `plans.test.ts` 7: plan limits from the user's plan, the free plan or the Worker defaults when plan tables are missing; one credit per call beyond the monthly limit, never beyond the daily limit; missing credit table = 0; plan validation; admin-only routes; idempotent credit grants; the free plan cannot be retired). Existing `ai-governor.test.ts` unchanged and passing. Bundle 478 KB.
 - PostgreSQL 16 with the 0057 DDL: free plan limits 20/300 apply by default; admin creates a draft plan (invalid 422, duplicate 409), cannot grant a draft (422), activates it, cannot retire `free` (409), unknown email 404, grants the plan (email match is case-insensitive) → limits switch to 2/day, 3/month → real governor calls: ok, ok, daily limit, daily limit → credit grant (repeat with the same grant id writes nothing) → ok, ok + 1 credit spent, monthly limit, monthly limit → `/me/plan` shows plan, usage and 0 credits left.

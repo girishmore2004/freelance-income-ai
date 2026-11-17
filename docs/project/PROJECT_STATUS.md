@@ -28,6 +28,7 @@ As of 2026-11-17, release 5.46.0 (Phase 0 batch 1 written and tested locally; **
 | C3 | Finding 2: OAuth key from `JWT_SECRET` | True for Edge only; Python already uses `OAUTH_ENCRYPTION_KEY`. Python **MFA** secrets are derived from `SECRET_KEY` (same class of issue) | Edge fixed; MFA logged as K-04 |
 | C4 | Edge reported registration/MFA/reset "pending" | Partly implemented, partly unwired; token store INSERT was broken | Fixed and wired |
 | C5 | Python readiness expected revision 0045 | Head was 0046 | Fixed with a tested constant |
+| C7 | Master Plan text: "27 agents" | Its catalogue tables list 28 (F1–F12, C1–C7, P1–P9) | All 28 recorded in the registry (migration 0058) |
 | C6 | Finding 4 lists queue gap | Also: cron ran AI drafting inline for up to 10 users with no quota | Moved to queue + AI governor |
 
 ## Blockers (summary — full list in BUSINESS_DECISIONS.md)
