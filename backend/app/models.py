@@ -419,6 +419,11 @@ class Notification(Base):
     channel: Mapped[str] = mapped_column(String(30), default="in_app")
     status: Mapped[str] = mapped_column(String(30), default="queued")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    # Inbox fields (migration 0062).
+    kind: Mapped[str] = mapped_column(String(60), nullable=False, default="general", server_default="general")
+    link: Mapped[str] = mapped_column(String(300), nullable=False, default="", server_default="")
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    dedupe_key: Mapped[str | None] = mapped_column(String(200), nullable=True, unique=True)
 
 class PortfolioDocument(Base):
     __tablename__ = "portfolio_documents"

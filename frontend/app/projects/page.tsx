@@ -1,5 +1,6 @@
 'use client';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { NotificationLink } from '../notification-link';
 import { ApiError, api, useSessionToken } from '@/lib/api-client';
 import { formatBudget } from '@/lib/listing-format';
 import { Invitations, MarketplaceVisibility } from './invitations';
@@ -74,7 +75,7 @@ export default function ProjectsPage() {
     <main className="shell">
       <div className="row between">
         <h2>Projects posted by clients</h2>
-        <span className="row"><a className="link" href="/contracts">Contracts</a><a className="link" href="/">← Back to workspace</a></span>
+        <span className="row"><NotificationLink /><a className="link" href="/contracts">Contracts</a><a className="link" href="/">← Back to workspace</a></span>
       </div>
 
       {closed ? (

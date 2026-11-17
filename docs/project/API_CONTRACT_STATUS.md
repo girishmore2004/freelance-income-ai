@@ -58,6 +58,8 @@ Do not change `NEXT_PUBLIC_API_URL`/proxy targets per page until its families ar
 
 **Payments (5.60.0; sandbox only):** `GET /contracts/{id}/payments`; `POST /contracts/{id}/milestones/{i}/fund` (client owner/admin; `Idempotency-Key` header; 409 `PAYMENTS_DISABLED` / `CONTRACT_NOT_ACTIVE` / `ALREADY_FUNDED` / `MILESTONE_APPROVED` / `FEES_NOT_CONFIGURED`) → `{payment, checkout}`; `POST /payments/sandbox/{intentId}/complete {outcome: succeed|fail}`; `POST /payments/webhooks/{provider}` (HMAC-SHA256 hex of the raw body in `X-Signature`, secret `PAYMENT_WEBHOOK_SECRET`; 404 until a live provider is configured); `GET /me/earnings`; `POST /me/payouts {amount_minor, idempotency_key}`; `GET /billing/invoices/{id}`; `POST /contracts/{id}/cancellation {reason}`, `.../cancellation/respond {accept}`, `.../cancellation/withdraw`; staff: `GET /admin/payments`, `POST /admin/payments/{id}/refund {note}`. Milestone review responses add `payment: released|not_funded|pending`. With `payments.require_funding` ON, delivery returns 409 `MILESTONE_NOT_FUNDED`.
 
+**Notifications (5.61.0):** `GET /notifications?unread=1` (replaces the previous 501; keeps `title, message, status, created_at` and adds `id, kind, link, read`); `GET /notifications/unread-count`; `POST /notifications/read {ids?}`.
+
 **Public (5.59.0, no login):** `GET /public/pricing` → `{plans | null, fees: {status: approved|not_decided|unavailable, ...}, payments_live, client_marketplace_open}`. `GET /marketplace/listings/{id}` also returns invite-only listings to invited freelancers.
 
 ## Phase 1 endpoints (Edge 5.48.0)

@@ -1,5 +1,6 @@
 'use client';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { NotificationLink } from '../notification-link';
 import { ApiError, api, useSessionToken } from '@/lib/api-client';
 import { formatMinor, rupeesToMinor } from '@/lib/listing-format';
 
@@ -55,7 +56,7 @@ export default function EarningsPage() {
 
   return (
     <main className="shell">
-      <div className="row between"><h2>Earnings</h2><a className="link" href="/contracts">Contracts</a></div>
+      <div className="row between"><h2>Earnings</h2><span className="row"><NotificationLink /><a className="link" href="/contracts">Contracts</a></span></div>
       {closed && <div className="card"><p className="muted">Earnings open with the client marketplace.</p></div>}
       <div aria-live="polite">{notice && <p className="success">{notice}</p>}{error && <p className="error" role="alert">{error}</p>}</div>
       {data && (

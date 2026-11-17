@@ -1,6 +1,6 @@
 # Implementation Ledger
 
-Last verified checkpoint: **2026-11-17, Phase 4 batch 2** (release 5.60.0, local tests; CI result recorded in TEST_STATUS.md).
+Last verified checkpoint: **2026-11-17, notifications** (release 5.61.0, local tests; CI result recorded in TEST_STATUS.md).
 
 **Deployment state 2026-11-17 18:34 IST (build #8f8b52e3, branch `cloudflare-edge-api-phase1` @ 4b683a1):** Workers Build ran `npm run check` — vitest 84/84 passed, typecheck passed. `wrangler deploy` uploaded the Worker (fetch + 6-hourly cron are live, v5.46.0) but **queue consumer registration failed** (code 11004: queue already has a consumer, the old `freelance-income-ai-consumer`). Neon migrations 0047–0049: not yet confirmed as run.
 Status values: DONE (implemented + tested here) · PARTIAL · BLOCKED · NOT STARTED.
@@ -62,10 +62,11 @@ Status values: DONE (implemented + tested here) · PARTIAL · BLOCKED · NOT STA
 | 7.3 | Disputes, appeals, policy documents, account deletion/anonymisation | NOT STARTED / BLOCKED | — | — | — | — | Policies need legal review (D-1); disputes need payments for holds |
 | 5.2 | Buying plans and credit packs | BLOCKED | — | — | — | — | Payments (D-1/D-2) |
 | 4.3 | Money loop in test mode: provider adapter interface + sandbox provider; milestone funding with fees locked at funding; idempotent checkouts; provider events stored raw and applied once; HMAC-verified webhook endpoint (for a future live provider); release on approval (with cron retry); refunds; mutual contract cancellation with refunds of unreleased funds; freelancer balance and payouts (locked per user, idempotent); test invoices; funded-first switch (D-3); staff refunds (logged); all as balanced ledger entries | DONE (code, sandbox only) | fia + edge | `0061_payments_sandbox.py`, `lib/payments.ts`, `lib/payment-routes.ts`, `delivery-routes.ts`, `app/contracts/payments-panel.tsx`, `app/earnings/page.tsx`, `app/finance/admin-payments.tsx` | `payments.test.ts`; full loop on PostgreSQL reconciled to the rupee; `e2e/payments.spec.ts` | Not deployed | — |
+| 7.4 | In-app notifications (P9): every contract event (offers, terms, activation, deliveries, reviews, funding, releases, refunds, cancellation, completion) to the other party; invitations, invitation answers, proposals, proposal decisions, messages, moderation decisions, report outcomes; deduplicated; never blocks the action (savepoint); inbox with unread count and mark-as-read | DONE (code) | fia + edge | `0062_notifications_inbox.py`, `lib/notify.ts`, `contract-events.ts`, hooks in match/hiring/delivery/trust routes, `app/notifications`, `app/notification-link.tsx` | `notify.test.ts`; PostgreSQL; e2e | Not deployed | Email delivery needs D-15 (Resend) |
 | 4.4 | Live payments: provider adapter, KYC/onboarding, tax invoices (GST), chargebacks | BLOCKED | — | — | — | — | D-1, D-2 (then a live adapter implementing `PaymentProvider`) |
 | 3.4 | Milestone funding | BLOCKED | — | — | — | — | D-1/D-2 (legal entity, payment provider); contracts show "funding not available" |
 | 1 | Remaining Phase 1: OpenAPI contract, organisation invitations, consents (needs policy docs), verification references, staff/admin tooling | NOT STARTED | — | — | — | — | Consents BLOCKED on legal docs (D-1) |
 | 2–8 | Client marketplace, shared delivery, payments, business model, agents, trust, launch | NOT STARTED | — | — | — | — | Phase 1 first; payments BLOCKED on D-1/D-2 |
 
 ## Next exact step
-In-app notifications (P9) for invitations, proposals, offers, deliveries, approvals, payments and reviews. Then disputes, account suspension and appeals; team invitations; file attachments (R2); porting the remaining legacy pages to the Edge API.
+Disputes, account suspension and appeals; team invitations; file attachments (R2); porting the remaining legacy pages to the Edge API.

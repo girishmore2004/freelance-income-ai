@@ -1,5 +1,6 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
+import { NotificationLink } from '../notification-link';
 import { ApiError, api, useSessionToken } from '@/lib/api-client';
 import { CONTRACT_LABELS, formatMinor } from '@/lib/listing-format';
 import { TermsForm, type Terms } from './terms-form';
@@ -97,7 +98,7 @@ export default function ContractsPage() {
     <main className="shell">
       <div className="row between">
         <h2>Contracts</h2>
-        <span className="row"><a className="link" href="/projects">Find projects</a><a className="link" href="/client/projects">Client projects</a></span>
+        <span className="row"><NotificationLink /><a className="link" href="/projects">Find projects</a><a className="link" href="/client/projects">Client projects</a></span>
       </div>
       <div aria-live="polite">
         {notice && <p className="success">{notice}</p>}

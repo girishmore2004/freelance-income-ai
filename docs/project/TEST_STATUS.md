@@ -1,5 +1,13 @@
 # Test Status
 
+## Notifications — 2026-11-17 IST (release 5.61.0)
+- Edge API: **256 passed, 0 failed** (new `notify.test.ts` 4: one row per distinct recipient with per-user dedupe, failures never thrown, contract events go to the other party only, inbox list/count/mark limited to the signed-in user).
+- PostgreSQL 16 with the 0062 DDL, real handlers: invitation → proposal → shortlist → offer → accept → message → delivery → revision → redelivery produced, for the freelancer: invitation.received, proposal.shortlisted, offer.sent, contract.activated, milestone.revision_requested; for the client: proposal.received, contract.activated, message.received, milestone.submitted ×2 (no self-notifications; redeliveries not swallowed by dedupe); unread count 5 → mark one → mark all → 0.
+- Frontend: typecheck 0 errors (`/notifications`, unread badge in headers, `e2e/notifications.spec.ts`).
+
+## Phase 4 batch 2 — GitHub CI (verified)
+Green on the first push. `main` @ 03aaca1: 1 skipped   2 skipped   41 passed (20.6s)   42 passed (12.5s) 554 passed, 6 warnings in 16.07s Edge API CI 252/252.
+
 ## Phase 4 batch 2 — money loop in test mode — 2026-11-17 IST (release 5.60.0)
 - Edge API: **252 passed, 0 failed** (new `payments.test.ts` 9: mode selection (off / sandbox / never live without a provider), HMAC webhook verification and rejection paths, funding/release/refund ledger lines, duplicate events, account naming, payout idempotency key; `delivery.test.ts` adds the funded-first gate).
 - PostgreSQL 16 with the 0061 DDL, real handlers, `payments.sandbox` and `payments.require_funding` ON, fee schedule 3.5% + 2.5%: funding refused before activation; delivery refused before funding; freelancer cannot fund; checkout ₹10,350 (₹10,000 + ₹350 fee, freelancer fee ₹250 locked); same Idempotency-Key returned the same checkout; only the creator can complete it; completed → funded; replayed completion = duplicate; second funding refused; delivery → approval **released ₹9,750** to the freelancer; payout above balance refused; payout ₹9,750 paid; repeated payout key returned the same payout; second milestone funded then mutual cancellation (requester cannot accept own request) **refunded** it; invoices (test documents) paid/refunded; outsider 404; webhook with bad signature 401. Ledger after the whole flow: funds held 0, fees held 0, freelancer payable 0, fee revenue ₹600 = provider clearing ₹600; trial balance equal.

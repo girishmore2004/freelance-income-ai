@@ -16,6 +16,7 @@ const protectedPages = [
   '/ai-agents',
   '/admin',
   '/earnings',
+  '/notifications',
 ];
 
 const LOGIN_PATH = '/api/v1/auth/login';
