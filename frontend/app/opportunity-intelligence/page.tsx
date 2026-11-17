@@ -1,16 +1,16 @@
 'use client';
 import {useEffect,useMemo,useState} from 'react';
-const API=process.env.NEXT_PUBLIC_API_URL||'http://localhost:8000';
+import {API_BASE as API,authFetch,useSessionToken} from '@/lib/api-client';
 type Item=Record<string,any>;
 export default function OpportunityIntelligencePage(){
- const [token,setToken]=useState(''),[items,setItems]=useState<Item[]>([]),[busy,setBusy]=useState(false);
+ const [token,setToken]=useSessionToken(),[items,setItems]=useState<Item[]>([]),[busy,setBusy]=useState(false);
  const [minScore,setMinScore]=useState('0'),[age,setAge]=useState('30'),[decision,setDecision]=useState(''),[source,setSource]=useState('');
  const [selected,setSelected]=useState<Item|null>(null),[review,setReview]=useState({decision:'saved',notes:'',next_action_date:''});
  const [risk,setRisk]=useState<Item|null>(null),[proposal,setProposal]=useState<Item|null>(null),[proposalEvidence,setProposalEvidence]=useState<Item|null>(null),[price,setPrice]=useState('');
  const [error,setError]=useState(''),[message,setMessage]=useState('');
- async function req(path:string,method='GET',body?:Item){const r=await fetch(API+path,{method,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});const j=await r.json().catch(()=>({detail:'Invalid response'}));if(!r.ok)throw new Error(typeof j.detail==='string'?j.detail:'Request failed');return j}
+ async function req(path:string,method='GET',body?:Item){const r=await authFetch(API+path,{method,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});const j=await r.json().catch(()=>({detail:'Invalid response'}));if(!r.ok)throw new Error(typeof j.detail==='string'?j.detail:'Request failed');return j}
  async function load(){if(!token)return;setBusy(true);setError('');try{const q=new URLSearchParams({limit:'100',min_score:minScore});if(age)q.set('max_age_days',age);if(decision)q.set('decision',decision);if(source)q.set('source',source);const result=await req('/api/v1/opportunity-intelligence?'+q.toString());setItems(result.items||[]);if(selected){const found=(result.items||[]).find((x:Item)=>x.opportunity.id===selected.opportunity.id);if(found)setSelected(found)}}catch(e:any){setError(e.message)}finally{setBusy(false)}}
- useEffect(()=>{setToken(localStorage.getItem('fia_token')||'')},[]);
+ 
  useEffect(()=>{if(token)load()},[token,minScore,age,decision,source]);
  async function saveReview(item:Item){setBusy(true);setError('');try{await req(`/api/v1/opportunities/${item.opportunity.id}/review`,'POST',review);setMessage('Opportunity review saved.');await load()}catch(e:any){setError(e.message)}finally{setBusy(false)}}
  async function assess(item:Item){setBusy(true);setError('');setRisk(null);try{const result=await req('/api/v1/research/assess','POST',{opportunity_id:item.opportunity.id});setRisk(result);setMessage('Risk assessment created from listing text and available recorded evidence.')}catch(e:any){setError(e.message)}finally{setBusy(false)}}
