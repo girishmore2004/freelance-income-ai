@@ -1,16 +1,16 @@
 'use client';
 import {useEffect,useState} from 'react';
-const API=process.env.NEXT_PUBLIC_API_URL||'http://localhost:8000';
+import {API_BASE as API,authFetch,useSessionToken} from '@/lib/api-client';
 type Item=Record<string,any>;
 export default function MarketplacesPage(){
- const [token,setToken]=useState(''); const [providers,setProviders]=useState<Item[]>([]);
+ const [token,setToken]=useSessionToken(); const [providers,setProviders]=useState<Item[]>([]);
  const [apps,setApps]=useState<Item[]>([]); const [credentialStatus,setCredentialStatus]=useState<Item>({}); const [opportunities,setOpportunities]=useState<Item[]>([]);
  const [provider,setProvider]=useState('manual'); const [opportunity,setOpportunity]=useState('');
  const [proposal,setProposal]=useState(''); const [note,setNote]=useState(''); const [busy,setBusy]=useState(false); const [message,setMessage]=useState('');
  const [searchTerm,setSearchTerm]=useState(''); const [savedSearches,setSavedSearches]=useState<Item[]>([]); const [savedTerm,setSavedTerm]=useState(''); const [savedInterval,setSavedInterval]=useState(24); const [searchResults,setSearchResults]=useState<Item[]>([]); const [nextCursor,setNextCursor]=useState<string|null>(null); const [searchTotal,setSearchTotal]=useState(0);
- async function req(path:string,method='GET',body?:Item){const r=await fetch(API+path,{method,headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},...(body?{body:JSON.stringify(body)}:{})});const j=await r.json().catch(()=>({detail:'Invalid response'}));if(!r.ok)throw new Error(j.detail||'Request failed');return j}
+ async function req(path:string,method='GET',body?:Item){const r=await authFetch(API+path,{method,headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},...(body?{body:JSON.stringify(body)}:{})});const j=await r.json().catch(()=>({detail:'Invalid response'}));if(!r.ok)throw new Error(j.detail||'Request failed');return j}
  async function load(){if(!token)return;const [p,a,o,c,ss]=await Promise.all([req('/api/v1/marketplaces'),req('/api/v1/marketplace-applications'),req('/api/v1/opportunities'),req('/api/v1/marketplaces/upwork/credential-status').catch(()=>({credential_status:'unknown'})),req('/api/v1/marketplaces/saved-searches').catch(()=>[])]);setProviders(p);setApps(a);setOpportunities(o);setCredentialStatus(c);setSavedSearches(ss)}
- useEffect(()=>{const t=localStorage.getItem('fia_token')||'';setToken(t)},[]);
+ 
  useEffect(()=>{if(token)load().catch(e=>setMessage(e.message))},[token]);
  async function run(fn:()=>Promise<any>){setBusy(true);setMessage('');try{await fn();await load();setMessage('Saved. No external marketplace action was performed.')}catch(e:any){setMessage(e.message)}finally{setBusy(false)}}
  async function create(){await run(async()=>{await req('/api/v1/marketplace-applications','POST',{provider,opportunity_id:opportunity,proposal_id:proposal||null})})}
