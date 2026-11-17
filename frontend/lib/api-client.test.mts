@@ -110,4 +110,10 @@ test('api() unwraps the Edge envelope and raises ApiError with the error code', 
     const e = error as InstanceType<Client['ApiError']>;
     return e instanceof client.ApiError && e.status === 403 && e.code === 'CSRF_TOKEN_INVALID';
   });
+
+  nextResponse = () => Response.json({ success: false, message: 'Check the highlighted fields.', data: null, error: { code: 'INVALID_ORGANIZATION', details: [{ website: 'Use a full https:// address.' }] } }, { status: 422 });
+  await assert.rejects(client.api('/api/v1/organizations', 'POST', {}), (error: unknown) => {
+    const e = error as InstanceType<Client['ApiError']>;
+    return e.code === 'INVALID_ORGANIZATION' && (e.details[0] as Record<string, string>).website === 'Use a full https:// address.';
+  });
 });
