@@ -40,6 +40,7 @@ A queue can have only one consumer, so detach the old one first:
 4. Leave the old `freelance-income-ai-consumer` Worker in place (harmless) or delete it after a week.
 
 ## 6. Deploy the Edge API
+**Cloudflare build settings (fix for "root directory not found"):** Workers & Pages → `freelance-income-ai-api-edge` → Settings → Build. The Edge API exists only on branch `cloudflare-edge-api-phase1`, so set: Git branch / production branch = `cloudflare-edge-api-phase1`; root directory = `backend/edge-api`; build command = `npm run check`; deploy command = `npx wrangler deploy`; turn off builds for non-production branches (otherwise every push to `main` fails the same way).
 - If the Worker is connected to GitHub (**Settings → Builds** shows the repo): merging the PR deploys it. Watch **Deployments**.
 - Otherwise, in `freelance-income-ai-api-edge/backend/edge-api`: `npm install` then `npx wrangler deploy` (expected last line: the workers.dev URL and a version id).
 
@@ -54,7 +55,9 @@ Worker → **Observability** → create alerts (or saved queries checked daily) 
 ## 8. Deploy the frontend
 The proxy and service binding are additive; bearer mode stays on, so nothing changes for users yet. Deploy as you do today (Workers Builds or `npm run deploy` in `frontend`). Verify `https://freelance-income-ai.girishmore097.workers.dev/api/v1/me` returns 401 JSON (proxy reaches the API).
 
-### Cookie sessions (later, after pages are migrated)
+### Cookie sessions (pages migrated in batch 2)
+Prerequisites: Edge API ≥ 5.46.0 deployed; frontend deployed with the `EDGE_API` service binding; Full CI green including "Run browser regression suite in cookie-session mode".
+Cloudflare → Workers & Pages → `freelance-income-ai` → Settings → Build → Build variables → add `NEXT_PUBLIC_AUTH_MODE` = `cookie` → Save → redeploy (Deployments → Retry/redeploy latest). Everyone will be signed out once (old tokens are deleted).
 Set build variable `NEXT_PUBLIC_AUTH_MODE=cookie`, redeploy, sign in, and confirm in DevTools → Application → Cookies that `__Host-fia_session` is HttpOnly. When all pages work, set `AUTH_ALLOW_BEARER=false` on the Edge Worker.
 
 ## Rollback
