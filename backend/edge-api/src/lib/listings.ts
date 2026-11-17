@@ -246,13 +246,41 @@ const SCREEN_RULES: Array<{ code: ScreenFinding["code"]; pattern: RegExp }> = [
  * not a verdict: flagged listings wait in `in_review` for staff (Phase 7 admin).
  */
 export function screenBrief(brief: Brief): ScreenFinding[] {
-  const haystack = [brief.title, brief.outcome, brief.description, ...brief.deliverables, ...brief.acceptance_criteria, brief.ownership_notes, ...brief.assumptions].join("\n");
+  return screenText([brief.title, brief.outcome, brief.description, ...brief.deliverables, ...brief.acceptance_criteria, brief.ownership_notes, ...brief.assumptions].join("\n"));
+}
+
+/** The same rules for any client-written text (e.g. invitation messages). */
+export function screenText(haystack: string): ScreenFinding[] {
   const findings: ScreenFinding[] = [];
   for (const rule of SCREEN_RULES) {
     const match = haystack.match(rule.pattern);
     if (match && !findings.some((f) => f.code === rule.code)) findings.push({ code: rule.code, evidence: match[0].slice(0, 80) });
   }
   return findings;
+}
+
+/* ------------------------------------------------------------------ */
+/* Closing date                                                        */
+/* ------------------------------------------------------------------ */
+
+export const MAX_OPEN_DAYS = 180;
+
+/**
+ * Optional `closes_at` (YYYY-MM-DD). Listings close at the end of that day
+ * (23:59:59 UTC) and the 6-hourly job marks them expired. Must be between
+ * tomorrow and MAX_OPEN_DAYS ahead. `undefined` = not provided.
+ */
+export function parseClosesAt(value: unknown, today = new Date()): { ok: true; value: string | null | undefined } | { ok: false; error: string } {
+  if (value === undefined) return { ok: true, value: undefined };
+  if (value === null || value === "") return { ok: true, value: null };
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return { ok: false, error: "Use a date (YYYY-MM-DD)." };
+  const end = new Date(`${value}T23:59:59.000Z`);
+  if (Number.isNaN(end.getTime()) || end.toISOString().slice(0, 10) !== value) return { ok: false, error: "Use a real date." };
+  const startOfToday = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+  const days = (end.getTime() - startOfToday) / 86_400_000;
+  if (days < 1) return { ok: false, error: "The closing date must be after today." };
+  if (days > MAX_OPEN_DAYS + 1) return { ok: false, error: `Listings can stay open for at most ${MAX_OPEN_DAYS} days.` };
+  return { ok: true, value: end.toISOString() };
 }
 
 /* ------------------------------------------------------------------ */
@@ -357,6 +385,7 @@ export function listingOut(listing: ListingRow, version: VersionRow) {
     moderation_notes: listing.moderation_notes,
     current_version: listing.current_version,
     published_at: listing.published_at ? new Date(listing.published_at).toISOString() : null,
+    closes_at: listing.closes_at ? new Date(listing.closes_at).toISOString() : null,
     created_at: new Date(listing.created_at).toISOString(),
     updated_at: new Date(listing.updated_at).toISOString(),
     brief: versionOut(version)
@@ -374,6 +403,8 @@ export function publicListingOut(listing: ListingRow, version: VersionRow, clien
   return {
     id: listing.id,
     published_at: listing.published_at ? new Date(listing.published_at).toISOString() : null,
+    closes_at: listing.closes_at ? new Date(listing.closes_at).toISOString() : null,
+    visibility: listing.visibility,
     client_name: confidential ? "Confidential client" : clientName,
     title: brief.title,
     category_slug: brief.category_slug,

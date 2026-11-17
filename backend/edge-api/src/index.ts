@@ -5,6 +5,7 @@ import { handleAuthRoute } from "./lib/auth-routes";
 import { handleAccountRoute } from "./lib/account-routes";
 import { handleIdentityRoute } from "./lib/identity-routes";
 import { handleListingRoute } from "./lib/listing-routes";
+import { handleMatchRoute, runScheduledListingExpiry } from "./lib/match-routes";
 import { enforceRateLimit } from "./lib/rate-limit";
 import { applySessionCookies } from "./lib/auth-context";
 import { handleMfaLoginRoute } from "./lib/mfa-login-route";
@@ -389,6 +390,16 @@ async function routeRequest(
   // proposals, approvals
   // --------------------------------------------------
 
+  const matchResponse = await handleMatchRoute(
+    request,
+    env,
+    requestId
+  );
+
+  if (matchResponse) {
+    return matchResponse;
+  }
+
   const listingResponse = await handleListingRoute(
     request,
     env,
@@ -523,6 +534,7 @@ export default {
     }
     ctx.waitUntil(runScheduledReplySync(env));
     ctx.waitUntil(runScheduledTokenMaintenance(env));
+    ctx.waitUntil(runScheduledListingExpiry(env));
   },
 
   // Queue consumer for freelance-income-ai-jobs (replaces the separate

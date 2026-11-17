@@ -15,6 +15,7 @@ import {
   isListingAction,
   listingOut,
   nextStatus,
+  parseClosesAt,
   publicListingOut,
   publicationGaps,
   screenBrief,
@@ -52,7 +53,7 @@ const DISABLED = "The client marketplace is not open yet.";
 const PAGE_SIZE = 20;
 
 /** Listing columns are selected under l_* aliases so they never collide with version columns. */
-type JoinedRow = VersionRow & {
+export type JoinedListingRow = VersionRow & {
   l_id: string;
   l_organization_id: string;
   l_category_slug: string;
@@ -67,6 +68,7 @@ type JoinedRow = VersionRow & {
   l_updated_at: Date;
   client_name?: string;
 };
+type JoinedRow = JoinedListingRow;
 
 export function listingFromJoined(row: JoinedRow): ListingRow {
   return {
@@ -217,7 +219,11 @@ export async function handleListingRoute(
           FROM project_listings l
           JOIN project_listing_versions v ON v.listing_id = l.id AND v.version = l.current_version
           JOIN organizations o ON o.id = l.organization_id
-          WHERE l.id = ${marketMatch[1]} AND l.status = 'published' AND l.visibility = 'public'
+          WHERE l.id = ${marketMatch[1]} AND l.status IN ('published', 'hiring')
+            AND (l.visibility = 'public' OR EXISTS (
+              SELECT 1 FROM listing_invitations i
+              WHERE i.listing_id = l.id AND i.freelancer_user_id = ${userId} AND i.status IN ('pending', 'accepted')
+            ))
             AND (l.closes_at IS NULL OR l.closes_at > now()) AND o.status = 'active'
           LIMIT 1
         `;
@@ -291,8 +297,13 @@ export async function handleListingRoute(
       }
 
       const categories = new Set((await enabledCategories(sql)).map((c) => c.slug));
-      const validation = validateBrief((await body(request)) ?? {}, categories);
-      if (!validation.ok) return failure("INVALID_BRIEF", "Check the highlighted fields.", 422, requestId, [validation.errors]);
+      const createPayload = (await body(request)) ?? {};
+      const validation = validateBrief(createPayload, categories);
+      const closes = parseClosesAt(createPayload.closes_at);
+      if (!validation.ok || !closes.ok) {
+        const errors = { ...(validation.ok ? {} : validation.errors), ...(closes.ok ? {} : { closes_at: closes.error }) };
+        return failure("INVALID_BRIEF", "Check the highlighted fields.", 422, requestId, [errors]);
+      }
       const brief = validation.brief;
       const hash = await briefHash(brief);
       const listingId = crypto.randomUUID();
@@ -300,8 +311,9 @@ export async function handleListingRoute(
         await tx`
           INSERT INTO project_listings
             (id, organization_id, created_by, category_slug, status, visibility, moderation_status, moderation_notes,
-             current_version, created_at, updated_at)
-          VALUES (${listingId}, ${org.id}, ${userId}, ${brief.category_slug}, 'draft', ${brief.visibility}, 'not_screened', '', 1, now(), now())
+             current_version, closes_at, created_at, updated_at)
+          VALUES (${listingId}, ${org.id}, ${userId}, ${brief.category_slug}, 'draft', ${brief.visibility}, 'not_screened', '', 1,
+                  ${closes.value ?? null}, now(), now())
         `;
         await insertVersion(tx, listingId, 1, brief, hash, userId);
       });
@@ -336,7 +348,11 @@ export async function handleListingRoute(
         const baseVersion = Number(payload.base_version);
         const categories = new Set((await enabledCategories(sql)).map((c) => c.slug));
         const validation = validateBrief(payload, categories);
-        if (!validation.ok) return failure("INVALID_BRIEF", "Check the highlighted fields.", 422, requestId, [validation.errors]);
+        const closes = parseClosesAt(payload.closes_at);
+        if (!validation.ok || !closes.ok) {
+          const errors = { ...(validation.ok ? {} : validation.errors), ...(closes.ok ? {} : { closes_at: closes.error }) };
+          return failure("INVALID_BRIEF", "Check the highlighted fields.", 422, requestId, [errors]);
+        }
         const brief = validation.brief;
         const hash = await briefHash(brief);
 
@@ -345,7 +361,14 @@ export async function handleListingRoute(
           if (!locked || !EDITABLE_STATUSES.includes(locked.status as never)) return { code: "NOT_EDITABLE" as const };
           if (baseVersion !== locked.current_version) return { code: "VERSION_CONFLICT" as const, current: locked.current_version };
           const current = await currentVersion(tx, locked);
-          if (current && current.content_hash === hash && locked.visibility === brief.visibility) return { code: "UNCHANGED" as const };
+          const closesAt = closes.value === undefined ? (locked.closes_at ? new Date(locked.closes_at).toISOString() : null) : closes.value;
+          const closesChanged = closesAt !== (locked.closes_at ? new Date(locked.closes_at).toISOString() : null);
+          if (current && current.content_hash === hash && locked.visibility === brief.visibility) {
+            if (!closesChanged) return { code: "UNCHANGED" as const };
+            // Only the closing date changed: no new brief version.
+            await tx`UPDATE project_listings SET closes_at = ${closesAt}, updated_at = now() WHERE id = ${listingId}`;
+            return { code: "CLOSES_ONLY" as const };
+          }
 
           const version = locked.current_version + 1;
           await insertVersion(tx, listingId, version, brief, hash, userId);
@@ -368,7 +391,7 @@ export async function handleListingRoute(
           await tx`
             UPDATE project_listings SET current_version = ${version}, category_slug = ${brief.category_slug},
               visibility = ${brief.visibility}, status = ${status}, moderation_status = ${moderation},
-              moderation_notes = ${notes}, updated_at = now()
+              moderation_notes = ${notes}, closes_at = ${closesAt}, updated_at = now()
             WHERE id = ${listingId}
           `;
           return { code: "OK" as const };
@@ -378,7 +401,7 @@ export async function handleListingRoute(
         if (outcome.code === "VERSION_CONFLICT") {
           return failure("VERSION_CONFLICT", `Someone saved a newer version (${outcome.current}). Reload and apply your changes again.`, 409, requestId);
         }
-        return await respondWithListing(sql, listingId, outcome.code === "UNCHANGED" ? "No changes to save" : "New version saved", 200, requestId);
+        return await respondWithListing(sql, listingId, outcome.code === "UNCHANGED" ? "No changes to save" : outcome.code === "CLOSES_ONLY" ? "Closing date updated" : "New version saved", 200, requestId);
       }
 
       // ---------------- transitions ----------------

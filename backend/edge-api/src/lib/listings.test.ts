@@ -306,3 +306,27 @@ describe("listing routes", () => {
     expect(listing.status).toBe("in_review");
   });
 });
+
+describe("listing closing date", () => {
+  it("rejects an invalid closing date with a field error and stores a valid one", async () => {
+    const bad = world();
+    const response = await handleListingRoute(jsonRequest("POST", "/api/v1/organizations/o1/listings", { ...COMPLETE, closes_at: "2020-01-01" }), env, "r", bad.deps);
+    expect(response!.status).toBe(422);
+    expect(JSON.stringify(await readJson(response!))).toContain("closes_at");
+
+    const good = world();
+    const created = await handleListingRoute(jsonRequest("POST", "/api/v1/organizations/o1/listings", { ...COMPLETE, closes_at: "2099-01-01" }), env, "r", good.deps);
+    // 2099 is beyond the 180-day limit.
+    expect(created!.status).toBe(422);
+  });
+
+  it("updates only the closing date without creating a new version", async () => {
+    const { deps, fake } = world({ status: "published", version: { content_hash: await briefHash(brief()) } });
+    const tomorrow = new Date(Date.now() + 2 * 86_400_000).toISOString().slice(0, 10);
+    const response = await handleListingRoute(jsonRequest("PUT", "/api/v1/listings/L1", { ...COMPLETE, base_version: 1, closes_at: tomorrow }), env, "r", deps);
+    expect(response!.status).toBe(200);
+    expect((await readJson(response!)).message).toBe("Closing date updated");
+    expect(fake.queries.some((q) => q.text.startsWith("INSERT INTO project_listing_versions"))).toBe(false);
+    expect(fake.queries.find((q) => q.text.startsWith("UPDATE project_listings SET closes_at"))!.values[0]).toBe(`${tomorrow}T23:59:59.000Z`);
+  });
+});
