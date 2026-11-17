@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { API_BASE as API, authFetch, useSessionToken } from '@/lib/api-client';
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 type Run = {
   id: string; workflow_type: string; status: string; current_step: string;
   attempt_count: number; max_attempts: number; error?: string; error_code?: string; last_error_node?: string;
@@ -16,7 +16,7 @@ type Run = {
   };
 };
 export default function AgentWorkflowsPage() {
-  const [token, setToken] = useState('');
+  const [token, setToken] = useSessionToken();
   const [runs, setRuns] = useState<Run[]>([]);
   const [selected, setSelected] = useState<Run|null>(null);
   const [workflowType, setWorkflowType] = useState('business_review');
@@ -26,30 +26,29 @@ export default function AgentWorkflowsPage() {
   const headers = () => ({ Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' });
   async function load() {
     if (!token) return;
-    const response = await fetch(`${API}/api/v1/agent-workflows`, {headers: headers()});
+    const response = await authFetch(`${API}/api/v1/agent-workflows`, {headers: headers()});
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || 'Unable to load agent workflows');
     setRuns(data);
-    const metricsResponse = await fetch(`${API}/api/v1/agent-workflows/metrics/summary`, {headers: headers()});
+    const metricsResponse = await authFetch(`${API}/api/v1/agent-workflows/metrics/summary`, {headers: headers()});
     if (metricsResponse.ok) setMetrics(await metricsResponse.json());
     if (selected) {
-      const detail = await fetch(`${API}/api/v1/agent-workflows/${selected.id}`, {headers: headers()});
+      const detail = await authFetch(`${API}/api/v1/agent-workflows/${selected.id}`, {headers: headers()});
       if (detail.ok) setSelected(await detail.json());
     }
   }
-  useEffect(() => { setToken(localStorage.getItem('fia_token') || ''); }, []);
   useEffect(() => { if (token) load().catch(e => setError(e.message)); }, [token]);
   async function start() {
     setBusy(true); setError('');
     try {
-      const response = await fetch(`${API}/api/v1/agent-workflows`, {
+      const response = await authFetch(`${API}/api/v1/agent-workflows`, {
         method: 'POST', headers: headers(),
         body: JSON.stringify({workflow_type: workflowType, idempotency_key: crypto.randomUUID()}),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || 'Unable to start workflow');
       await load();
-      const detail = await fetch(`${API}/api/v1/agent-workflows/${data.workflow_id}`, {headers: headers()});
+      const detail = await authFetch(`${API}/api/v1/agent-workflows/${data.workflow_id}`, {headers: headers()});
       if (detail.ok) setSelected(await detail.json());
     } catch (e:any) { setError(e.message || 'Unable to start workflow'); }
     finally { setBusy(false); }
@@ -57,7 +56,7 @@ export default function AgentWorkflowsPage() {
   async function cancel(id:string) {
     setBusy(true); setError('');
     try {
-      const response = await fetch(`${API}/api/v1/agent-workflows/${id}/cancel`, {method:'POST',headers:headers()});
+      const response = await authFetch(`${API}/api/v1/agent-workflows/${id}/cancel`, {method:'POST',headers:headers()});
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || 'Unable to cancel workflow');
       await load();
@@ -67,7 +66,7 @@ export default function AgentWorkflowsPage() {
   async function retry(id:string) {
     setBusy(true); setError('');
     try {
-      const response = await fetch(`${API}/api/v1/agent-workflows/${id}/retry`, {method:'POST',headers:headers()});
+      const response = await authFetch(`${API}/api/v1/agent-workflows/${id}/retry`, {method:'POST',headers:headers()});
       const data = await response.json();
       if (!response.ok) throw new Error(data.detail || 'Unable to retry workflow');
       await load();
@@ -100,7 +99,7 @@ export default function AgentWorkflowsPage() {
       {runs.map(run=><article className="item" key={run.id}>
         <div className="row"><b>{run.workflow_type.replaceAll('_',' ')}</b><span className="muted">{run.status} · {run.current_step} · attempts {run.attempt_count}/{run.max_attempts}</span></div>
         <small className="muted">{run.id}</small>
-        <div className="row"><button className="btn" onClick={async()=>{const r=await fetch(`${API}/api/v1/agent-workflows/${run.id}`,{headers:headers()});if(r.ok)setSelected(await r.json())}}>View details</button>
+        <div className="row"><button className="btn" onClick={async()=>{const r=await authFetch(`${API}/api/v1/agent-workflows/${run.id}`,{headers:headers()});if(r.ok)setSelected(await r.json())}}>View details</button>
         {run.status==='failed' && run.attempt_count<run.max_attempts && <button className="btn" disabled={busy} onClick={()=>retry(run.id)}>Retry from checkpoint</button>}
         {(run.status==='queued'||run.status==='running') && <button className="btn" disabled={busy} onClick={()=>cancel(run.id)}>Cancel</button>}</div>
         {run.error && <p className="error">{run.error_code ? `${run.error_code}: ` : ''}{run.last_error_node ? `at ${run.last_error_node} — ` : ''}{run.error}</p>}
