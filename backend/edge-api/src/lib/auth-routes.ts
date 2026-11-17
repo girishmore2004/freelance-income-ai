@@ -4,6 +4,7 @@ import type { Env } from "../types";
 import { revokeAccessSession } from "./session-service";
 import { authenticateRequest } from "./auth-context";
 import { failure, success } from "./response";
+import { loadRoles } from "./identity";
 
 function database(env: Env) {
   const connectionString = env.HYPERDRIVE?.connectionString;
@@ -55,11 +56,20 @@ export async function handleAuthRoute(
 
     const user = result.authenticated!.user;
 
+    const sql = database(env);
+    let roles: string[];
+    try {
+      roles = await loadRoles(sql, user.id);
+    } finally {
+      await sql.end({ timeout: 5 });
+    }
+
     return success(
       {
         id: user.id,
         email: user.email,
-        email_verified: user.email_verified
+        email_verified: user.email_verified,
+        roles
       },
       "Current user retrieved",
       200,
