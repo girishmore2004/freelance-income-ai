@@ -1,19 +1,19 @@
 'use client';
 import {useEffect,useMemo,useState} from 'react';
-const API=process.env.NEXT_PUBLIC_API_URL||'http://localhost:8000';
+import {API_BASE as API,authFetch,useSessionToken} from '@/lib/api-client';
 type Action={priority:number;category:string;title:string;reason:string;evidence:{type:string;id:string};suggested_action:string;due_date:string|null;requires_human_approval:boolean};
 type Plan={as_of_date:string;actions:Action[];total_actionable_records:number;returned_actions:number;policy:string};
 const labels:Record<string,string>={finance:'Finance',delivery:'Delivery',approval:'Approvals',communication:'Communication',pipeline:'Pipeline'};
 export default function AgentPlanPage(){
- const [token,setToken]=useState('');const [plan,setPlan]=useState<Plan|null>(null);const [error,setError]=useState('');const [busy,setBusy]=useState(false);const [filter,setFilter]=useState('all');
+ const [token,setToken]=useSessionToken();const [plan,setPlan]=useState<Plan|null>(null);const [error,setError]=useState('');const [busy,setBusy]=useState(false);const [filter,setFilter]=useState('all');
  async function load(currentToken:string){
   setBusy(true);setError('');
-  try{const r=await fetch(API+'/api/v1/agent/action-plan?limit=50',{headers:{Authorization:`Bearer ${currentToken}`}});
+  try{const r=await authFetch(API+'/api/v1/agent/action-plan?limit=50',{headers:{Authorization:`Bearer ${currentToken}`}});
    const d=await r.json();if(!r.ok)throw new Error(typeof d.detail==='string'?d.detail:'Unable to load action plan');setPlan(d);
   }catch(e:unknown){setError(e instanceof Error?e.message:'Unable to load action plan');}
   finally{setBusy(false);}
  }
- useEffect(()=>{const saved=localStorage.getItem('fia_token')||'';setToken(saved);if(saved)void load(saved);},[]);
+ useEffect(()=>{if(token)void load(token);},[token]);
  const categories=useMemo(()=>Array.from(new Set((plan?.actions||[]).map(a=>a.category))),[plan]);
  const visible=(plan?.actions||[]).filter(a=>filter==='all'||a.category===filter);
  const counts=useMemo(()=>{const result:Record<string,number>={};for(const a of plan?.actions||[])result[a.category]=(result[a.category]||0)+1;return result;},[plan]);
