@@ -25,6 +25,10 @@ export interface QueueProducer {
   ): Promise<void>;
 }
 
+export interface RateLimiterBinding {
+  limit(options: { key: string; delta?: number }): Promise<{ success: boolean }>;
+}
+
 export interface Env {
   APP_NAME?: string;
   APP_VERSION?: string;
@@ -33,6 +37,9 @@ export interface Env {
 
   HYPERDRIVE: HyperdriveBinding;
   FREELANCE_JOBS?: QueueProducer;
+  // Cloudflare Rate Limiting bindings (wrangler.jsonc "ratelimits").
+  AUTH_RATE_LIMITER?: RateLimiterBinding;
+  API_RATE_LIMITER?: RateLimiterBinding;
   AI?: { run(model: string, input: unknown): Promise<unknown> };
   WORKERS_AI_MODEL?: string;
   // AI cost controls (see lib/ai-governor.ts). Prices: USD per 1M tokens, from the provider's pricing page.
