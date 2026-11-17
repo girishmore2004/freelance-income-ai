@@ -204,3 +204,45 @@ test('after completion the freelancer reviews the client without seeing the hidd
   await expect(page.getByText('Great work')).toBeVisible();
   await expect.poll(() => captured.find((c) => c.path === '/api/v1/contracts/K1/review')?.body).toEqual({ rating: 4, comment: 'Clear brief' });
 });
+
+test('client compares proposals without a ranking and starts an offer from the suggested milestone split', async ({ page }) => {
+  const captured: Captured[] = [];
+  await signIn(page);
+  const proposal = (id: string, name: string, price: number) => ({ id, status: 'submitted', cover_letter: `Proposal from ${name}`, price_minor: price, currency: 'INR', budget_model: 'fixed', estimated_days: 20, invited: false, created_at: '2026-11-17T00:00:00Z', contract_id: null, contract_status: null, freelancer: { user_id: id, display_name: name, headline: '', skills: [], services: [], hourly_rate: null, currency: 'INR', weekly_hours: 20, timezone: '', newcomer: false } });
+  await mock(page, captured, (path) => {
+    if (path === '/api/v1/me') return ok({ id: 'c1', roles: ['client'] });
+    if (path === '/api/v1/me/identity') return ok({ roles: ['client'], client_side_enabled: true, organizations: [{ id: 'o1', name: 'Acme Studio', membership_role: 'owner', kind: 'company' }] });
+    if (path === '/api/v1/project-categories') return ok([{ slug: 'website_development', name: 'Website development', description: '', template: { stages: [], acceptance: [], default_revisions: 2 } }]);
+    if (path === '/api/v1/organizations/o1/listings') {
+      return ok([{ id: 'L1', status: 'published', visibility: 'public', moderation_status: 'passed', current_version: 1, published_at: '2026-11-17T00:00:00Z', closes_at: null, brief: { ...PROJECT, milestones: [], languages: ['en'], timezone: '', confidentiality: 'standard', ownership_notes: '', assumptions: [] } }]);
+    }
+    if (path === '/api/v1/listings/L1/proposals') return ok([proposal('P1', 'Asha Rao', 3_000_000), proposal('P2', 'Ravi K', 1_000_000)]);
+    if (path === '/api/v1/listings/L1/proposal-comparison') {
+      return ok({
+        disclaimer: 'Facts and flags only, in the order proposals arrived. Nothing is ranked; the lowest price is not a recommendation.',
+        price_range: { min: 1_000_000, max: 3_000_000 },
+        rows: [
+          { proposal_id: 'P1', freelancer_name: 'Asha Rao', price_minor: 3_000_000, budget_fit: 'within', estimated_days: 20, timeline_fit: 'fits', skills_covered: ['Next.js'], skills_missing: [], deliverables_mentioned: 1, deliverables_total: 1, rating: null, invited: false, notes: [] },
+          { proposal_id: 'P2', freelancer_name: 'Ravi K', price_minor: 1_000_000, budget_fit: 'below', estimated_days: 20, timeline_fit: 'fits', skills_covered: [], skills_missing: ['Next.js'], deliverables_mentioned: 0, deliverables_total: 1, rating: null, invited: false, notes: ['Priced below your budget range: check that the scope is fully covered.'] },
+        ],
+      });
+    }
+    if (path === '/api/v1/listing-proposals/P1/suggested-terms') {
+      return ok({
+        note: "Suggested split of the freelancer's quoted price. Edit every amount and date before sending.",
+        missing_terms: ['Ownership and licensing are not stated: say who owns the work and source files.'],
+        terms: { title: 'Bakery ordering website', scope: '', deliverables: ['Order form'], milestones: [{ title: 'Design', amount_minor: 1_000_000, due_date: null }, { title: 'Build', amount_minor: 2_000_000, due_date: null }], revision_rounds: 2, acceptance_criteria: ['Orders arrive'], ownership_terms: '' },
+      });
+    }
+    return undefined;
+  });
+  await page.goto('/client/projects');
+  await page.getByRole('button', { name: 'Proposals', exact: true }).click();
+  await page.getByRole('button', { name: 'Compare proposals' }).click();
+  await expect(page.getByText('Nothing is ranked; the lowest price is not a recommendation.')).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Below budget' })).toBeVisible();
+  await page.getByRole('button', { name: 'Make an offer' }).first().click();
+  await expect(page.getByText('Ownership and licensing are not stated: say who owns the work and source files.')).toBeVisible();
+  await expect(page.getByLabel('Milestone 2')).toHaveValue('Build');
+  await expect(page.getByText('Total: ₹30,000')).toBeVisible();
+});

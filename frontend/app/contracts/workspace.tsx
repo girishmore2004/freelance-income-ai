@@ -19,6 +19,8 @@ type Workspace = {
   funding_note: string;
 };
 
+type Checklist = { items: { criterion: string; mentioned: boolean }[]; summary: string; note: string };
+
 const STATE_LABELS: Record<string, string> = { pending: 'Not delivered', submitted: 'Waiting for review', approved: 'Approved', revision_requested: 'Revision requested' };
 const EVENT_LABELS: Record<string, string> = {
   'offer.sent': 'Offer sent', 'offer.declined': 'Offer declined', 'offer.withdrawn': 'Offer withdrawn', 'terms.proposed': 'New terms proposed',
@@ -38,6 +40,7 @@ export function ContractWorkspace({ contractId, onChanged }: { contractId: strin
   const [links, setLinks] = useState('');
   const [reviewFor, setReviewFor] = useState<number | null>(null);
   const [reviewNote, setReviewNote] = useState('');
+  const [checklist, setChecklist] = useState<Checklist | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -83,6 +86,17 @@ export function ContractWorkspace({ contractId, onChanged }: { contractId: strin
       () => api(`/api/v1/contracts/${contractId}/milestones/${index}/submit`, 'POST', { note, links: linesToList(links) }),
       () => { setDeliverFor(null); setNote(''); setLinks(''); },
     );
+  }
+
+  async function startReview(index: number) {
+    setReviewFor(index);
+    setChecklist(null);
+    try {
+      const result = await api<Checklist>(`/api/v1/contracts/${contractId}/milestones/${index}/acceptance-check`);
+      if (result && Array.isArray(result.items)) setChecklist(result);
+    } catch {
+      // The checklist is optional help; reviewing works without it.
+    }
   }
 
   function review(index: number, decision: 'approve' | 'request_revision') {
@@ -138,6 +152,13 @@ export function ContractWorkspace({ contractId, onChanged }: { contractId: strin
           {open && ws.party === 'client' && ws.can_manage && m.state === 'submitted' && (
             reviewFor === m.index ? (
               <div>
+                {checklist && (
+                  <div aria-label="Acceptance checklist">
+                    <b>Acceptance checklist</b>
+                    <ul>{checklist.items.map((i) => <li key={i.criterion}>{i.mentioned ? '✓' : '✗'} {i.criterion}</li>)}</ul>
+                    <p className="muted">{checklist.summary} {checklist.note}</p>
+                  </div>
+                )}
                 <div className="field"><label htmlFor={`review-${m.index}`}>Feedback (required to request a revision)</label><textarea id={`review-${m.index}`} rows={2} maxLength={5000} value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} /></div>
                 <div className="row">
                   <button className="btn primary" disabled={busy} onClick={() => review(m.index, 'approve')}>Approve milestone</button>
@@ -147,7 +168,7 @@ export function ContractWorkspace({ contractId, onChanged }: { contractId: strin
                 {m.revisions_used >= ws.revision_rounds && <p className="muted">All agreed revision rounds are used.</p>}
               </div>
             ) : (
-              <button className="btn primary" disabled={busy} onClick={() => setReviewFor(m.index)}>Review delivery</button>
+              <button className="btn primary" disabled={busy} onClick={() => void startReview(m.index)}>Review delivery</button>
             )
           )}
         </div>

@@ -65,3 +65,12 @@ def test_constraints():
         with Session(engine) as session:
             session.add(AgentDefinition(code="X2", name="X", side="client", purpose="p", autonomy_ceiling="A9", human_gate="g", status="live"))
             session.commit()
+
+
+def test_0059_marks_built_assistants_live():
+    source = (MIGRATION.parent / "0059_assistants_live.py").read_text()
+    assert 'down_revision = "0058_agent_registry"' in source
+    namespace: dict = {}
+    exec(compile(source.split("def upgrade", 1)[0], "0059", "exec"), namespace)
+    assert namespace["LIVE"] == {"C3": ["proposal_comparison"], "C5": ["contract_assistant"], "C6": ["acceptance_assistant"]}
+    assert "AND status = 'planned'" in source

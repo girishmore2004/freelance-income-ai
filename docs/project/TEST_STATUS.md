@@ -1,5 +1,14 @@
 # Test Status
 
+## Phase 6 batch 2 — 2026-11-17 IST (release 5.57.0)
+- Edge API: **234 passed, 0 failed** (new `assistants.test.ts` 8: keyword coverage with simple word forms, C3 budget/timeline fit and flags without ranking, C5 exact split of the freelancer's price with remainder on the last milestone and dates spread to the deadline, missing-term flags, C6 checklist, route switch/membership/run recording).
+- PostgreSQL 16, real handlers: C3 compared two proposals (within/fits vs below/not stated with flags; disclaimer; outsider 404); C5 split ₹25,000.01 into ₹8,333 + ₹8,333 + ₹8,334.01 (sum exact) with dates to the deadline and an ownership flag, then used as the actual offer; C6 refused before delivery (409), checked both criteria after delivery, hidden from the freelancer (404); each wrote an agent run; switching C3 off returned 403 `AGENT_DISABLED`.
+- Frontend: typecheck 0 errors (comparison table, suggested terms in the offer form, acceptance checklist in reviews, new Playwright journey).
+- Python: registry test extended for migration 0059 (data-only); runs in CI.
+
+## Phase 6 batch 1 — GitHub CI (verified)
+Green on the first push. `main` @ c18e3fc: 1 skipped   2 skipped   32 passed (19.8s)   33 passed (10.8s) 546 passed, 6 warnings in 15.86s Edge API CI 226/226.
+
 ## Phase 6 batch 1 — 2026-11-17 IST (release 5.56.0)
 - Edge API: **226 passed, 0 failed** (new `agents.test.ts` 5: operation→agent map, registry tolerance, governor refusal for a disabled agent with no usage row written, catalogue in both shapes without internal runtime names, run labelling and filtered query, admin-only switch).
 - PostgreSQL 16 with the 0058 DDL and the 28 seeded agents (4 live, 4 partly built, 17 planned, 3 blocked): catalogue ordered freelancer → client → platform; legacy `/agents/registry` shape; my runs labelled (`match_shortlist` → C2) and filtered by agent; non-admin toggle 404; invalid value 422; switching F4 off made the real governor refuse `proposal_draft` (template used) while C1 stayed allowed; switched back on.

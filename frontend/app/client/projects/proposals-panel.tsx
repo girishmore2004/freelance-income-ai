@@ -17,6 +17,16 @@ type Proposal = {
   freelancer: FreelancerCard;
 };
 
+type ComparisonRow = {
+  proposal_id: string; freelancer_name: string; price_minor: number; budget_fit: string; estimated_days: number | null; timeline_fit: string;
+  skills_covered: string[]; skills_missing: string[]; deliverables_mentioned: number; deliverables_total: number;
+  rating: { average: number; count: number } | null; invited: boolean; notes: string[];
+};
+type Comparison = { rows: ComparisonRow[]; disclaimer: string };
+type Suggested = { terms: Terms; missing_terms: string[]; note: string };
+
+const FIT: Record<string, string> = { within: 'Within budget', below: 'Below budget', above: 'Above budget', no_budget: 'No budget set', fits: 'Fits deadline', tight: 'Tight', late: 'Past deadline', no_deadline: 'No deadline', not_stated: 'Not stated' };
+
 type ListingBrief = { title: string; deliverables: string[]; acceptance_criteria: string[]; revision_rounds: number; ownership_notes: string };
 
 function messageOf(e: unknown): string {
@@ -26,6 +36,8 @@ function messageOf(e: unknown): string {
 export function ProposalsPanel({ listingId, brief, canManage }: { listingId: string; brief: ListingBrief; canManage: boolean }) {
   const [items, setItems] = useState<Proposal[] | null>(null);
   const [offerFor, setOfferFor] = useState<Proposal | null>(null);
+  const [suggested, setSuggested] = useState<Suggested | null>(null);
+  const [comparison, setComparison] = useState<Comparison | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -55,7 +67,29 @@ export function ProposalsPanel({ listingId, brief, canManage }: { listingId: str
     }
   }
 
+  async function compare() {
+    setError('');
+    try {
+      const result = await api<Comparison>(`/api/v1/listings/${listingId}/proposal-comparison`);
+      setComparison(result && Array.isArray(result.rows) ? result : null);
+    } catch (e) {
+      setError(messageOf(e));
+    }
+  }
+
+  async function startOffer(p: Proposal) {
+    setSuggested(null);
+    try {
+      const result = await api<Suggested>(`/api/v1/listing-proposals/${p.id}/suggested-terms`);
+      if (result && result.terms && Array.isArray(result.terms.milestones)) setSuggested(result);
+    } catch {
+      // The assistant is optional: fall back to a single milestone at the quoted price.
+    }
+    setOfferFor(p);
+  }
+
   function initialTerms(p: Proposal): Terms {
+    if (suggested) return suggested.terms;
     return {
       title: brief.title,
       scope: '',
@@ -75,6 +109,30 @@ export function ProposalsPanel({ listingId, brief, canManage }: { listingId: str
         {error && <p className="error" role="alert">{error}</p>}
       </div>
       {items && items.length === 0 && <p className="empty">No proposals yet.</p>}
+      {items && items.length > 1 && !comparison && <button className="btn" type="button" onClick={() => void compare()}>Compare proposals</button>}
+      {comparison && (
+        <div>
+          <p className="muted">{comparison.disclaimer}</p>
+          <table>
+            <caption>Proposal comparison</caption>
+            <thead><tr><th scope="col">Freelancer</th><th scope="col">Price</th><th scope="col">Budget</th><th scope="col">Timeline</th><th scope="col">Skills</th><th scope="col">Deliverables mentioned</th><th scope="col">Flags</th></tr></thead>
+            <tbody>
+              {comparison.rows.map((r) => (
+                <tr key={r.proposal_id}>
+                  <td>{r.freelancer_name}{r.rating ? ` ★ ${r.rating.average}` : ''}{r.invited ? ' (invited)' : ''}</td>
+                  <td>{formatMinor(r.price_minor, 'INR')}</td>
+                  <td>{FIT[r.budget_fit] ?? r.budget_fit}</td>
+                  <td>{r.estimated_days ? `${r.estimated_days} days · ` : ''}{FIT[r.timeline_fit] ?? r.timeline_fit}</td>
+                  <td>{r.skills_covered.join(', ') || '—'}{r.skills_missing.length ? ` (missing ${r.skills_missing.join(', ')})` : ''}</td>
+                  <td>{r.deliverables_mentioned}/{r.deliverables_total}</td>
+                  <td>{r.notes.join(' ')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <button className="link" type="button" onClick={() => setComparison(null)}>Hide comparison</button>
+        </div>
+      )}
       {items?.map((p) => (
         <div className="card item" key={p.id}>
           <div className="row between">
@@ -91,8 +149,14 @@ export function ProposalsPanel({ listingId, brief, canManage }: { listingId: str
           {canManage && ['submitted', 'shortlisted'].includes(p.status) && offerFor?.id !== p.id && (
             <div className="row">
               {p.status === 'submitted' && <button className="btn" disabled={busy} onClick={() => void decide(p, 'shortlist')}>Shortlist</button>}
-              <button className="btn primary" disabled={busy} onClick={() => setOfferFor(p)}>Make an offer</button>
+              <button className="btn primary" disabled={busy} onClick={() => void startOffer(p)}>Make an offer</button>
               <button className="btn" disabled={busy} onClick={() => void decide(p, 'decline')}>Decline</button>
+            </div>
+          )}
+          {offerFor?.id === p.id && suggested && (
+            <div className="muted">
+              <p>{suggested.note}</p>
+              {suggested.missing_terms.length > 0 && <ul>{suggested.missing_terms.map((m) => <li key={m}>{m}</li>)}</ul>}
             </div>
           )}
           {offerFor?.id === p.id && (

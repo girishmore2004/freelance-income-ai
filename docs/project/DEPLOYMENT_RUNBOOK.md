@@ -110,6 +110,10 @@ Set build variable `NEXT_PUBLIC_AUTH_MODE=cookie`, redeploy, sign in, and confir
 2. Deploy Edge (5.56.0), then the frontend. Sidebar → **AI agents** shows the catalogue and your agent activity.
 3. Emergency stop for one agent (admin): `/ai-agents` → **Switch off** (its AI calls use templates until switched on). The global stop is still `FEATURE_FLAGS_OFF=ai.generation`.
 
+## Phase 6 batch 2 (release 5.57.0): client assistants
+1. "Stage 3C Neon migrations" (expects `0059_assistants_live`; data-only). Check: `SELECT code, status FROM agent_definitions WHERE code IN ('C3','C5','C6');` → live.
+2. Deploy Edge (5.57.0), then the frontend. Client → Proposals → **Compare proposals**; **Make an offer** starts from the suggested split; Workspace → **Review delivery** shows the acceptance checklist.
+
 ## Rollback
 - Edge or frontend: Cloudflare → Worker → **Deployments** → previous version → **Rollback**. If you roll the Edge API back, re-attach the old consumer to the queue.
 - Database: see DATABASE_MIGRATION_STATUS.md (5.45 code runs on the 0049 schema).
