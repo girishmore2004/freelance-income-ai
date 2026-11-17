@@ -222,6 +222,7 @@ export default function AccountPage() {
                       {org.billing.tax_id ? ` · Tax ID ${org.billing.tax_id}` : ''}
                     </p>
                   )}
+                  <a className="btn" href="/client/projects">Manage projects</a>
                   {(org.membership_role === 'owner' || org.membership_role === 'admin') && (
                     <button className="btn" disabled={busy} onClick={() => { setEditingId(org.id); setForm(formFrom(org)); setNotice(''); setError(''); }}>
                       Edit

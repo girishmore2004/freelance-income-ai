@@ -35,6 +35,9 @@ Do not change `NEXT_PUBLIC_API_URL`/proxy targets per page until its families ar
 | Delivery governance, analytics, finance intelligence, CRM | Python only | Not ported |
 | Listings, matches, invitations, offers, contracts (two-party), payments, payouts, reviews, disputes, admin | — | Not built (Phases 2–7) |
 
+## Phase 2 endpoints (Edge 5.49.0, behind `marketplace.client_side`)
+`GET /project-categories`; `POST /organizations/{org}/brief-assistant {category_slug, notes}` → `{draft, source: "model"|"template", note?}` (not stored); `GET|POST /organizations/{org}/listings`; `GET /listings/{id}` (with version history); `PUT /listings/{id} {base_version, ...brief}` → new version (409 `VERSION_CONFLICT` / `NOT_EDITABLE`); `POST /listings/{id}/transition {action: submit|pause|resume|close|cancel}` (owner/admin; 409 `INVALID_TRANSITION`; 422 `INCOMPLETE_BRIEF` with `details[0].gaps`); `GET /marketplace/listings?category=&q=&before=` → `{items, next_before}`; `GET /marketplace/listings/{id}`. Money fields are integer minor units (`budget_min_minor`, `budget_max_minor`). Marketplace items never include organisation ids, billing data, ownership notes or assumptions; confidential briefs show "Confidential client" and no description.
+
 ## Phase 1 endpoints (Edge 5.48.0)
 `GET /me/identity`, `POST /me/roles {role}`, `DELETE /me/roles/{role}`, `GET|POST /organizations`, `GET|PATCH /organizations/{id}`, `GET /organizations/{id}/members`. `GET /me` now also returns `roles`. `POST /auth/register` accepts optional `intent: "freelancer" | "client"`. Errors: `FEATURE_DISABLED` (403, client side off), `CLIENT_ROLE_REQUIRED`, `ROLE_NOT_ALLOWED`, `ROLE_SUSPENDED`, `LAST_PUBLIC_ROLE`, `INVALID_ORGANIZATION` (422, `error.details[0]` = field → message), `ORGANIZATION_LIMIT`, `RATE_LIMITED` (429 + `Retry-After`). Non-members always get 404.
 

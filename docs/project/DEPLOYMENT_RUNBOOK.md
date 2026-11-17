@@ -66,6 +66,13 @@ Set build variable `NEXT_PUBLIC_AUTH_MODE=cookie`, redeploy, sign in, and confir
 3. Deploy the frontend (`main`). Open `/account` → "Your roles" shows Find work = Active, Hire = locked.
 4. To try the client side on staging only: Neon → SQL Editor → `UPDATE feature_flags SET enabled = true, updated_by = 'founder' WHERE key = 'marketplace.client_side';` Reload `/account` → "Turn on" for Hire → create a client account. Switch off again with `enabled = false` (or set the Worker variable `FEATURE_FLAGS_OFF=marketplace.client_side` for an instant kill switch).
 
+## Phase 2 batch 1 (release 5.49.0): client project posting
+1. Neon backup branch → "Stage 3C Neon migrations" (expects `0051_native_project_listings`). Check: `SELECT slug, enabled FROM project_categories;`.
+2. Deploy Edge (branch `cloudflare-edge-api-phase1`, 5.49.0), then the frontend (`main`).
+3. With `marketplace.client_side` ON (staging): Account → turn on Hire → create a client account → **Manage projects** → Post a new project → describe it → "Draft the brief with AI" → set budget and deadline → Save and submit. It should say "Published" and appear on `/projects` for any signed-in user.
+4. Enable more categories (D-6): `UPDATE project_categories SET enabled = true, updated_at = now() WHERE slug = 'ui_ux_design';`
+5. Moderation until the admin queue exists — list held listings: `SELECT l.id, v.title, l.moderation_notes FROM project_listings l JOIN project_listing_versions v ON v.listing_id = l.id AND v.version = l.current_version WHERE l.status = 'in_review';` Approve: `UPDATE project_listings SET status = 'published', moderation_status = 'approved', published_at = COALESCE(published_at, now()), updated_at = now() WHERE id = '<id>' AND status = 'in_review';` Return to the client: `UPDATE project_listings SET status = 'draft', moderation_status = 'rejected', moderation_notes = '<reason>', updated_at = now() WHERE id = '<id>' AND status = 'in_review';`
+
 ## Rollback
 - Edge or frontend: Cloudflare → Worker → **Deployments** → previous version → **Rollback**. If you roll the Edge API back, re-attach the old consumer to the queue.
 - Database: see DATABASE_MIGRATION_STATUS.md (5.45 code runs on the 0049 schema).

@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import String, Text, DateTime, Float, Integer, ForeignKey, Boolean, UniqueConstraint, Index, CheckConstraint, func, text as sql_text
+from sqlalchemy import String, Text, DateTime, Date, Float, Integer, BigInteger, ForeignKey, Boolean, UniqueConstraint, Index, CheckConstraint, func, text as sql_text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import JSON
 from pgvector.sqlalchemy import Vector
@@ -1208,4 +1208,89 @@ class OrganizationMembership(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
     role: Mapped[str] = mapped_column(String(20), nullable=False, default="member", server_default="member")
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active", server_default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
+
+# ---------------------------------------------------------------------------
+# Native project listings (migration 0051, Phase 2). Owned by the Edge API.
+# ---------------------------------------------------------------------------
+
+LISTING_STATUS_VALUES = ("draft", "in_review", "published", "hiring", "paused", "closed", "cancelled", "expired")
+
+
+class ProjectCategory(Base):
+    """Work category with its workflow template (inputs, stages, acceptance)."""
+    __tablename__ = "project_categories"
+    slug: Mapped[str] = mapped_column(String(60), primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str] = mapped_column(String(400), nullable=False, default="", server_default="")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=100, server_default="100")
+    template_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}", server_default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now, server_default=func.now(), nullable=False)
+
+
+class ProjectListing(Base):
+    """A client organisation's native project and its lifecycle state."""
+    __tablename__ = "project_listings"
+    __table_args__ = (
+        CheckConstraint("status IN ('draft', 'in_review', 'published', 'hiring', 'paused', 'closed', 'cancelled', 'expired')", name="ck_project_listings_status"),
+        CheckConstraint("visibility IN ('public', 'invite_only', 'private')", name="ck_project_listings_visibility"),
+        CheckConstraint("moderation_status IN ('not_screened', 'passed', 'flagged', 'approved', 'rejected')", name="ck_project_listings_moderation"),
+        Index("ix_project_listings_org_created", "organization_id", "created_at"),
+        Index("ix_project_listings_status_published", "status", "published_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    category_slug: Mapped[str] = mapped_column(ForeignKey("project_categories.slug"), index=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft", server_default="draft")
+    visibility: Mapped[str] = mapped_column(String(20), nullable=False, default="public", server_default="public")
+    moderation_status: Mapped[str] = mapped_column(String(20), nullable=False, default="not_screened", server_default="not_screened")
+    moderation_notes: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    current_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    closes_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now, server_default=func.now(), nullable=False)
+
+
+class ProjectListingVersion(Base):
+    """Immutable snapshot of a listing's brief. Money in integer minor units."""
+    __tablename__ = "project_listing_versions"
+    __table_args__ = (
+        UniqueConstraint("listing_id", "version", name="uq_listing_version"),
+        CheckConstraint("budget_model IN ('fixed', 'hourly')", name="ck_listing_versions_budget_model"),
+        CheckConstraint("budget_min_minor IS NULL OR budget_min_minor >= 0", name="ck_listing_versions_budget_min"),
+        CheckConstraint("budget_max_minor IS NULL OR budget_min_minor IS NULL OR budget_max_minor >= budget_min_minor", name="ck_listing_versions_budget_range"),
+        CheckConstraint("confidentiality IN ('standard', 'confidential')", name="ck_listing_versions_confidentiality"),
+        CheckConstraint("experience_level IN ('any', 'entry', 'intermediate', 'expert')", name="ck_listing_versions_experience"),
+        CheckConstraint("revision_rounds >= 0 AND revision_rounds <= 10", name="ck_listing_versions_revisions"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    listing_id: Mapped[str] = mapped_column(ForeignKey("project_listings.id", ondelete="CASCADE"), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    category_slug: Mapped[str] = mapped_column(String(60), nullable=False)
+    outcome: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    deliverables_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
+    skills_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
+    experience_level: Mapped[str] = mapped_column(String(20), nullable=False, default="any", server_default="any")
+    budget_model: Mapped[str] = mapped_column(String(20), nullable=False, default="fixed", server_default="fixed")
+    budget_min_minor: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    budget_max_minor: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR", server_default="INR")
+    deadline: Mapped[object | None] = mapped_column(Date, nullable=True)
+    milestones_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
+    acceptance_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
+    revision_rounds: Mapped[int] = mapped_column(Integer, nullable=False, default=2, server_default="2")
+    languages_json: Mapped[str] = mapped_column(Text, nullable=False, default='["en"]', server_default='["en"]')
+    timezone: Mapped[str] = mapped_column(String(60), nullable=False, default="", server_default="")
+    confidentiality: Mapped[str] = mapped_column(String(20), nullable=False, default="standard", server_default="standard")
+    ownership_notes: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    assumptions_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)

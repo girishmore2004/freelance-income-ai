@@ -1,5 +1,20 @@
 # Test Status
 
+## Phase 2 batch 1 — 2026-11-17 IST (release 5.49.0)
+- Edge API (real `postgres` 3.4.9 + `bcryptjs`): **149 passed, 0 failed** (new `listings.test.ts` 23: validation, lifecycle, screening, public projection, Brief Builder guard/quota/fallback, routes incl. non-member 404s, owner-only transitions, version conflicts, re-screening). Typecheck clean; bundle builds.
+- PostgreSQL 16: 0051 DDL; marketplace query with bound parameters (filters, search, keyset paging; excludes draft/private/expired/closed-org); FOR UPDATE + new version; unique version, budget range, status and category FK rejections.
+- Frontend: typecheck 0 errors (incl. new pages and 4 e2e specs); `npm run test:unit` 10/10 (new money-conversion tests); render smoke of `/client/projects` and `/projects`. Playwright runs in CI.
+- Python: `tests/test_project_listings_v551.py` compiled (runs in CI); category seed checked directly (8 categories, only website_development enabled).
+
+
+## Full CI run #370 — root cause found (2026-11-17 20:05 IST)
+The recurring "login failure…" e2e failure was in the **cookie-mode** Playwright pass (15 tests: 13 passed, 1 skipped, 1 failed). In cookie mode the page calls `GET /api/v1/me` to detect a session; the test's catch-all mock answered 200, so the page treated the visitor as signed in and never showed the login form (in `next dev` the form appeared, then vanished — the earlier "detached" message). Earlier explanations (parallel compilation, dev-server reloads) were wrong. Fix: the mock returns 401 for `/me` until a login succeeds, like the real API. The production-build Playwright setup is kept (it tests what ships).
+
+
+## Full CI run #357 — 2026-11-17 19:50 IST
+`frontend-e2e`: 13 passed, 1 skipped, 1 failed — the same "login failure" test (input repeatedly detached before typing), even with one worker, so the parallel-compile explanation was incomplete. Change: CI Playwright now runs against a production build instead of `next dev`. Verified in Next.js source that `next start` with `output: 'standalone'` only warns. Not runnable here (no npm registry); confirm on the next CI run.
+
+
 ## Phase 1 batch 1 — 2026-11-17 IST (release 5.48.0)
 - Edge API with real `postgres` 3.4.9 + `bcryptjs`: **126 passed, 0 failed** (new `identity.test.ts` 19: roles, organisation validation, flag gating, cross-account 404s, owner-only edits, billing visibility, transactions, rate limiting). Typecheck clean (TS-6-only `mfa-service.ts` messages excluded, as before).
 - PostgreSQL 16: migration 0050 DDL, idempotent backfill, check constraints, role toggle, membership lookups (outsider gets 0 rows), account deletion not blocked (`SET NULL`).
