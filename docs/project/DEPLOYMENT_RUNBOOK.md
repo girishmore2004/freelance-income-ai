@@ -60,6 +60,12 @@ Prerequisites: Edge API ≥ 5.46.0 deployed; frontend deployed with the `EDGE_AP
 Cloudflare → Workers & Pages → `freelance-income-ai` → Settings → Build → Build variables → add `NEXT_PUBLIC_AUTH_MODE` = `cookie` → Save → redeploy (Deployments → Retry/redeploy latest). Everyone will be signed out once (old tokens are deleted).
 Set build variable `NEXT_PUBLIC_AUTH_MODE=cookie`, redeploy, sign in, and confirm in DevTools → Application → Cookies that `__Host-fia_session` is HttpOnly. When all pages work, set `AUTH_ALLOW_BEARER=false` on the Edge Worker.
 
+## Phase 1 (release 5.48.0): roles and client accounts
+1. Neon backup branch, then GitHub Actions → "Stage 3C Neon migrations" (expects `0050_identity_roles_orgs`). Check: `SELECT role, count(*) FROM user_roles GROUP BY role;` shows every user as freelancer.
+2. Deploy the Edge API (branch `cloudflare-edge-api-phase1`). The build log should list `env.AUTH_RATE_LIMITER` and `env.API_RATE_LIMITER` as Rate Limit bindings.
+3. Deploy the frontend (`main`). Open `/account` → "Your roles" shows Find work = Active, Hire = locked.
+4. To try the client side on staging only: Neon → SQL Editor → `UPDATE feature_flags SET enabled = true, updated_by = 'founder' WHERE key = 'marketplace.client_side';` Reload `/account` → "Turn on" for Hire → create a client account. Switch off again with `enabled = false` (or set the Worker variable `FEATURE_FLAGS_OFF=marketplace.client_side` for an instant kill switch).
+
 ## Rollback
 - Edge or frontend: Cloudflare → Worker → **Deployments** → previous version → **Rollback**. If you roll the Edge API back, re-attach the old consumer to the queue.
 - Database: see DATABASE_MIGRATION_STATUS.md (5.45 code runs on the 0049 schema).
