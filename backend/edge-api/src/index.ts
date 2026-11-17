@@ -1,14 +1,18 @@
-import type { Env } from "./types";
+import type { Env, QueueBatch } from "./types";
 
 import { handleLoginRoute } from "./lib/login-route";
 import { handleAuthRoute } from "./lib/auth-routes";
+import { handleAccountRoute } from "./lib/account-routes";
+import { applySessionCookies } from "./lib/auth-context";
 import { handleMfaLoginRoute } from "./lib/mfa-login-route";
 import { handleRegisterRoute } from "./lib/register-route";
 import { handleCoreRoute } from "./lib/core-routes";
 import { handleWorkflowRoute } from "./lib/workflow-routes";
 import { handleApplyRoute } from "./lib/apply-routes";
-import { runScheduledReplySync } from "./lib/apply-agent";
+import { runScheduledReplySync, runScheduledTokenMaintenance } from "./lib/apply-agent";
 import { runScheduledDiscovery } from "./lib/discovery-agent";
+import { handleJobRoute } from "./lib/job-routes";
+import { processQueueBatch, runScheduledQueueMaintenance } from "./lib/jobs";
 import {
   applyCors,
   handlePreflight
@@ -66,7 +70,7 @@ async function routeRequest(
       {
         application: env.APP_NAME ?? "Freelance Income AI",
         service: "freelance-income-ai-api-edge",
-        version: env.APP_VERSION ?? "5.45.1",
+        version: env.APP_VERSION ?? "5.46.0",
         environment: env.APP_ENV ?? "staging",
         status: "operational",
         runtime: "cloudflare-workers",
@@ -194,20 +198,25 @@ async function routeRequest(
     return success(
       {
         service: "freelance-income-ai-api-edge",
-        version: env.APP_VERSION ?? "5.45.1",
+        version: env.APP_VERSION ?? "5.46.0",
         platform: "Cloudflare Workers",
         database: "Neon PostgreSQL",
         database_transport: "Hyperdrive",
         queue_enabled: Boolean(env.FREELANCE_JOBS),
-        migration_stage: "authentication_partial",
+        migration_stage: "phase0_stabilisation",
         authentication: {
           login_route: "implemented",
           session_validation: "implemented",
           logout_routes: "implemented",
-          registration: "pending",
-          mfa_verification: "pending",
-          password_reset: "pending"
+          registration: "implemented",
+          email_verification: "implemented_requires_resend",
+          password_reset: "implemented_requires_resend",
+          session_management: "implemented",
+          mfa_verification: "implemented",
+          mfa_management: "implemented",
+          cookie_sessions: "implemented_opt_in"
         },
+        queue_consumer: "edge_worker",
         business_routes_migrated: false,
         production_cutover_allowed: false
       },
@@ -227,25 +236,26 @@ async function routeRequest(
   ) {
     return success(
       {
-        phase: 1,
-        foundation: "implemented",
-        authentication: "partial",
+        phase: 0,
+        foundation: "stabilising",
+        authentication: "parity_with_python",
         authentication_features: {
-          password_verification: "implementation_pending_validation",
-          login: "implemented_pending_testing",
-          session_creation: "implemented_pending_testing",
-          session_validation: "implemented_pending_testing",
-          logout: "implemented_pending_testing",
-          registration: "not_migrated",
-          mfa_verification: "not_migrated",
-          password_reset: "not_migrated"
+          login: "implemented",
+          registration: "implemented",
+          email_verification: "implemented_requires_resend",
+          password_reset: "implemented_requires_resend",
+          password_change: "implemented",
+          sessions_list_revoke: "implemented",
+          mfa_verification: "implemented",
+          mfa_setup_enable_disable: "implemented",
+          cookie_sessions: "implemented_opt_in"
         },
-        business_modules: "not_migrated",
-        ai_modules: "not_migrated",
+        business_modules: "partial",
+        ai_modules: "partial_with_budget_controls",
         document_modules: "not_migrated",
-        queues: "binding_configured",
+        queues: "consumer_on_edge_worker",
         production_cutover: false,
-        next_phase: "authentication_testing_and_mfa"
+        next_phase: "frontend_cookie_migration_and_client_marketplace"
       },
       "Migration status retrieved",
       200,
@@ -302,6 +312,21 @@ async function routeRequest(
     if (mfaResponse) return mfaResponse;
   }
   // --------------------------------------------------
+  // Account security: email verification, password reset,
+  // password change, sessions and MFA management
+  // --------------------------------------------------
+
+  const accountResponse = await handleAccountRoute(
+    request,
+    env,
+    requestId
+  );
+
+  if (accountResponse) {
+    return accountResponse;
+  }
+
+  // --------------------------------------------------
   // Remaining authentication routes
   // --------------------------------------------------
 
@@ -335,6 +360,16 @@ async function routeRequest(
   // Core product routes: profile, dashboard, opportunities,
   // proposals, approvals
   // --------------------------------------------------
+
+  const jobResponse = await handleJobRoute(
+    request,
+    env,
+    requestId
+  );
+
+  if (jobResponse) {
+    return jobResponse;
+  }
 
   const applyResponse = await handleApplyRoute(
     request,
@@ -436,13 +471,29 @@ async function routeRequest(
 export default {
   // Cron Trigger: the AI looks for new work and drafts proposals
   // for the best matches. Nothing is ever sent without approval.
+  // With the queue configured, discovery runs as idempotent per-user
+  // queue jobs (with retries and dead-lettering); without it, inline.
   async scheduled(
     _controller: ScheduledController,
     env: Env,
     ctx: ExecutionContext
   ): Promise<void> {
-    ctx.waitUntil(runScheduledDiscovery(env));
+    if (env.FREELANCE_JOBS) {
+      ctx.waitUntil(runScheduledQueueMaintenance(env));
+    } else {
+      ctx.waitUntil(runScheduledDiscovery(env));
+    }
     ctx.waitUntil(runScheduledReplySync(env));
+    ctx.waitUntil(runScheduledTokenMaintenance(env));
+  },
+
+  // Queue consumer for freelance-income-ai-jobs (replaces the separate
+  // health-check-only consumer Worker; see DEPLOYMENT_RUNBOOK.md).
+  async queue(
+    batch: QueueBatch,
+    env: Env
+  ): Promise<void> {
+    await processQueueBatch(batch, env);
   },
 
   async fetch(
@@ -482,6 +533,12 @@ export default {
         response = internalError(requestId);
       }
     }
+
+    response = await applySessionCookies(
+      request,
+      response,
+      env
+    );
 
     response = applyCors(
       request,
