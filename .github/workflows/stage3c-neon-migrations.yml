@@ -29,7 +29,7 @@ jobs:
       EXPECTED_DATABASE: neondb
       EXPECTED_SCHEMA: public
       EXPECTED_NEON_HOST: ${{ vars.STAGE3C_EXPECTED_NEON_HOST }}
-      EXPECTED_ALEMBIC_REVISION: "0049_feature_flags_ai_cost"
+      EXPECTED_ALEMBIC_REVISION: "0050_identity_roles_orgs"
 
     steps:
       - name: Require explicit migration confirmation
@@ -388,7 +388,7 @@ jobs:
           echo "- Target: Neon test database" >> "$GITHUB_STEP_SUMMARY"
           echo "- Database: neondb" >> "$GITHUB_STEP_SUMMARY"
           echo "- Schema: public" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Expected Alembic revision: 0049_feature_flags_ai_cost" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Expected Alembic revision: 0050_identity_roles_orgs" >> "$GITHUB_STEP_SUMMARY"
           echo "- Final database identity verified" >> "$GITHUB_STEP_SUMMARY"
           echo "- pgvector extension verified" >> "$GITHUB_STEP_SUMMARY"
           echo "- Production database was not configured as the migration target" >> "$GITHUB_STEP_SUMMARY"
