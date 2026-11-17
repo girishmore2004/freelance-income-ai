@@ -1,5 +1,14 @@
 # Test Status
 
+## Phase 3 batch 2 — 2026-11-17 IST (release 5.52.0)
+- Edge API (real `postgres` 3.4.9 + `bcryptjs`): **199 passed, 0 failed** (new `delivery.test.ts` 9: milestone state derivation, https-only links, party-only workspace, freelancer-only delivery, one open delivery per milestone, revision limit and required reason, owner/admin review, completion only when all milestones approved, message screening/closing; `hiring.test.ts` now also checks the activity-log insert). Typecheck clean; bundle 447 KB.
+- PostgreSQL 16 with the 0054 DDL, real handlers end to end: offer → message during negotiation → delivery refused before activation → accept → stranger 404 → contact-detail message 422 → client cannot deliver → http link 422 → deliver → second delivery 409 → missing milestone 404 → revision without reason 422 → revision → redeliver → revision over the 1 agreed round 409 → approve → nothing to review 409 → second milestone → approve → contract **completed**; workspace shows ₹15,000/₹15,000 approved and the full activity trail (offer.sent → terms.accepted → contract.activated → … → contract.completed); messages closed after completion.
+- Frontend: typecheck 0 errors (new workspace component, 5 e2e specs incl. a new deliver-and-approve journey); `npm run test:unit` 11/11.
+- Python: `tests/test_delivery_workspace_v554.py` (3 tests) compiled; runs in CI.
+
+## Phase 3 batch 1 — GitHub CI (verified)
+Edge API CI 190/190; `main` @ c404d6d: pytest 531 passed; Playwright 24 passed / 2 skipped (bearer), 25 passed / 1 skipped (cookie). Green on the first push.
+
 ## Phase 3 batch 1 — 2026-11-17 IST (release 5.51.0)
 - Edge API (real `postgres` 3.4.9 + `bcryptjs`): **190 passed, 0 failed** (new `hiring.test.ts` 17: proposal and terms validation, server-computed totals, screening, party actions, route isolation from the existing `/proposals` routes, invite-only/member/closed checks, owner/admin rules, one-transaction offers, activation only on matching versions, stale/double acceptance, counter-proposals). Typecheck clean; bundle builds (432 KB).
 - PostgreSQL 16 with the 0053 DDL, real handlers end to end: proposals (role, validation, screening, duplicate, edit) → client list (outsider 404) → decline/shortlist → invalid offer 422 → offer v1 → duplicate offer 409 → other freelancer 404 → counter-offer v2 (total recomputed) → double accept 409 → stale accept 409 → client accepts v2 → active, proposal hired, listing hiring → withdraw refused → deleting a user with a contract is blocked by RESTRICT.

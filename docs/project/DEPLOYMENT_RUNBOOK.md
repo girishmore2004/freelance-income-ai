@@ -84,6 +84,11 @@ Set build variable `NEXT_PUBLIC_AUTH_MODE=cookie`, redeploy, sign in, and confir
 2. Deploy Edge (5.51.0), then the frontend. Same rule: migrate before the flag is on.
 3. Staging check (flag ON): freelancer → `/projects` → Show details → **Send a proposal** (price in ₹). Client → `/client/projects` → **Proposals** → **Make an offer** (edit milestones) → **Send offer**. Freelancer → `/contracts` → Open → **Accept version 1** → status Active; the listing shows Hiring. "Milestone funding is not available yet" is expected (payments are BLOCKED on D-1/D-2).
 
+## Phase 3 batch 2 (release 5.52.0): delivery workspace
+1. Neon backup branch → "Stage 3C Neon migrations" (expects `0054_delivery_workspace`).
+2. Deploy Edge (5.52.0), then the frontend.
+3. Staging check: on an active contract → `/contracts` → Open → Workspace. Freelancer: **Deliver work** (note + https links). Client: **Review delivery** → Approve or Request revision (reason required; limited to the agreed rounds). When every milestone is approved the contract shows Completed. Messages and the activity list appear for both sides.
+
 ## Rollback
 - Edge or frontend: Cloudflare → Worker → **Deployments** → previous version → **Rollback**. If you roll the Edge API back, re-attach the old consumer to the queue.
 - Database: see DATABASE_MIGRATION_STATUS.md (5.45 code runs on the 0049 schema).

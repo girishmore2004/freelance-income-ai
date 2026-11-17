@@ -1378,6 +1378,7 @@ class Contract(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
     activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class ContractVersion(Base):
@@ -1408,4 +1409,59 @@ class ContractVersion(Base):
     client_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     client_accepted_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     freelancer_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ContractMessage(Base):
+    """A message between the parties of a contract (migration 0054)."""
+    __tablename__ = "contract_messages"
+    __table_args__ = (
+        CheckConstraint("sender_party IN ('client', 'freelancer')", name="ck_contract_messages_party"),
+        Index("ix_contract_messages_contract", "contract_id", "created_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    contract_id: Mapped[str] = mapped_column(ForeignKey("contracts.id", ondelete="CASCADE"), nullable=False)
+    sender_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    sender_party: Mapped[str] = mapped_column(String(20), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
+
+class MilestoneSubmission(Base):
+    """A delivery for one contract milestone and its review (migration 0054)."""
+    __tablename__ = "milestone_submissions"
+    __table_args__ = (
+        CheckConstraint("status IN ('submitted', 'approved', 'revision_requested')", name="ck_milestone_submissions_status"),
+        CheckConstraint("milestone_index >= 0 AND milestone_index < 20", name="ck_milestone_submissions_index"),
+        Index("ix_milestone_submissions_contract", "contract_id", "milestone_index", "submitted_at"),
+        Index("uq_milestone_open_submission", "contract_id", "milestone_index", unique=True,
+              postgresql_where=sql_text("status = 'submitted'"), sqlite_where=sql_text("status = 'submitted'")),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    contract_id: Mapped[str] = mapped_column(ForeignKey("contracts.id", ondelete="CASCADE"), nullable=False)
+    milestone_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    contract_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="submitted", server_default="submitted")
+    note: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    links_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
+    submitted_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    reviewed_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    review_note: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+
+
+class ContractEvent(Base):
+    """Append-only contract activity log (migration 0054)."""
+    __tablename__ = "contract_events"
+    __table_args__ = (
+        CheckConstraint("actor_party IN ('client', 'freelancer', 'system')", name="ck_contract_events_party"),
+        Index("ix_contract_events_contract", "contract_id", "created_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    contract_id: Mapped[str] = mapped_column(ForeignKey("contracts.id", ondelete="CASCADE"), nullable=False)
+    actor_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    actor_party: Mapped[str] = mapped_column(String(20), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(60), nullable=False)
+    details_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}", server_default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
 

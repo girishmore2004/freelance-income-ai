@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ApiError, api, useSessionToken } from '@/lib/api-client';
 import { CONTRACT_LABELS, formatMinor } from '@/lib/listing-format';
 import { TermsForm, type Terms } from './terms-form';
+import { ContractWorkspace } from './workspace';
 
 /**
  * Contracts for both parties (Phase 3). An offer becomes active only when the
@@ -129,6 +130,7 @@ export default function ContractsPage() {
               {t.ownership_terms && <p className="muted">Ownership: {t.ownership_terms}</p>}
               <p className="muted">Client accepted: {when(t.client_accepted_at)} · Freelancer accepted: {when(t.freelancer_accepted_at)}</p>
               {detail.status === 'active' && <p className="success">Both parties accepted version {t.version}.</p>}
+              {detail.status === 'completed' && <p className="success">All milestones approved. This contract is completed.</p>}
               <p className="muted">{detail.funding.message}</p>
 
               <div className="row">
@@ -154,6 +156,17 @@ export default function ContractsPage() {
                     setNotice(result.message ?? 'New terms proposed');
                     setChanging(false);
                     await load();
+                  }}
+                />
+              )}
+
+              {['offered', 'active', 'completed'].includes(detail.status) && (
+                <ContractWorkspace
+                  key={`${detail.id}-${detail.status}`}
+                  contractId={detail.id}
+                  onChanged={() => {
+                    void load();
+                    api<Detail>(`/api/v1/contracts/${detail.id}`).then((d) => { if (d.status !== detail.status) setDetail(d); }).catch(() => undefined);
                   }}
                 />
               )}

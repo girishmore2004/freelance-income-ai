@@ -129,3 +129,44 @@ test('freelancer accepts the offer and the contract becomes active', async ({ pa
   await expect.poll(() => captured.find((c) => c.path === '/api/v1/contracts/K1/accept')?.body).toEqual({ version: 1 });
   await expect(page.getByRole('button', { name: 'Accept version 1' })).toHaveCount(0);
 });
+
+test('freelancer delivers a milestone and the client approves it in the workspace', async ({ page }) => {
+  const captured: Captured[] = [];
+  let state = 'pending';
+  let party: 'freelancer' | 'client' = 'freelancer';
+  await signIn(page);
+  const active = { ...VERSION, freelancer_accepted_at: '2026-11-17T01:00:00Z' };
+  const workspace = () => ({
+    contract_id: 'K1', status: 'active', party, can_manage: true, revision_rounds: 2, currency: 'INR',
+    milestones: [{ index: 0, title: 'Complete project', amount_minor: 3_000_000, due_date: null, state, revisions_used: 0,
+      submissions: state === 'pending' ? [] : [{ id: 's1', status: state, note: 'Site is live on staging', links: ['https://staging.example.com/'], submitted_at: '2026-11-18T00:00:00Z', reviewed_at: null, review_note: '' }] }],
+    approved_minor: state === 'approved' ? 3_000_000 : 0, total_minor: 3_000_000, messages: [], activity: [],
+    funding_note: 'Approval records that the work is accepted. No payment is released: payments are not enabled yet.',
+  });
+  await mock(page, captured, (path, method, body) => {
+    if (path === '/api/v1/me') return ok({ id: party === 'freelancer' ? 'f1' : 'c1', roles: [party] });
+    if (path === '/api/v1/contracts') return ok([{ id: 'K1', status: 'active', party, client_name: 'Acme Studio', current_version: 1, activated_at: '2026-11-17T01:00:00Z', terms: active }]);
+    if (path === '/api/v1/contracts/K1') return ok({ id: 'K1', status: 'active', party, client_name: 'Acme Studio', project_title: 'Bakery ordering website', current_version: 1, activated_at: '2026-11-17T01:00:00Z', terms: active, versions: [active], allowed_actions: [], funding: { available: false, message: 'Milestone funding is not available yet.' } });
+    if (path === '/api/v1/contracts/K1/workspace') return ok(workspace(), 'Workspace');
+    if (path === '/api/v1/contracts/K1/milestones/0/submit' && method === 'POST') { state = 'submitted'; return ok({ milestone: 0, state }, 'Delivered. The client will review it.'); }
+    if (path === '/api/v1/contracts/K1/milestones/0/review' && method === 'POST') { state = (body?.decision === 'approve') ? 'approved' : 'revision_requested'; return ok({ milestone: 0, state, contract_completed: false }, 'Milestone approved. No payment is released: payments are not enabled yet.'); }
+    return undefined;
+  });
+
+  await page.goto('/contracts');
+  await page.getByRole('button', { name: 'Open' }).click();
+  await page.getByRole('button', { name: 'Deliver work' }).click();
+  await page.getByLabel('What are you delivering?').fill('Site is live on staging');
+  await page.getByLabel(/Links/).fill('https://staging.example.com/');
+  await page.getByRole('button', { name: 'Deliver', exact: true }).click();
+  await expect(page.getByText('Delivered. The client will review it.')).toBeVisible();
+  await expect.poll(() => captured.find((c) => c.path === '/api/v1/contracts/K1/milestones/0/submit')?.body).toEqual({ note: 'Site is live on staging', links: ['https://staging.example.com/'] });
+
+  party = 'client';
+  await page.reload();
+  await page.getByRole('button', { name: 'Open' }).click();
+  await page.getByRole('button', { name: 'Review delivery' }).click();
+  await page.getByRole('button', { name: 'Approve milestone' }).click();
+  await expect(page.getByText(/Milestone approved/).first()).toBeVisible();
+  await expect.poll(() => captured.find((c) => c.path === '/api/v1/contracts/K1/milestones/0/review')?.body).toEqual({ decision: 'approve', note: '' });
+});

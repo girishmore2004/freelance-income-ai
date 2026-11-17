@@ -23,6 +23,8 @@
 | K-21 | Low | Matching ranks at most 500 opted-in freelancers per request (most recently opted-in first). Fine for launch; needs SQL pre-filtering by skill/category beyond that. | Add a skills index or pgvector retrieval when visible freelancers exceed ~400. |
 | K-23 | Medium | Contract rows block deleting the user or organisation (RESTRICT) by design. There is no account-deletion flow on Edge yet; when one is built it must anonymise contract parties instead of deleting. | Phase 7 account deletion. |
 | K-24 | Low | After a freelancer has proposed on an invitation, the invitation still shows "Send a proposal"; a second attempt is refused with "Edit it instead". | Hide once `/me/proposals` is cross-checked (Phase 3 batch 2 UI pass). |
+| K-25 | Low | Contract messages block phone numbers/emails even after hiring (same rule as listings). Parties may legitimately need a call; meetings are not built. | Revisit with founder policy (D-16 proposed); add scheduled calls later. |
+| K-26 | Info | Deliveries are notes + https links only; file uploads (R2, size limits, malware scanning) are not built. | Phase 3 follow-up with R2 (K-19). |
 | K-22 | Info | Invitations are in-app only (no email yet); freelancers see them on `/projects`. | Notifications in Phase 3 with Resend (D-15). |
 | K-20 | Low | Listing screen is keyword-based (e.g. it can miss obfuscated contact details and may flag legitimate mentions of "WhatsApp integration"). Flags only hold for review; they never reject. | Tune from moderation outcomes; P1 agent later. |
 | K-10 | Info | `password-service.test.ts` could not run offline (needs `bcryptjs`). | CI covers it. |
