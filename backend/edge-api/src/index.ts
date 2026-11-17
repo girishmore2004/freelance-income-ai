@@ -14,6 +14,7 @@ import { handlePlanRoute } from "./lib/plan-routes";
 import { handleAgentRoute } from "./lib/agents";
 import { handleAssistantRoute } from "./lib/assistant-routes";
 import { handleTrustRoute } from "./lib/trust-routes";
+import { handlePublicRoute } from "./lib/public-routes";
 import { enforceRateLimit } from "./lib/rate-limit";
 import { applySessionCookies } from "./lib/auth-context";
 import { handleMfaLoginRoute } from "./lib/mfa-login-route";
@@ -397,6 +398,16 @@ async function routeRequest(
   // Core product routes: profile, dashboard, opportunities,
   // proposals, approvals
   // --------------------------------------------------
+
+  const publicResponse = await handlePublicRoute(
+    request,
+    env,
+    requestId
+  );
+
+  if (publicResponse) {
+    return publicResponse;
+  }
 
   const trustResponse = await handleTrustRoute(
     request,
