@@ -13,7 +13,7 @@
   },
   "vars": {
     "APP_NAME": "Freelance Income AI",
-    "APP_VERSION": "5.45.1",
+    "APP_VERSION": "5.46.0",
     "APP_ENV": "staging",
     "CORS_ORIGINS": "https://freelance-income-ai.girishmore097.workers.dev",
     "PUBLIC_REGISTRATION": "false",
@@ -39,6 +39,19 @@
       {
         "binding": "FREELANCE_JOBS",
         "queue": "freelance-income-ai-jobs"
+      }
+    ],
+    // This Worker is the consumer. Remove the consumer from the old
+    // "freelance-income-ai-consumer" Worker BEFORE deploying (a queue can
+    // have only one consumer). Retry/DLQ settings match the old consumer.
+    "consumers": [
+      {
+        "queue": "freelance-income-ai-jobs",
+        "max_batch_size": 5,
+        "max_batch_timeout": 5,
+        "max_retries": 5,
+        "retry_delay": 30,
+        "dead_letter_queue": "freelance-income-ai-jobs-dlq"
       }
     ]
   }
