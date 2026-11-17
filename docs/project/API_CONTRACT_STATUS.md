@@ -35,6 +35,9 @@ Do not change `NEXT_PUBLIC_API_URL`/proxy targets per page until its families ar
 | Delivery governance, analytics, finance intelligence, CRM | Python only | Not ported |
 | Listings, matches, invitations, offers, contracts (two-party), payments, payouts, reviews, disputes, admin | — | Not built (Phases 2–7) |
 
+## Phase 1 endpoints (Edge 5.48.0)
+`GET /me/identity`, `POST /me/roles {role}`, `DELETE /me/roles/{role}`, `GET|POST /organizations`, `GET|PATCH /organizations/{id}`, `GET /organizations/{id}/members`. `GET /me` now also returns `roles`. `POST /auth/register` accepts optional `intent: "freelancer" | "client"`. Errors: `FEATURE_DISABLED` (403, client side off), `CLIENT_ROLE_REQUIRED`, `ROLE_NOT_ALLOWED`, `ROLE_SUSPENDED`, `LAST_PUBLIC_ROLE`, `INVALID_ORGANIZATION` (422, `error.details[0]` = field → message), `ORGANIZATION_LIMIT`, `RATE_LIMITED` (429 + `Retry-After`). Non-members always get 404.
+
 ## New Edge endpoints this batch
 `POST /auth/verify-email`, `POST /auth/resend-verification`, `POST /auth/password-reset/request`, `POST /auth/password-reset/confirm`, `POST /auth/password/change`, `GET /auth/sessions`, `DELETE /auth/sessions/{id}`, `GET /auth/mfa/status`, `POST /auth/mfa/setup|enable|disable|recovery-codes/rotate`, `POST /discovery/refresh`, `GET /background-jobs`. Request fields, limits, status codes and messages follow `backend/app/main.py`.
 
