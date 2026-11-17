@@ -1,0 +1,43 @@
+name: Edge API CI
+
+# Typecheck, unit tests and a deploy dry-run for the Cloudflare Edge API.
+# Uses a plain `npm install` (no --legacy-peer-deps) so a peer-dependency
+# conflict fails the build instead of being hidden (Progress Report finding 6).
+
+on:
+  push:
+    paths:
+      - "backend/edge-api/**"
+      - ".github/workflows/edge-api-ci.yml"
+  pull_request:
+    paths:
+      - "backend/edge-api/**"
+      - ".github/workflows/edge-api-ci.yml"
+  workflow_dispatch:
+
+jobs:
+  edge-api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend/edge-api
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Clean install (no legacy peer resolution)
+        run: npm install --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Wrangler deploy dry-run (bundles the Worker without deploying)
+        run: npm run build:check
