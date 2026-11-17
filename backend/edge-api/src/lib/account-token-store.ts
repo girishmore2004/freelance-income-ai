@@ -20,6 +20,8 @@ export interface IssuedAccountActionToken {
 }
 
 type Sql = ReturnType<typeof postgres>;
+// A connection or a transaction handle; see Queryable in core-routes.ts.
+type Queryable = postgres.Sql | postgres.TransactionSql;
 
 const TOKEN_BYTES = 48;
 const TOKEN_MIN_LENGTH = 32;
@@ -127,7 +129,7 @@ function createDatabaseClient(env: Env): Sql {
  * - Old token records are cleaned up
  */
 export async function issueAccountActionTokenWith(
-  sql: Sql,
+  sql: Queryable,
   userId: string,
   purpose: AccountActionPurpose,
   lifetimeMinutes?: number
@@ -192,7 +194,7 @@ export async function issueAccountActionTokenWith(
  * Expired, used, unknown, malformed and wrong-purpose tokens all return null.
  */
 export async function consumeAccountActionTokenWith(
-  sql: Sql,
+  sql: Queryable,
   rawToken: string,
   purpose: AccountActionPurpose
 ): Promise<AccountActionToken | null> {
@@ -219,7 +221,7 @@ export async function consumeAccountActionTokenWith(
 
 /** Seconds since the most recent token of this purpose was issued, or null if none. */
 export async function secondsSinceLastToken(
-  sql: Sql,
+  sql: Queryable,
   userId: string,
   purpose: AccountActionPurpose
 ): Promise<number | null> {
