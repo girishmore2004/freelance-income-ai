@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import String, Text, DateTime, Float, Integer, ForeignKey, Boolean, UniqueConstraint
+from sqlalchemy import String, Text, DateTime, Float, Integer, ForeignKey, Boolean, UniqueConstraint, Index, func, text as sql_text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import JSON
 from pgvector.sqlalchemy import Vector
@@ -469,6 +469,13 @@ class BackgroundJob(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Added in migration 0048 for Cloudflare Queue jobs processed by the Edge API.
+    # A non-null idempotency_key makes enqueueing the same logical job a no-op.
+    idempotency_key: Mapped[str | None] = mapped_column(String(200), nullable=True, unique=True)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}", server_default="{}")
+    source: Mapped[str] = mapped_column(String(30), nullable=False, default="python", server_default="python")
+    dead_lettered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 class PortfolioChunk(Base):
     __tablename__ = "portfolio_chunks"
@@ -986,6 +993,11 @@ class AIUsageEvent(Base):
     input_chars: Mapped[int] = mapped_column(Integer, default=0)
     output_chars: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, index=True)
+    # Migration 0049: estimated provider cost in micro-USD (1e-6 USD) and the
+    # service that made the call, for global spend caps and cost reporting.
+    # Estimates only; provider invoices remain the accounting source of truth.
+    estimated_cost_micros: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    service: Mapped[str] = mapped_column(String(20), nullable=False, default="python", server_default="python")
 
 class AbuseEvent(Base):
     __tablename__ = "abuse_events"
@@ -1021,3 +1033,103 @@ class SchedulePlanVersion(Base):
     decision_reason: Mapped[str] = mapped_column(String(500), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+# ---------------------------------------------------------------------------
+# Edge API owned tables (release 5.46.0, migration 0047).
+#
+# These tables were used by the Cloudflare Edge API (apply/reply agent and
+# Gmail integration) but were never captured in models or migrations. Column
+# names, defaults and constraints match the SQL issued by
+# backend/edge-api/src/lib/apply-routes.ts and apply-agent.ts. The Python
+# service does not read or write them; the Edge API is the owning service.
+# ---------------------------------------------------------------------------
+
+
+class EdgeIntegration(Base):
+    """Per-user OAuth integration used by the Edge apply agent (Gmail).
+
+    Tokens are stored encrypted by the Edge API (AES-GCM, OAUTH_ENCRYPTION_KEY).
+    The Edge INSERT omits ``id``; on PostgreSQL migration 0047 sets
+    ``DEFAULT gen_random_uuid()::text`` so the database generates it.
+    """
+    __tablename__ = "integrations"
+    __table_args__ = (UniqueConstraint("user_id", "provider", name="uq_integrations_user_provider"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)  # PostgreSQL server default set by migration 0047
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    provider: Mapped[str] = mapped_column(String(40), nullable=False)
+    email: Mapped[str] = mapped_column(String(320), nullable=False, default="", server_default="")
+    refresh_token: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    access_token: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now, server_default=func.now(), nullable=False)
+
+
+class EdgeApplication(Base):
+    """An approved proposal sent by the Edge apply agent (email/Freelancer.com)."""
+    __tablename__ = "applications"
+    __table_args__ = (
+        Index("ix_applications_user_created", "user_id", "created_at"),
+        Index("ix_applications_status_created", "status", "created_at"),
+        # One live send per proposal: makes the W2 "send proposal" action idempotent
+        # even under concurrent requests (the route also checks before inserting).
+        Index(
+            "uq_applications_live_proposal",
+            "proposal_id",
+            unique=True,
+            postgresql_where=sql_text("status IN ('sending', 'sent', 'replied')"),
+            sqlite_where=sql_text("status IN ('sending', 'sent', 'replied')"),
+        ),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    opportunity_id: Mapped[str] = mapped_column(ForeignKey("opportunities.id", ondelete="CASCADE"), index=True, nullable=False)
+    proposal_id: Mapped[str | None] = mapped_column(ForeignKey("proposals.id", ondelete="SET NULL"), nullable=True)
+    channel: Mapped[str] = mapped_column(String(30), nullable=False, default="manual", server_default="manual")
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="sent", server_default="sent")
+    recipient: Mapped[str] = mapped_column(String(320), nullable=False, default="", server_default="")
+    external_ref: Mapped[str] = mapped_column(String(255), nullable=False, default="", server_default="")
+    thread_id: Mapped[str] = mapped_column(String(255), nullable=False, default="", server_default="")
+    extra: Mapped[str] = mapped_column(Text, nullable=False, default="{}", server_default="{}")
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
+
+class EdgeApplicationMessage(Base):
+    """Inbound client reply or outbound user reply on an Edge application thread."""
+    __tablename__ = "application_messages"
+    __table_args__ = (
+        UniqueConstraint("user_id", "external_id", name="uq_application_messages_user_external"),
+        Index("ix_application_messages_app_received", "application_id", "received_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    application_id: Mapped[str] = mapped_column(ForeignKey("applications.id", ondelete="CASCADE"), nullable=False)
+    direction: Mapped[str] = mapped_column(String(8), nullable=False)
+    sender: Mapped[str] = mapped_column(String(300), nullable=False, default="", server_default="")
+    subject: Mapped[str] = mapped_column(String(300), nullable=False, default="", server_default="")
+    body: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    external_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    message_ref: Mapped[str] = mapped_column(String(500), nullable=False, default="", server_default="")
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    ai_label: Mapped[str] = mapped_column(String(40), nullable=False, default="", server_default="")
+    ai_summary: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    ai_suggestion: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
+
+class FeatureFlag(Base):
+    """Server-side feature flag / kill switch (migration 0049).
+
+    Read by the Edge API on each request that needs it. An environment
+    variable FEATURE_FLAGS_OFF can force any flag off without a database write.
+    """
+    __tablename__ = "feature_flags"
+    key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    description: Mapped[str] = mapped_column(String(300), nullable=False, default="", server_default="")
+    owner: Mapped[str] = mapped_column(String(80), nullable=False, default="", server_default="")
+    updated_by: Mapped[str] = mapped_column(String(80), nullable=False, default="", server_default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now, server_default=func.now(), nullable=False)
