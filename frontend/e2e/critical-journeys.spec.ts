@@ -203,6 +203,11 @@ for (const path of protectedPages) {
 test('successful login stores a session and opens the authenticated workspace shell', async ({
   page,
 }) => {
+  test.skip(
+    process.env.E2E_AUTH_MODE === 'cookie',
+    'Bearer-mode journey; cookie-session.spec.ts covers cookie mode.',
+  );
+
   const pageErrors: string[] = [];
 
   page.on('pageerror', (error) => {
