@@ -118,6 +118,9 @@ test('freelancer accepts the offer and the contract becomes active', async ({ pa
     if (path === '/api/v1/contracts') return ok([{ id: 'K1', status, party: 'freelancer', client_name: 'Acme Studio', current_version: 1, activated_at: null, terms: VERSION }]);
     if (path === '/api/v1/contracts/K1') return ok(detail(), 'Contract');
     if (path === '/api/v1/contracts/K1/accept') { status = 'active'; return ok(detail(), 'Both parties accepted. The contract is active.'); }
+    if (path === '/api/v1/contracts/K1/workspace') {
+      return ok({ contract_id: 'K1', status, party: 'freelancer', can_manage: true, revision_rounds: 2, currency: 'INR', milestones: [], approved_minor: 0, total_minor: 3_000_000, messages: [], activity: [], funding_note: '' }, 'Workspace');
+    }
     return undefined;
   });
   await page.goto('/contracts');

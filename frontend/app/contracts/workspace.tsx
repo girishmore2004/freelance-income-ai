@@ -44,7 +44,10 @@ export function ContractWorkspace({ contractId, onChanged }: { contractId: strin
 
   const load = useCallback(async () => {
     try {
-      setWs(await api<Workspace>(`/api/v1/contracts/${contractId}/workspace`));
+      const data = await api<Workspace>(`/api/v1/contracts/${contractId}/workspace`);
+      // Never render a malformed reply (it would take the whole contracts page down).
+      if (data && Array.isArray(data.milestones) && Array.isArray(data.messages) && Array.isArray(data.activity)) setWs(data);
+      else setError('Could not load the workspace. Please refresh.');
     } catch (e) {
       setError(messageOf(e));
     }
