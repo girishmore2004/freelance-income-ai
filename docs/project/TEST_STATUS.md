@@ -1,6 +1,13 @@
 # Test Status
 
+## Phase 3 batch 1 — 2026-11-17 IST (release 5.51.0)
+- Edge API (real `postgres` 3.4.9 + `bcryptjs`): **190 passed, 0 failed** (new `hiring.test.ts` 17: proposal and terms validation, server-computed totals, screening, party actions, route isolation from the existing `/proposals` routes, invite-only/member/closed checks, owner/admin rules, one-transaction offers, activation only on matching versions, stale/double acceptance, counter-proposals). Typecheck clean; bundle builds (432 KB).
+- PostgreSQL 16 with the 0053 DDL, real handlers end to end: proposals (role, validation, screening, duplicate, edit) → client list (outsider 404) → decline/shortlist → invalid offer 422 → offer v1 → duplicate offer 409 → other freelancer 404 → counter-offer v2 (total recomputed) → double accept 409 → stale accept 409 → client accepts v2 → active, proposal hired, listing hiring → withdraw refused → deleting a user with a contract is blocked by RESTRICT.
+- Frontend: typecheck 0 errors (incl. new `/contracts` page, terms form, proposal and offer panels, 5 e2e specs); `npm run test:unit` 11/11 (new exact-amount formatter test). Playwright runs in CI (new `e2e/hiring.spec.ts`, 3 journeys; `/contracts` added to the sign-in guard checks).
+- Python: `tests/test_proposals_contracts_v553.py` (4 tests) compiled; runs in CI.
+
 ## Phase 2 batch 2 — 2026-11-17 IST (release 5.50.0)
+- **GitHub CI (verified):** Edge API CI 173/173 (vitest, 14 files); Backend tests + Full CI on `main` @ 9bbacbe: pytest 527 passed; Playwright 20 passed / 2 skipped (bearer) and 21 passed / 1 skipped (cookie). First push failed on two real defects, both fixed: revision id longer than `alembic_version`'s 32 characters, and the opt-in checkbox only changing after the API reply.
 - Edge API (real `postgres` 3.4.9 + `bcryptjs`): **173 passed, 0 failed** (new `matching.test.ts` 22; `listings.test.ts` now 25 with closing-date tests). Typecheck clean (TS-6-only `mfa-service.ts` messages excluded, as before). Worker bundle builds (402 KB).
 - PostgreSQL 16 with the 0052 DDL: the **real route handlers** were run end to end with the real driver: create invite-only listing with closing date → publish → matches (hidden freelancer excluded, newcomer flagged) → invite-only listing hidden before invitation, visible to the invitee only → duplicate invite 409 → hidden freelancer 404 → other user's invitation 404 → accept → second answer 409 → withdraw → re-invite → saved-freelancer upsert → outsider 404 → opt-in/out → closing-date-only edit keeps version 1 → expiry marks the listing expired. `= ANY(text[])` parameter verified.
 - Frontend: typecheck 0 errors (pages, components, all 4 e2e specs incl. 2 new Playwright tests); `npm run test:unit` 10/10. Playwright runs in CI.

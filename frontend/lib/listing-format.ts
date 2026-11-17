@@ -35,3 +35,31 @@ export const STATUS_LABELS: Record<string, string> = {
   cancelled: 'Cancelled',
   expired: 'Expired',
 };
+
+/** Exact amount from minor units, keeping paise when present (₹12,500 or ₹12,500.50). */
+export function formatMinor(value: number, currency: string): string {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: value % 100 === 0 ? 0 : 2,
+    maximumFractionDigits: 2,
+  }).format(value / 100);
+}
+
+export const PROPOSAL_LABELS: Record<string, string> = {
+  submitted: 'Submitted',
+  shortlisted: 'Shortlisted',
+  declined: 'Declined',
+  withdrawn: 'Withdrawn',
+  offered: 'Offer received',
+  hired: 'Hired',
+};
+
+export const CONTRACT_LABELS: Record<string, string> = {
+  offered: 'Offer open',
+  active: 'Active',
+  declined: 'Declined',
+  withdrawn: 'Withdrawn',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+};

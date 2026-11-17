@@ -79,6 +79,11 @@ Set build variable `NEXT_PUBLIC_AUTH_MODE=cookie`, redeploy, sign in, and confir
 3. Staging check (flag ON): as a freelancer open `/projects` → tick "Show my profile to clients". As a client open `/client/projects` → a published listing → **Find freelancers** → the freelancer appears with a score and reasons → **Invite to propose**. Back as the freelancer, the invitation appears on `/projects` → Accept.
 4. Listings with a closing date are marked `expired` by the 6-hourly cron (log event `listings.expired`).
 
+## Phase 3 batch 1 (release 5.51.0): proposals, offers, contracts
+1. Neon backup branch → "Stage 3C Neon migrations" (expects `0053_proposals_contracts`). Check: `SELECT count(*) FROM contracts;` returns 0.
+2. Deploy Edge (5.51.0), then the frontend. Same rule: migrate before the flag is on.
+3. Staging check (flag ON): freelancer → `/projects` → Show details → **Send a proposal** (price in ₹). Client → `/client/projects` → **Proposals** → **Make an offer** (edit milestones) → **Send offer**. Freelancer → `/contracts` → Open → **Accept version 1** → status Active; the listing shows Hiring. "Milestone funding is not available yet" is expected (payments are BLOCKED on D-1/D-2).
+
 ## Rollback
 - Edge or frontend: Cloudflare → Worker → **Deployments** → previous version → **Rollback**. If you roll the Edge API back, re-attach the old consumer to the queue.
 - Database: see DATABASE_MIGRATION_STATUS.md (5.45 code runs on the 0049 schema).

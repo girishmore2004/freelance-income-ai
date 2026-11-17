@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ApiError, api, useSessionToken } from '@/lib/api-client';
 import { STATUS_LABELS, formatBudget, linesToList, minorToRupees, rupeesToMinor } from '@/lib/listing-format';
 import { MatchPanel, SavedFreelancers } from './match-panel';
+import { ProposalsPanel } from './proposals-panel';
 
 /**
  * Client project posting (Phase 2). The client describes the work, can ask the
@@ -97,6 +98,7 @@ export default function ClientProjectsPage() {
   const [notes, setNotes] = useState('');
   const [assist, setAssist] = useState<Assist | null>(null);
   const [matchesFor, setMatchesFor] = useState<string | null>(null);
+  const [proposalsFor, setProposalsFor] = useState<string | null>(null);
 
   const loadListings = useCallback(async (organizationId: string) => {
     if (!organizationId) return;
@@ -249,7 +251,7 @@ export default function ClientProjectsPage() {
     <main className="shell">
       <div className="row between">
         <h2>Client projects</h2>
-        <a className="link" href="/account">← Account &amp; roles</a>
+        <span className="row"><a className="link" href="/contracts">Contracts</a><a className="link" href="/account">← Account &amp; roles</a></span>
       </div>
       <div aria-live="polite">
         {notice && <p className="success">{notice}</p>}
@@ -360,7 +362,13 @@ export default function ClientProjectsPage() {
                       {matchesFor === l.id ? 'Hide suggestions' : 'Find freelancers'}
                     </button>
                   )}
+                  {['published', 'hiring', 'paused', 'closed', 'expired'].includes(l.status) && (
+                    <button className="btn" aria-expanded={proposalsFor === l.id} onClick={() => setProposalsFor(proposalsFor === l.id ? null : l.id)}>
+                      {proposalsFor === l.id ? 'Hide proposals' : 'Proposals'}
+                    </button>
+                  )}
                 </div>
+                {proposalsFor === l.id && <ProposalsPanel listingId={l.id} brief={l.brief} canManage={canManage && ['published', 'hiring', 'paused'].includes(l.status)} />}
                 {matchesFor === l.id && (
                   <MatchPanel listingId={l.id} organizationId={orgId} canInvite={canManage}
                     invitable={['published', 'hiring'].includes(l.status) && l.visibility !== 'private'} />

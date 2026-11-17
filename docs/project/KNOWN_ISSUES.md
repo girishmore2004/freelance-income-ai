@@ -21,6 +21,8 @@
 | K-18 | Medium | No moderation queue UI yet: listings held `in_review` by the screen must be approved or returned with SQL (runbook). | Admin moderation queue (Phase 7). |
 | K-19 | Low | Listing attachments (R2) are not built. Invitations and closing dates shipped in 5.50.0. | Phase 3 with the delivery workspace. |
 | K-21 | Low | Matching ranks at most 500 opted-in freelancers per request (most recently opted-in first). Fine for launch; needs SQL pre-filtering by skill/category beyond that. | Add a skills index or pgvector retrieval when visible freelancers exceed ~400. |
+| K-23 | Medium | Contract rows block deleting the user or organisation (RESTRICT) by design. There is no account-deletion flow on Edge yet; when one is built it must anonymise contract parties instead of deleting. | Phase 7 account deletion. |
+| K-24 | Low | After a freelancer has proposed on an invitation, the invitation still shows "Send a proposal"; a second attempt is refused with "Edit it instead". | Hide once `/me/proposals` is cross-checked (Phase 3 batch 2 UI pass). |
 | K-22 | Info | Invitations are in-app only (no email yet); freelancers see them on `/projects`. | Notifications in Phase 3 with Resend (D-15). |
 | K-20 | Low | Listing screen is keyword-based (e.g. it can miss obfuscated contact details and may flag legitimate mentions of "WhatsApp integration"). Flags only hold for review; they never reject. | Tune from moderation outcomes; P1 agent later. |
 | K-10 | Info | `password-service.test.ts` could not run offline (needs `bcryptjs`). | CI covers it. |

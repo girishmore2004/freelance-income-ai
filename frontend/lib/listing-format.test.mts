@@ -1,7 +1,7 @@
 /** Money conversion for listing forms (rupees in the UI, paise in the API). Run: npm run test:unit */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatBudget, linesToList, minorToRupees, rupeesToMinor } from './listing-format.ts';
+import { formatBudget, formatMinor, linesToList, minorToRupees, rupeesToMinor } from './listing-format.ts';
 
 test('rupees convert to integer paise without floating-point drift', () => {
   assert.equal(rupeesToMinor('25000'), 2_500_000);
@@ -28,4 +28,10 @@ test('budget ranges render in INR', () => {
 
 test('multi-line fields become clean lists', () => {
   assert.deepEqual(linesToList(' Home page \n\n About page\n'), ['Home page', 'About page']);
+});
+
+test('exact amounts keep paise only when present', () => {
+  assert.equal(formatMinor(1_250_000, 'INR'), '₹12,500');
+  assert.equal(formatMinor(1_250_050, 'INR'), '₹12,500.50');
+  assert.equal(formatMinor(32_000_000, 'INR'), '₹3,20,000');
 });

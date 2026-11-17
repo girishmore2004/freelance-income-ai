@@ -1,6 +1,6 @@
 # Implementation Ledger
 
-Last verified checkpoint: **2026-11-17, Phase 2 batch 2** (release 5.50.0, local tests; CI result recorded in TEST_STATUS.md).
+Last verified checkpoint: **2026-11-17, Phase 3 batch 1** (release 5.51.0, local tests; CI result recorded in TEST_STATUS.md).
 
 **Deployment state 2026-11-17 18:34 IST (build #8f8b52e3, branch `cloudflare-edge-api-phase1` @ 4b683a1):** Workers Build ran `npm run check` — vitest 84/84 passed, typecheck passed. `wrangler deploy` uploaded the Worker (fetch + 6-hourly cron are live, v5.46.0) but **queue consumer registration failed** (code 11004: queue already has a consumer, the old `freelance-income-ai-consumer`). Neon migrations 0047–0049: not yet confirmed as run.
 Status values: DONE (implemented + tested here) · PARTIAL · BLOCKED · NOT STARTED.
@@ -43,8 +43,12 @@ Status values: DONE (implemented + tested here) · PARTIAL · BLOCKED · NOT STA
 | 2.9 | Saved freelancers per organisation (200 max, note) | DONE (code) | edge + fia | same | unit + PostgreSQL (upsert, non-member 404) | Not deployed | — |
 | 2.10 | Listing closing date (`closes_at`, ≤180 days) + 6-hourly expiry | DONE (code) | edge + fia | `lib/listings.ts`, `lib/listing-routes.ts`, `lib/match-routes.ts`, `src/index.ts`, client page | unit + PostgreSQL (expired 1 listing) | Not deployed | — |
 | 2 | Remaining Phase 2: listing attachments (R2) | NOT STARTED | — | — | — | — | With Phase 3 delivery files |
+| 3.1 | Proposals on native listings: freelancer-set price (minor units), cover letter screened for contact/payment, one per listing, edit/withdraw while open; invite-only only for invitees; client's own members cannot propose; closed/expired listings refuse | DONE (code) | fia + edge | `0053_proposals_contracts.py`, `models.py`, `lib/contracts.ts`, `lib/hiring-routes.ts`, `app/projects/proposal-form.tsx` | `hiring.test.ts` 17; full flow on PostgreSQL 16 | Not deployed | Run 0053 |
+| 3.2 | Client review: proposals per listing with freelancer card, shortlist/decline (owner/admin) | DONE (code) | edge + fia | `hiring-routes.ts`, `app/client/projects/proposals-panel.tsx` | unit + PostgreSQL | Not deployed | Messaging/interviews (Phase 3 batch 2) |
+| 3.3 | Offer → versioned two-party contract: terms (scope, deliverables, milestones with amounts and dates, revisions, acceptance, ownership); total computed server-side; content hash; client's offer = v1 accepted by client; either side proposes changes as a new version accepted by its proposer; active only when both accepted the same version; stale-version and double-accept refused; decline/withdraw; listing → hiring, proposal → hired; one open contract per proposal (DB partial unique index); contract rows RESTRICT deletion | DONE (code) | fia + edge | same + `app/contracts/page.tsx`, `app/contracts/terms-form.tsx` | `hiring.test.ts`; PostgreSQL run (counter-offer, stale accept, activation, deletion blocked); `e2e/hiring.spec.ts` (CI) | Not deployed | Change orders after activation; delivery workspace |
+| 3.4 | Milestone funding | BLOCKED | — | — | — | — | D-1/D-2 (legal entity, payment provider); contracts show "funding not available" |
 | 1 | Remaining Phase 1: OpenAPI contract, organisation invitations, consents (needs policy docs), verification references, staff/admin tooling | NOT STARTED | — | — | — | — | Consents BLOCKED on legal docs (D-1) |
 | 2–8 | Client marketplace, shared delivery, payments, business model, agents, trust, launch | NOT STARTED | — | — | — | — | Phase 1 first; payments BLOCKED on D-1/D-2 |
 
 ## Next exact step
-Phase 3 batch 1: proposals on native listings (freelancer → listing, with price in minor units set by the freelancer), client shortlist/decline, offer → versioned two-party agreement with acceptance by both sides. Payments stay disabled (D-1/D-2).
+Phase 3 batch 2: shared delivery workspace for active contracts — contract messages, milestone submission (deliverable notes + links; R2 files later), client review (approve / request revision within the agreed rounds), activity log, notifications in-app. Payments stay disabled (D-1/D-2).

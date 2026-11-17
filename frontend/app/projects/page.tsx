@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ApiError, api, useSessionToken } from '@/lib/api-client';
 import { formatBudget } from '@/lib/listing-format';
 import { Invitations, MarketplaceVisibility } from './invitations';
+import { MyProposals, ProposalForm } from './proposal-form';
 
 /**
  * Native client projects for freelancers (Phase 2). Shows only published,
@@ -30,6 +31,9 @@ export default function ProjectsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [closed, setClosed] = useState(false);
+  const [proposing, setProposing] = useState<string | null>(null);
+  const [notice, setNotice] = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const fetchPage = useCallback(async (before: string | null, append: boolean, cat: string, q: string) => {
     setLoading(true);
@@ -69,7 +73,7 @@ export default function ProjectsPage() {
     <main className="shell">
       <div className="row between">
         <h2>Projects posted by clients</h2>
-        <a className="link" href="/">← Back to workspace</a>
+        <span className="row"><a className="link" href="/contracts">Contracts</a><a className="link" href="/">← Back to workspace</a></span>
       </div>
 
       {closed ? (
@@ -77,7 +81,9 @@ export default function ProjectsPage() {
       ) : (
         <>
           <MarketplaceVisibility />
-          <Invitations />
+          {notice && <p className="success" role="status">{notice}</p>}
+          <Invitations onProposalSent={(message) => { setNotice(message); setRefreshKey((k) => k + 1); }} />
+          <MyProposals refreshKey={refreshKey} />
           <h3>Public projects</h3>
           <form className="row" onSubmit={search} role="search">
             <div className="field">
@@ -117,7 +123,16 @@ export default function ProjectsPage() {
                   {p.milestones.length > 0 && <><b>Milestones</b><ol>{p.milestones.map((m) => <li key={m}>{m}</li>)}</ol></>}
                   {p.acceptance_criteria.length > 0 && <><b>Acceptance criteria</b><ul>{p.acceptance_criteria.map((a) => <li key={a}>{a}</li>)}</ul></>}
                   <p className="muted">Experience: {p.experience_level} · Revision rounds: {p.revision_rounds}</p>
-                  <p className="muted">Proposals for client-posted projects open with the hiring workflow.</p>
+                  {proposing === p.id ? (
+                    <ProposalForm
+                      listingId={p.id}
+                      budgetModel={p.budget_model}
+                      onCancel={() => setProposing(null)}
+                      onDone={(message) => { setProposing(null); setNotice(message); setRefreshKey((k) => k + 1); }}
+                    />
+                  ) : (
+                    <button className="btn primary" onClick={() => setProposing(p.id)}>Send a proposal</button>
+                  )}
                 </div>
               )}
             </article>

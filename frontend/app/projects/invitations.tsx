@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError, api } from '@/lib/api-client';
 import { formatBudget } from '@/lib/listing-format';
+import { ProposalForm } from './proposal-form';
 
 /**
  * Freelancer side of client discovery: the opt-in to be suggested to clients,
@@ -13,7 +14,7 @@ type InvitedProject = {
   title: string; client_name: string; outcome: string; budget_min_minor: number | null; budget_max_minor: number | null;
   currency: string; budget_model: string; deadline: string | null; skills: string[];
 };
-type Invitation = { id: string; status: string; message: string; created_at: string; listing_status: string; project: InvitedProject };
+type Invitation = { id: string; listing_id: string; status: string; message: string; created_at: string; listing_status: string; project: InvitedProject };
 
 function messageOf(e: unknown): string {
   return e instanceof Error ? e.message : 'Something went wrong. Please try again.';
@@ -71,8 +72,9 @@ export function MarketplaceVisibility() {
   );
 }
 
-export function Invitations() {
+export function Invitations({ onProposalSent }: { onProposalSent?: (message: string) => void } = {}) {
   const [items, setItems] = useState<Invitation[] | null>(null);
+  const [proposing, setProposing] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -94,7 +96,7 @@ export function Invitations() {
     setNotice('');
     try {
       await api(`/api/v1/me/invitations/${inv.id}/respond`, 'POST', { response });
-      setNotice(response === 'accept' ? 'Invitation accepted. Proposals for client projects open with the hiring workflow.' : 'Invitation declined');
+      setNotice(response === 'accept' ? 'Invitation accepted. Send your proposal when you are ready.' : 'Invitation declined');
       await load();
     } catch (e) {
       setError(messageOf(e));
@@ -124,6 +126,18 @@ export function Invitations() {
             </div>
           )}
           {inv.status === 'pending' && !['published', 'hiring'].includes(inv.listing_status) && <p className="muted">This project is no longer taking proposals.</p>}
+          {['pending', 'accepted'].includes(inv.status) && inv.listing_status === 'published' && (
+            proposing === inv.id ? (
+              <ProposalForm
+                listingId={inv.listing_id}
+                budgetModel={inv.project.budget_model}
+                onCancel={() => setProposing(null)}
+                onDone={(message) => { setProposing(null); setNotice(message); onProposalSent?.(message); void load(); }}
+              />
+            ) : (
+              <button className="btn" disabled={busy} onClick={() => setProposing(inv.id)}>Send a proposal</button>
+            )
+          )}
         </article>
       ))}
     </section>

@@ -1328,3 +1328,84 @@ class SavedFreelancer(Base):
     saved_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     note: Mapped[str] = mapped_column(String(300), nullable=False, default="", server_default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
+
+class ListingProposal(Base):
+    """A freelancer's proposal on a native listing (migration 0053). Price in minor units, set by the freelancer."""
+    __tablename__ = "listing_proposals"
+    __table_args__ = (
+        UniqueConstraint("listing_id", "freelancer_user_id", name="uq_listing_proposal"),
+        CheckConstraint("status IN ('submitted', 'shortlisted', 'declined', 'withdrawn', 'offered', 'hired')", name="ck_listing_proposals_status"),
+        CheckConstraint("price_minor > 0", name="ck_listing_proposals_price"),
+        CheckConstraint("budget_model IN ('fixed', 'hourly')", name="ck_listing_proposals_model"),
+        CheckConstraint("estimated_days IS NULL OR (estimated_days >= 1 AND estimated_days <= 730)", name="ck_listing_proposals_days"),
+        Index("ix_listing_proposals_listing", "listing_id", "created_at"),
+        Index("ix_listing_proposals_freelancer", "freelancer_user_id", "created_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    listing_id: Mapped[str] = mapped_column(ForeignKey("project_listings.id", ondelete="CASCADE"), nullable=False)
+    freelancer_user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    invitation_id: Mapped[str | None] = mapped_column(ForeignKey("listing_invitations.id", ondelete="SET NULL"), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="submitted", server_default="submitted")
+    cover_letter: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    price_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR", server_default="INR")
+    budget_model: Mapped[str] = mapped_column(String(20), nullable=False, default="fixed", server_default="fixed")
+    estimated_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class Contract(Base):
+    """An offer/agreement between a client organisation and a freelancer (migration 0053)."""
+    __tablename__ = "contracts"
+    __table_args__ = (
+        CheckConstraint("status IN ('offered', 'active', 'declined', 'withdrawn', 'completed', 'cancelled')", name="ck_contracts_status"),
+        Index("ix_contracts_org", "organization_id", "created_at"),
+        Index("ix_contracts_freelancer", "freelancer_user_id", "created_at"),
+        Index("uq_contracts_open_per_proposal", "proposal_id", unique=True,
+              postgresql_where=sql_text("status IN ('offered', 'active')"), sqlite_where=sql_text("status IN ('offered', 'active')")),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    listing_id: Mapped[str] = mapped_column(ForeignKey("project_listings.id", ondelete="RESTRICT"), nullable=False)
+    proposal_id: Mapped[str] = mapped_column(ForeignKey("listing_proposals.id", ondelete="RESTRICT"), nullable=False)
+    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False)
+    freelancer_user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="offered", server_default="offered")
+    current_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ContractVersion(Base):
+    """Immutable contract terms with each party's acceptance (migration 0053)."""
+    __tablename__ = "contract_versions"
+    __table_args__ = (
+        UniqueConstraint("contract_id", "version", name="uq_contract_version"),
+        CheckConstraint("total_minor > 0", name="ck_contract_versions_total"),
+        CheckConstraint("revision_rounds >= 0 AND revision_rounds <= 10", name="ck_contract_versions_revisions"),
+        CheckConstraint("proposed_by IN ('client', 'freelancer')", name="ck_contract_versions_proposed_by"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    contract_id: Mapped[str] = mapped_column(ForeignKey("contracts.id", ondelete="CASCADE"), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    scope: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    deliverables_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
+    milestones_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
+    total_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR", server_default="INR")
+    revision_rounds: Mapped[int] = mapped_column(Integer, nullable=False, default=2, server_default="2")
+    acceptance_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
+    ownership_terms: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    proposed_by: Mapped[str] = mapped_column(String(20), nullable=False)
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    client_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    client_accepted_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    freelancer_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
