@@ -22,7 +22,7 @@ from app.models import (
     Base, ListingInvitation, Organization, Profile, ProjectCategory, ProjectListing, SavedFreelancer, User,
 )
 
-MIGRATION = pathlib.Path(__file__).resolve().parents[1] / "alembic" / "versions" / "0052_invitations_saved_freelancers.py"
+MIGRATION = pathlib.Path(__file__).resolve().parents[1] / "alembic" / "versions" / "0052_invites_saved_freelancers.py"
 
 
 def _engine():

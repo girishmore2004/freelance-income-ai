@@ -1,6 +1,6 @@
 """Matching support: freelancer opt-in, listing invitations, saved freelancers (Phase 2).
 
-Revision ID: 0052_invitations_saved_freelancers
+Revision ID: 0052_invites_saved_freelancers
 Revises: 0051_native_project_listings
 
 * ``profiles.marketplace_visible`` / ``marketplace_visible_at``: a freelancer
@@ -18,7 +18,7 @@ import sqlalchemy as sa
 from sqlalchemy import inspect
 
 
-revision = "0052_invitations_saved_freelancers"
+revision = "0052_invites_saved_freelancers"
 down_revision = "0051_native_project_listings"
 branch_labels = None
 depends_on = None

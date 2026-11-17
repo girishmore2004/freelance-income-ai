@@ -32,12 +32,16 @@ export function MarketplaceVisibility() {
 
   async function toggle() {
     if (!state) return;
+    const previous = state;
+    // Optimistic: the checkbox follows the click and reverts if the API refuses.
+    setState({ ...previous, visible: !previous.visible });
     setBusy(true);
     setError('');
     try {
-      const next = await api<Visibility>('/api/v1/me/marketplace-profile', 'PUT', { visible: !state.visible });
-      setState({ ...state, ...next });
+      const next = await api<Visibility>('/api/v1/me/marketplace-profile', 'PUT', { visible: !previous.visible });
+      setState({ ...previous, ...next });
     } catch (e) {
+      setState(previous);
       setError(messageOf(e));
     } finally {
       setBusy(false);

@@ -179,11 +179,11 @@ test('freelancer opts in to client suggestions and accepts an invitation', async
   await page.goto('/projects');
   await page.getByLabel('Show my profile to clients').check();
   await expect(page.getByText(/Clients can see your name/)).toBeVisible();
-  expect(captured.find((c) => c.method === 'PUT' && c.path === '/api/v1/me/marketplace-profile')?.body).toEqual({ visible: true });
+  await expect.poll(() => captured.find((c) => c.method === 'PUT' && c.path === '/api/v1/me/marketplace-profile')?.body).toEqual({ visible: true });
 
   await expect(page.getByText('Candle shop website')).toBeVisible();
   await expect(page.getByText('We liked your portfolio.')).toBeVisible();
   await page.getByRole('button', { name: 'Accept' }).click();
   await expect(page.getByText(/Invitation accepted/)).toBeVisible();
-  expect(captured.find((c) => c.path === '/api/v1/me/invitations/i1/respond')?.body).toEqual({ response: 'accept' });
+  await expect.poll(() => captured.find((c) => c.path === '/api/v1/me/invitations/i1/respond')?.body).toEqual({ response: 'accept' });
 });
