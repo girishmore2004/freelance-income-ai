@@ -1,6 +1,8 @@
 import type { Env } from "../types";
 import { database, loadProfile } from "./core-routes";
 import type { Row, Sql } from "./core-routes";
+import { reserveAiCall, settleAiCall } from "./ai-governor";
+import { currentKeyId, decryptSecret, encryptSecret, signOAuthState, storedSecretScheme, tokenEncryptionConfigured, verifyOAuthState } from "./token-crypto";
 
 /**
  * Apply + reply agent.
@@ -20,48 +22,33 @@ const GOOGLE_SCOPES = [
   "https://www.googleapis.com/auth/userinfo.email"
 ].join(" ");
 
-/* ---------------- token encryption (AES-GCM, key from JWT_SECRET) ---------------- */
-async function key(env: Env): Promise<CryptoKey> {
-  const secret = String(env.JWT_SECRET ?? "");
-  if (!secret) throw new Error("JWT_SECRET is not configured");
-  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`integration-tokens|${secret}`));
-  return crypto.subtle.importKey("raw", hash, "AES-GCM", false, ["encrypt", "decrypt"]);
-}
-const b64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
-const unb64 = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
-
+/* ---------------- token encryption + signed OAuth state ----------------
+ * Keys come from OAUTH_ENCRYPTION_KEY (independent of JWT_SECRET); see
+ * token-crypto.ts for formats, rotation and legacy-value handling.
+ */
 export async function encryptToken(env: Env, plain: string): Promise<string> {
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const cipher = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await key(env), new TextEncoder().encode(plain)));
-  return `${b64(iv)}.${b64(cipher)}`;
+  return encryptSecret(env, plain);
 }
 export async function decryptToken(env: Env, stored: string): Promise<string> {
-  const [iv, data] = stored.split(".");
-  const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(iv) }, await key(env), unb64(data));
-  return new TextDecoder().decode(plain);
-}
-
-/* ---------------- signed OAuth state ---------------- */
-async function hmac(env: Env, value: string): Promise<string> {
-  const k = await crypto.subtle.importKey("raw", new TextEncoder().encode(String(env.JWT_SECRET ?? "")), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  return b64(new Uint8Array(await crypto.subtle.sign("HMAC", k, new TextEncoder().encode(value)))).replace(/[+/=]/g, "");
+  return (await decryptSecret(env, stored)).plaintext;
 }
 export async function makeState(env: Env, userId: string): Promise<string> {
-  const body = `${userId}.${Date.now()}`;
-  return `${body}.${await hmac(env, body)}`;
+  return signOAuthState(env, userId);
 }
 export async function readState(env: Env, state: string): Promise<string | null> {
-  const parts = state.split(".");
-  if (parts.length !== 3) return null;
-  const body = `${parts[0]}.${parts[1]}`;
-  if ((await hmac(env, body)) !== parts[2]) return null;
-  if (Date.now() - Number(parts[1]) > 15 * 60_000) return null;
-  return parts[0];
+  return verifyOAuthState(env, state);
 }
 
 /* ---------------- Google / Gmail ---------------- */
 export function googleConfigured(env: Env): boolean {
-  return Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
+  return Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET) && tokenEncryptionConfigured(env);
+}
+
+/** Explains which configuration is missing for the Gmail connect flow. */
+export function gmailConfigurationProblem(env: Env): string | null {
+  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) return "Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to the API Worker first.";
+  if (!tokenEncryptionConfigured(env)) return "Add OAUTH_ENCRYPTION_KEY (a base64 value of at least 32 random bytes) to the API Worker as a secret first.";
+  return null;
 }
 
 export function gmailAuthUrl(env: Env, redirectUri: string, state: string): string {
@@ -107,7 +94,7 @@ export async function connectGmail(env: Env, sql: Sql, userId: string, code: str
             ${await encryptToken(env, token.access_token)}, ${new Date(Date.now() + (token.expires_in ?? 3600) * 1000)}, now())
     ON CONFLICT (user_id, provider) DO UPDATE SET
       email = EXCLUDED.email, refresh_token = EXCLUDED.refresh_token,
-      access_token = EXCLUDED.access_token, expires_at = EXCLUDED.expires_at
+      access_token = EXCLUDED.access_token, expires_at = EXCLUDED.expires_at, updated_at = now()
   `;
   return email;
 }
@@ -117,19 +104,85 @@ async function gmailAccess(env: Env, sql: Sql, userId: string): Promise<{ token:
   const row = rows[0];
   if (!row) return null;
 
-  if (row.expires_at && new Date(row.expires_at).getTime() > Date.now() + 60_000 && row.access_token) {
-    return { token: await decryptToken(env, row.access_token), email: row.email };
+  const refresh = await decryptSecret(env, row.refresh_token);
+  const access = row.access_token ? await decryptSecret(env, row.access_token).catch(() => null) : null;
+
+  // Lazy key migration: anything not under the current key is rewritten now.
+  if (refresh.needsReencrypt || (access && access.needsReencrypt)) {
+    await sql`
+      UPDATE integrations SET refresh_token = ${await encryptSecret(env, refresh.plaintext)},
+        access_token = ${access ? await encryptSecret(env, access.plaintext) : ""},
+        updated_at = now()
+      WHERE user_id = ${userId} AND provider = 'gmail'
+    `;
+    console.log(JSON.stringify({ event: "oauth_token.reencrypted", provider: "gmail", from: refresh.scheme }));
+  }
+
+  if (access && row.expires_at && new Date(row.expires_at).getTime() > Date.now() + 60_000) {
+    return { token: access.plaintext, email: row.email };
   }
   const fresh = await googleToken(env, {
-    refresh_token: await decryptToken(env, row.refresh_token),
+    refresh_token: refresh.plaintext,
     grant_type: "refresh_token"
   });
   await sql`
-    UPDATE integrations SET access_token = ${await encryptToken(env, fresh.access_token)},
-      expires_at = ${new Date(Date.now() + (fresh.expires_in ?? 3600) * 1000)}
+    UPDATE integrations SET access_token = ${await encryptSecret(env, fresh.access_token)},
+      expires_at = ${new Date(Date.now() + (fresh.expires_in ?? 3600) * 1000)}, updated_at = now()
     WHERE user_id = ${userId} AND provider = 'gmail'
   `;
   return { token: fresh.access_token, email: row.email };
+}
+
+/**
+ * Re-encrypts stored integration tokens that are not under the current key
+ * (legacy JWT-derived values or OAUTH_ENCRYPTION_KEY_PREVIOUS). Bounded per
+ * call; safe to run repeatedly. Rows that cannot be decrypted are reported,
+ * never deleted.
+ */
+export async function reencryptIntegrationTokens(env: Env, sql: Sql, limit = 50): Promise<{ scanned: number; reencrypted: number; failed: number }> {
+  const result = { scanned: 0, reencrypted: 0, failed: 0 };
+  if (!tokenEncryptionConfigured(env)) return result;
+  const currentPrefix = `v2:${await currentKeyId(env)}:%`;
+  const rows = await sql`
+    SELECT user_id, provider, refresh_token, access_token FROM integrations
+    WHERE refresh_token NOT LIKE ${currentPrefix}
+       OR (access_token <> '' AND access_token NOT LIKE ${currentPrefix})
+    ORDER BY user_id LIMIT ${Math.max(1, Math.min(limit, 500))}
+  `;
+  for (const row of rows) {
+    result.scanned += 1;
+    const schemes = [await storedSecretScheme(env, row.refresh_token), await storedSecretScheme(env, row.access_token)];
+    if (schemes.every((scheme) => scheme === "current" || scheme === "empty")) continue;
+    try {
+      const refresh = await decryptSecret(env, row.refresh_token);
+      const access = row.access_token ? await decryptSecret(env, row.access_token).catch(() => null) : null;
+      await sql`
+        UPDATE integrations SET refresh_token = ${await encryptSecret(env, refresh.plaintext)},
+          access_token = ${access ? await encryptSecret(env, access.plaintext) : ""}, updated_at = now()
+        WHERE user_id = ${row.user_id} AND provider = ${row.provider}
+      `;
+      result.reencrypted += 1;
+    } catch (error) {
+      result.failed += 1;
+      console.error(JSON.stringify({ event: "oauth_token.reencrypt_failed", provider: row.provider, error_message: error instanceof Error ? error.message : "unknown" }));
+    }
+  }
+  return result;
+}
+
+/** Counts stored token values by key scheme (no plaintext is read). */
+export async function integrationKeyStatus(env: Env, sql: Sql): Promise<{ current: number; previous_or_unknown: number; legacy: number }> {
+  const rows = await sql`SELECT refresh_token, access_token FROM integrations`;
+  const status = { current: 0, previous_or_unknown: 0, legacy: 0 };
+  for (const row of rows) {
+    for (const value of [row.refresh_token, row.access_token]) {
+      const scheme = await storedSecretScheme(env, String(value ?? ""));
+      if (scheme === "current") status.current += 1;
+      else if (scheme === "legacy") status.legacy += 1;
+      else if (scheme === "other") status.previous_or_unknown += 1;
+    }
+  }
+  return status;
 }
 
 async function gmailFetch(token: string, path: string, init: RequestInit = {}): Promise<any> {
@@ -254,8 +307,17 @@ function heuristic(text: string): ReplyAnalysis {
   };
 }
 
-export async function analyzeReply(env: Env, title: string, clientText: string, profile: Row): Promise<ReplyAnalysis> {
-  if (!env.AI) return heuristic(clientText);
+export async function analyzeReply(
+  env: Env,
+  title: string,
+  clientText: string,
+  profile: Row,
+  governance?: { sql: Sql; userId: string }
+): Promise<ReplyAnalysis> {
+  if (!env.AI || !governance) return heuristic(clientText);
+  const inputChars = Math.min(clientText.length, 3000) + title.length + 600;
+  const decision = await reserveAiCall(env, governance.sql, { userId: governance.userId, operation: "reply_analysis", inputChars, maxOutputTokens: 350 });
+  if (!decision.allowed) return heuristic(clientText);
   try {
     const result = (await env.AI.run(env.WORKERS_AI_MODEL || "@cf/meta/llama-3.1-8b-instruct", {
       messages: [
@@ -272,6 +334,7 @@ export async function analyzeReply(env: Env, title: string, clientText: string, 
     })) as { response?: string } | null;
 
     const out = result?.response ?? "";
+    await settleAiCall(env, governance.sql, decision.eventId, inputChars, out.length);
     const label = out.match(/LABEL:\s*(\w+)/i)?.[1]?.toLowerCase() ?? "";
     const summary = out.match(/SUMMARY:\s*(.+)/i)?.[1]?.trim() ?? "";
     const suggestion = out.match(/REPLY:\s*([\s\S]+)/i)?.[1]?.trim() ?? "";
@@ -349,15 +412,16 @@ export async function syncReplies(env: Env, sql: Sql, userId: string): Promise<{
 
       for (const msg of incoming) {
         if (!msg.body) continue;
-        const exists = await sql`SELECT 1 FROM application_messages WHERE external_id = ${msg.external_id} LIMIT 1`;
+        const exists = await sql`SELECT 1 FROM application_messages WHERE user_id = ${userId} AND external_id = ${msg.external_id} LIMIT 1`;
         if (exists.length) continue;
 
-        const analysis = await analyzeReply(env, String(app.title), msg.body, profile);
+        const analysis = await analyzeReply(env, String(app.title), msg.body, profile, { sql, userId });
         await sql`
           INSERT INTO application_messages
             (id, user_id, application_id, direction, sender, subject, body, external_id, message_ref, received_at, ai_label, ai_summary, ai_suggestion, created_at)
           VALUES (${crypto.randomUUID()}, ${userId}, ${app.id}, 'in', ${msg.sender}, ${msg.subject}, ${msg.body},
                   ${msg.external_id}, ${msg.message_ref ?? ''}, ${msg.at}, ${analysis.label}, ${analysis.summary}, ${analysis.suggestion}, now())
+          ON CONFLICT (user_id, external_id) DO NOTHING
         `;
         await sql`UPDATE applications SET status = 'replied', last_checked_at = now() WHERE id = ${app.id}`;
         if (app.opp_status === "applied") await sql`UPDATE opportunities SET status = 'replied' WHERE id = ${app.opportunity_id}`;
@@ -388,6 +452,27 @@ export async function runScheduledReplySync(env: Env): Promise<void> {
         console.error(JSON.stringify({ event: "reply_sync.failed", error_message: error instanceof Error ? error.message : "unknown" }));
       }
     }
+  } finally {
+    await sql.end({ timeout: 5 });
+  }
+}
+
+/**
+ * Cron entry point: moves stored OAuth tokens onto the current
+ * OAUTH_ENCRYPTION_KEY and logs rotation progress (counts only).
+ */
+export async function runScheduledTokenMaintenance(env: Env): Promise<void> {
+  if (!tokenEncryptionConfigured(env)) {
+    console.warn(JSON.stringify({ event: "oauth_token.key_missing", message: "OAUTH_ENCRYPTION_KEY is not configured; Gmail connect is disabled" }));
+    return;
+  }
+  const sql = database(env);
+  try {
+    const result = await reencryptIntegrationTokens(env, sql, 100);
+    const status = await integrationKeyStatus(env, sql);
+    console.log(JSON.stringify({ event: "oauth_token.key_status", ...result, ...status, key_id: await currentKeyId(env) }));
+  } catch (error) {
+    console.error(JSON.stringify({ event: "oauth_token.maintenance_failed", error_message: error instanceof Error ? error.message : "unknown" }));
   } finally {
     await sql.end({ timeout: 5 });
   }
