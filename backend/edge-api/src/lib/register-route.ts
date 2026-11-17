@@ -3,6 +3,8 @@ import type { Env } from "../types";
 import { hashPassword } from "./password-service";
 import { createAccessSession } from "./session-service";
 import { failure, success } from "./response";
+import { issueAccountActionTokenWith } from "./account-token-store";
+import { accountMailConfigured, publicAppUrl, sendAccountEmail } from "./account-mailer";
 
 function database(env: Env) {
   const connectionString = env.HYPERDRIVE?.connectionString;
@@ -52,7 +54,8 @@ function validate(
 
 /**
  * POST /api/v1/auth/register
- * Port of the FastAPI register route for the no-email-verification case.
+ * Port of the FastAPI register route, including the email-verification flow
+ * (REQUIRE_EMAIL_VERIFICATION=true sends a single-use link through Resend).
  * Returns null when the request is not a register request.
  */
 export async function handleRegisterRoute(
@@ -78,10 +81,13 @@ export async function handleRegisterRoute(
     );
   }
 
-  if (env.REQUIRE_EMAIL_VERIFICATION?.trim().toLowerCase() === "true") {
+  const requireVerification =
+    env.REQUIRE_EMAIL_VERIFICATION?.trim().toLowerCase() === "true";
+
+  if (requireVerification && !accountMailConfigured(env)) {
     return failure(
-      "EMAIL_DELIVERY_NOT_AVAILABLE",
-      "Email verification is not available on the edge API yet. Set REQUIRE_EMAIL_VERIFICATION to false.",
+      "EMAIL_DELIVERY_NOT_CONFIGURED",
+      "Account email delivery is not configured. Contact the administrator.",
       503,
       requestId
     );
@@ -130,7 +136,7 @@ export async function handleRegisterRoute(
           id, email, password_hash, created_at, email_verified,
           mfa_enabled, mfa_secret_encrypted, failed_login_attempts
         ) VALUES (
-          ${userId}, ${input.email}, ${passwordHash}, now(), true,
+          ${userId}, ${input.email}, ${passwordHash}, now(), ${!requireVerification},
           false, '', 0
         )
       `;
@@ -149,6 +155,18 @@ export async function handleRegisterRoute(
         )
       `;
 
+      if (requireVerification) {
+        // Issued and emailed inside the transaction: if the provider rejects
+        // the message, the account is not created (same as the Python route).
+        const issued = await issueAccountActionTokenWith(tx, userId, "verify_email");
+        const link = `${publicAppUrl(env)}/#verify_token=${issued.token}`;
+        await sendAccountEmail(env, {
+          to: input.email,
+          subject: "Verify your Freelance Income AI account",
+          text: `Welcome! Verify your email address using this link (valid for 24 hours):\n\n${link}\n\nIf you did not create this account, ignore this message.`
+        });
+      }
+
       return true;
     });
 
@@ -162,6 +180,18 @@ export async function handleRegisterRoute(
         },
         "Request received",
         200,
+        requestId
+      );
+    }
+
+    if (requireVerification) {
+      return success(
+        {
+          status: "verification_required",
+          message: "Account created. Check your email for the verification link."
+        },
+        "Account created. Check your email for the verification link.",
+        201,
         requestId
       );
     }
