@@ -1637,3 +1637,40 @@ class AgentDefinition(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
 
+
+class Report(Base):
+    """A user's report about content or another user (migration 0060)."""
+    __tablename__ = "reports"
+    __table_args__ = (
+        CheckConstraint("target_type IN ('listing', 'user', 'proposal', 'contract_message', 'review')", name="ck_reports_target"),
+        CheckConstraint("reason IN ('spam', 'scam', 'off_platform', 'abuse', 'prohibited', 'fake', 'other')", name="ck_reports_reason"),
+        CheckConstraint("status IN ('open', 'actioned', 'dismissed')", name="ck_reports_status"),
+        Index("ix_reports_status_created", "status", "created_at"),
+        Index("uq_reports_open_per_reporter", "reporter_user_id", "target_type", "target_id", unique=True,
+              postgresql_where=sql_text("status = 'open'"), sqlite_where=sql_text("status = 'open'")),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    reporter_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    target_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    target_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    reason: Mapped[str] = mapped_column(String(30), nullable=False)
+    details: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="open", server_default="open")
+    resolution_note: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    resolved_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
+
+class ModerationAction(Base):
+    """Append-only staff decision log (migration 0060; UPDATE/DELETE refused in PostgreSQL)."""
+    __tablename__ = "moderation_actions"
+    __table_args__ = (Index("ix_moderation_actions_target", "target_type", "target_id", "created_at"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    actor_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    target_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    target_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    action: Mapped[str] = mapped_column(String(40), nullable=False)
+    note: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+

@@ -18,13 +18,15 @@
 | K-15 | Info | Resolved: the "login failure" e2e failure was a test-mock bug (`/me` answered 200 in cookie mode). CI Playwright runs against a production build. | — |
 | K-16 | Medium | If the only owner of an organisation deletes their account, the organisation is left without an owner (membership cascades). | Account-deletion flow must transfer or close owned organisations (Phase 7). |
 | K-17 | Low | Organisation invitations are not built yet; organisations have a single owner until then. | Phase 2/3 with email invitations. |
-| K-18 | Medium | No moderation queue UI yet: listings held `in_review` by the screen must be approved or returned with SQL (runbook). | Admin moderation queue (Phase 7). |
+| K-18 | Info | Resolved in 5.58.0: `/admin` moderation queue. | — |
 | K-19 | Low | Listing attachments (R2) are not built. Invitations and closing dates shipped in 5.50.0. | Phase 3 with the delivery workspace. |
 | K-21 | Low | Matching ranks at most 500 opted-in freelancers per request (most recently opted-in first). Fine for launch; needs SQL pre-filtering by skill/category beyond that. | Add a skills index or pgvector retrieval when visible freelancers exceed ~400. |
 | K-23 | Medium | Contract rows block deleting the user or organisation (RESTRICT) by design. There is no account-deletion flow on Edge yet; when one is built it must anonymise contract parties instead of deleting. | Phase 7 account deletion. |
 | K-24 | Low | After a freelancer has proposed on an invitation, the invitation still shows "Send a proposal"; a second attempt is refused with "Edit it instead". | Hide once `/me/proposals` is cross-checked (Phase 3 batch 2 UI pass). |
 | K-25 | Low | Contract messages block phone numbers/emails even after hiring (same rule as listings). Parties may legitimately need a call; meetings are not built. | Revisit with founder policy (D-16 proposed); add scheduled calls later. |
 | K-26 | Info | Deliveries are notes + https links only; file uploads (R2, size limits, malware scanning) are not built. | Phase 3 follow-up with R2 (K-19). |
+| K-27 | Low | The sidebar shows the Admin link to everyone; non-staff see "This page is for staff". | Hide by role when the home page is refactored. |
+| K-28 | Medium | Account suspension is not built (needs session revocation and appeal flow); staff can hide listings and action reports. | Phase 7 batch 2. |
 | K-22 | Info | Invitations are in-app only (no email yet); freelancers see them on `/projects`. | Notifications in Phase 3 with Resend (D-15). |
 | K-20 | Low | Listing screen is keyword-based (e.g. it can miss obfuscated contact details and may flag legitimate mentions of "WhatsApp integration"). Flags only hold for review; they never reject. | Tune from moderation outcomes; P1 agent later. |
 | K-10 | Info | `password-service.test.ts` could not run offline (needs `bcryptjs`). | CI covers it. |

@@ -114,6 +114,12 @@ Set build variable `NEXT_PUBLIC_AUTH_MODE=cookie`, redeploy, sign in, and confir
 1. "Stage 3C Neon migrations" (expects `0059_assistants_live`; data-only). Check: `SELECT code, status FROM agent_definitions WHERE code IN ('C3','C5','C6');` → live.
 2. Deploy Edge (5.57.0), then the frontend. Client → Proposals → **Compare proposals**; **Make an offer** starts from the suggested split; Workspace → **Review delivery** shows the acceptance checklist.
 
+## Phase 7 batch 1 (release 5.58.0): moderation, reports, admin
+1. "Stage 3C Neon migrations" (expects `0060_trust_admin`). Check: `SELECT tgname FROM pg_trigger WHERE tgname = 'moderation_actions_append_only';` → 1 row.
+2. Deploy Edge (5.58.0), then the frontend.
+3. Give moderators the role (SQL as in Phase 4 step 3 with `'moderator'`). Sidebar → **Admin**: overview, moderation queue (Approve and publish / Return to client with a note), open reports, and — for admins — feature flags. **This is where you can now turn `marketplace.client_side` on or off without SQL.** `payments.live` is locked.
+4. The SQL moderation steps in "Phase 2 batch 1" step 5 are no longer needed.
+
 ## Rollback
 - Edge or frontend: Cloudflare → Worker → **Deployments** → previous version → **Rollback**. If you roll the Edge API back, re-attach the old consumer to the queue.
 - Database: see DATABASE_MIGRATION_STATUS.md (5.45 code runs on the 0049 schema).

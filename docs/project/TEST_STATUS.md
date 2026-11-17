@@ -1,5 +1,14 @@
 # Test Status
 
+## Phase 7 batch 1 — 2026-11-17 IST (release 5.58.0)
+- Edge API: **239 passed, 0 failed** (new `trust.test.ts` 5: report validation, de-duplication and volume limit, staff-only endpoints, approve/return with logged reason in one transaction, action + hide pending review without deletes, admin-only flags with `payments.live` locked).
+- PostgreSQL 16 with the 0060 DDL and trigger: a fee-requesting brief was held by the screen and appeared in the queue with `upfront_fee`; return without a reason 422; returned; second decision 409; reports: invalid 422, unknown target 404, created, duplicate open report 409, self-report 422; staff saw the reporter, actioned it and the listing was hidden pending review (`in_review`, `reported:scam`); re-resolve 409; overview counts and flags; moderator cannot change flags (403); `payments.live` refused (409 `FLAG_LOCKED`); the moderation log recorded each decision and **the database refused DELETE on it**.
+- Frontend: typecheck 0 errors (`/admin` page, report button on project details, `e2e/admin.spec.ts` with 2 journeys, `/admin` in sign-in guard checks).
+- Python: `tests/test_trust_admin_v560.py` (3 tests) compiled; runs in CI.
+
+## Phase 6 batch 2 — GitHub CI (verified)
+Green on the first push. `main` @ dbef1da: 1 skipped   2 skipped   33 passed (18.6s)   34 passed (10.8s) 547 passed, 6 warnings in 15.71s Edge API CI 234/234.
+
 ## Phase 6 batch 2 — 2026-11-17 IST (release 5.57.0)
 - Edge API: **234 passed, 0 failed** (new `assistants.test.ts` 8: keyword coverage with simple word forms, C3 budget/timeline fit and flags without ranking, C5 exact split of the freelancer's price with remainder on the last milestone and dates spread to the deadline, missing-term flags, C6 checklist, route switch/membership/run recording).
 - PostgreSQL 16, real handlers: C3 compared two proposals (within/fits vs below/not stated with flags; disclaimer; outsider 404); C5 split ₹25,000.01 into ₹8,333 + ₹8,333 + ₹8,334.01 (sum exact) with dates to the deadline and an ownership flag, then used as the actual offer; C6 refused before delivery (409), checked both criteria after delivery, hidden from the freelancer (404); each wrote an agent run; switching C3 off returned 403 `AGENT_DISABLED`.

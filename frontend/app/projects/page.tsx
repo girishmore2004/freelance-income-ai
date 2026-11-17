@@ -4,6 +4,7 @@ import { ApiError, api, useSessionToken } from '@/lib/api-client';
 import { formatBudget } from '@/lib/listing-format';
 import { Invitations, MarketplaceVisibility } from './invitations';
 import { MyProposals, ProposalForm } from './proposal-form';
+import { ReportButton } from './report-button';
 
 /**
  * Native client projects for freelancers (Phase 2). Shows only published,
@@ -123,6 +124,7 @@ export default function ProjectsPage() {
                   {p.milestones.length > 0 && <><b>Milestones</b><ol>{p.milestones.map((m) => <li key={m}>{m}</li>)}</ol></>}
                   {p.acceptance_criteria.length > 0 && <><b>Acceptance criteria</b><ul>{p.acceptance_criteria.map((a) => <li key={a}>{a}</li>)}</ul></>}
                   <p className="muted">Experience: {p.experience_level} · Revision rounds: {p.revision_rounds}</p>
+                  <div><ReportButton targetType="listing" targetId={p.id} /></div>
                   {proposing === p.id ? (
                     <ProposalForm
                       listingId={p.id}
