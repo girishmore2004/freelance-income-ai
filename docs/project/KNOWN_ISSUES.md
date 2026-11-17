@@ -1,51 +1,21 @@
-# Test Status
+# Known Issues
 
-## Phase 0 batch 2 — 2026-11-17 19:xx IST
-- Edge API (`cloudflare-edge-api-phase1` @ batch-2 commit), real `postgres` 3.4.9 + `bcryptjs` 3.0.2: **107 passed, 0 failed** (11 files; new `ai-guard.test.ts` 23). Bundle builds (333 KB) with the guard; eval JSON not bundled.
-- Frontend: strict typecheck of all pages, `lib/`, both e2e specs and `playwright.config.ts` with real React 18 + Playwright 1.63 types: 0 errors (baseline 0). `npm run test:unit`: 6/6. `next build` and Playwright were not run here (npm registry unreachable) — CI runs both, including a second Playwright pass with `E2E_AUTH_MODE=cookie`.
-- Workers Build #8f8b52e3 (batch 1) ran the real vitest: 84/84.
-
-
-## Update 2026-11-17 18:30 — Edge API CI failure fixed
-GitHub "Edge API CI" run #28 failed typecheck with 10 errors. Reproduced exactly with the real `postgres` 3.4.9 types (installed from GitHub) and fixed:
-- `src/lib/job-routes.ts` had been uploaded as `job_routes.ts` (renamed).
-- postgres ≥ 3.4.8: `TransactionSql` is no longer a subtype of `Sql`; query helpers now accept `Queryable = Sql | TransactionSql`.
-After the fix, with real `postgres` 3.4.9 and real `bcryptjs` 3.0.2: typecheck clean (except TS 6-only `mfa-service.ts` messages your CI's TS 5.9 does not report), **84 passed, 0 failed** (the 4 password tests now run), Worker bundle builds with `fetch`, `scheduled`, `queue`.
-
-
-Run on 2026-11-17 in an offline build container (no package downloads). Results are reported exactly; nothing below is a CI or production result.
-
-## Edge API (`backend/edge-api`)
-Runner: the repository's own `*.test.ts` files executed with `tsx` and a local stand-in for the vitest API (vitest, `postgres`, `bcryptjs` and `@cloudflare/workers-types` could not be installed).
-
-| Suite | Result |
-|---|---|
-| account-routes (new) | 16 passed |
-| ai-governor (new) | 11 passed |
-| auth-context (new) | 9 passed |
-| jobs (new) | 11 passed |
-| token-crypto (new) | 11 passed |
-| apply-agent | 4 passed |
-| discovery-agent | 7 passed |
-| project-sources | 4 passed |
-| scoring | 5 passed |
-| password-service | 2 passed, **4 not runnable** (needs real `bcryptjs`; environment, not a code defect) |
-| **Total** | **80 passed, 4 not runnable** (baseline before this batch: 22 passed + same 4) |
-
-Typecheck (`tsc --noEmit`, TypeScript 6 with stub types): 0 new errors versus baseline; 11 pre-existing harness-only errors (bcryptjs stub typing, TS 6 DOM `BufferSource`). Bundle (`esbuild`): builds, 218 KB, exports `fetch`, `scheduled`, `queue`, contains no test code.
-
-## Database (real PostgreSQL 16.15)
-- 0047 DDL, fresh and hand-made-table paths, then every Edge SQL statement shape for the three tables: pass; duplicate live send and duplicate message rejected; failed send allowed.
-- Job queue: idempotent enqueue, two consumers racing (one claims), duplicate delivery after success (not re-run), stale claim (reclaimed after 15 min), fresh claim (not reclaimed): pass.
-- AI usage aggregation: per-user day/month counts across services and global daily cost: pass.
-- Alembic itself was **not** executed (SQLAlchemy/Alembic unavailable offline).
-
-## Python backend
-- New/changed tests: `tests/test_edge_apply_tables_v546.py`, `tests/test_system_diagnostics_v542.py`. Byte-compiled only; **not run** (FastAPI/SQLAlchemy unavailable). The migration-head logic was executed directly: single head `0049_feature_flags_ai_cost`.
-- Historical baseline (Progress Report): 495 passed, 12 skipped.
-
-## Frontend
-New files (`app/api/v1/[...path]/route.ts`, `lib/api-client.ts`) pass an isolated strict typecheck. `next build`, ESLint and Playwright were **not run**.
-
-## Must run in CI before deploy
-`Full CI` (pytest + Alembic on pgvector + frontend build + Playwright) and the new `Edge API CI` (clean npm install, typecheck, vitest, wrangler dry-run).
+| ID | Severity | Issue | Plan |
+|---|---|---|---|
+| K-01 | High | 12 of 13 frontend pages depend on Python routes that are not deployed; about 100 route references fail in production. | Decision D-11, then port or hide per page behind flags. |
+| K-02 | High | Browser token stays in `localStorage` until `NEXT_PUBLIC_AUTH_MODE=cookie` is set. All pages now use the shared client (batch 2), so this is a configuration switch. | Switch after Full CI is green (runbook "Cookie sessions"). |
+| K-03 | Low | Resolved in 5.48.0 with Cloudflare `ratelimits` (approximate, per location). Strict global limits would need a Durable Object. | Monitor `rate_limit.exceeded`. |
+| K-04 | Medium | MFA TOTP secrets (both services) are encrypted with a key derived from `JWT_SECRET`/`SECRET_KEY`; rotating it locks MFA users out. | Add `MFA_ENCRYPTION_KEY` with dual-key read in both services. |
+| K-05 | Medium | Python AI calls are not under the new global budget (Python is not deployed, so no current spend). | Apply the same governor if Python is ever hosted. |
+| K-06 | Low | Two near-identical MFA modules on Edge (`mfa.ts`, `mfa-service.ts`). | Consolidate onto `mfa.ts`. |
+| K-07 | Low | Edge repo still carries stale copies of the Python backend and frontend. | Remove after ADR-001 is confirmed in practice. |
+| K-08 | Low | Two Gmail integration stores exist (Python `email_provider_connections`, Edge `integrations`). | Pick one when D-11 is decided. |
+| K-09 | Info | Proxy forwards bodies up to 12 MB; Edge has no file upload routes yet. | Revisit with R2 uploads (Phase 3). |
+| K-11 | Medium | Edge API has no `package-lock.json`, so `^` ranges resolve to new versions on every install (postgres 3.4.9 changed its types and broke CI). | Commit a lockfile generated by `npm install` in `backend/edge-api`. |
+| K-12 | Medium | Cloudflare Workers Build for `freelance-income-ai-api-edge` was building `main` (no `backend/edge-api` there) with deploy command `npx wrangler preview`. | Production branch `cloudflare-edge-api-phase1`, deploy command `npx wrangler deploy` (runbook step 6). |
+| K-13 | Low | Output guard is pattern-based: it reduces but cannot eliminate injected content (e.g. paraphrased off-platform requests). | Grow `ai-eval/guard-cases.json` from `ai.output_blocked` logs; add model-graded eval when D-13 is decided. |
+| K-14 | Medium | Worker `freelance-income-ai-consumer` still has a Workers Build connected to `main`; each push redeploys it and fails with code 11004 because the Edge API now owns the queue. | Disconnect its Git builds or delete the Worker (runbook step 5). `backend/queue-consumer` is retired. |
+| K-15 | Low | Playwright runs against `next dev`; CI uses one worker to avoid dev-server reloads caused by the shared client module. | Move e2e to a production build when the OpenNext preview path is set up in CI. |
+| K-16 | Medium | If the only owner of an organisation deletes their account, the organisation is left without an owner (membership cascades). | Account-deletion flow must transfer or close owned organisations (Phase 7). |
+| K-17 | Low | Organisation invitations are not built yet; organisations have a single owner until then. | Phase 2/3 with email invitations. |
+| K-10 | Info | `password-service.test.ts` could not run offline (needs `bcryptjs`). | CI covers it. |
