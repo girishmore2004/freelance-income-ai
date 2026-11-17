@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { buildMime, decryptToken, encryptToken, findContactEmail, makeState, readState } from "./apply-agent";
 import type { Env } from "../types";
 
-const env = { JWT_SECRET: "test-secret-value-1234567890" } as unknown as Env;
+const env = {
+  JWT_SECRET: "test-secret-value-1234567890",
+  OAUTH_ENCRYPTION_KEY: "q2Xh0b3S3m5yYk9zQ2l3bkF0cGx1S3J0dlZ1UjR3c0E="
+} as unknown as Env;
 
 describe("apply agent helpers", () => {
   it("encrypts and decrypts tokens", async () => {
