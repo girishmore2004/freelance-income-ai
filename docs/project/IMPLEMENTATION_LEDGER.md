@@ -1,6 +1,6 @@
 # Implementation Ledger
 
-Last verified checkpoint: **2026-11-17, Phase 0 batch 1** (release 5.46.0).
+Last verified checkpoint: **2026-11-17, Phase 2 batch 2** (release 5.50.0, local tests; CI result recorded in TEST_STATUS.md).
 
 **Deployment state 2026-11-17 18:34 IST (build #8f8b52e3, branch `cloudflare-edge-api-phase1` @ 4b683a1):** Workers Build ran `npm run check` — vitest 84/84 passed, typecheck passed. `wrangler deploy` uploaded the Worker (fetch + 6-hourly cron are live, v5.46.0) but **queue consumer registration failed** (code 11004: queue already has a consumer, the old `freelance-income-ai-consumer`). Neon migrations 0047–0049: not yet confirmed as run.
 Status values: DONE (implemented + tested here) · PARTIAL · BLOCKED · NOT STARTED.
@@ -37,9 +37,14 @@ Status values: DONE (implemented + tested here) · PARTIAL · BLOCKED · NOT STA
 | 2.3 | Basic listing screen (P1): off-platform contact/payment, upfront fees, prohibited work, link shorteners → held `in_review` | DONE (code) | edge | `lib/listings.ts` | unit tests | Not deployed | Moderation queue UI (Phase 7); approve via SQL meanwhile |
 | 2.4 | AI Brief Builder (C1): fenced input, JSON-only output, never budget/dates/links, guard + governor, template fallback | DONE (code) | edge | `lib/brief-builder.ts` | unit tests (clean, priced, dated, non-JSON, quota) | Not deployed | Live-model quality eval needs D-13 |
 | 2.5 | Client posting page + freelancer project list | DONE (code) | fia | `app/client/projects/page.tsx`, `app/projects/page.tsx`, `lib/listing-format.ts` | typecheck 0; unit 10/10; render smoke; `e2e/projects.spec.ts` (CI) | Not deployed | — |
-| 2 | Remaining Phase 2: two-sided matching (C2), invitations, saved freelancers, attachments (R2), listing expiry job | NOT STARTED | — | — | — | — | Next batch |
+| 2.6 | Freelancer opt-in to client discovery (default off; needs freelancer role + name + skill) | DONE (code) | fia + edge | `0052_invitations_saved_freelancers.py`, `models.py`, `lib/match-routes.ts`, `app/projects/invitations.tsx` | `matching.test.ts`; real handlers on PostgreSQL 16 | Not deployed | Run 0052 |
+| 2.7 | Match and Shortlist agent C2: deterministic 0–100 score (skills, budget fit, category, availability, timezone), reasons, missing skills, dealbreakers respected, 2 newcomer places; agent run logged | DONE (code) | edge + fia | `lib/matching.ts`, `lib/match-routes.ts`, `app/client/projects/match-panel.tsx` | `matching.test.ts` 22 (scoring, determinism, newcomer slots, routes); PostgreSQL run | Not deployed | Tune weights from hiring outcomes |
+| 2.8 | Invitations: owner/admin invite visible freelancers to published public/invite-only listings; one per freelancer (re-invite only after withdrawal); 30 per listing; message screened for contact/payment details; accept/decline once; invite-only listings visible to invitees | DONE (code) | edge + fia | same | unit + PostgreSQL (duplicate, hidden freelancer, other user's invitation, re-invite, visibility) | Not deployed | Proposals on accepted invitations (Phase 3) |
+| 2.9 | Saved freelancers per organisation (200 max, note) | DONE (code) | edge + fia | same | unit + PostgreSQL (upsert, non-member 404) | Not deployed | — |
+| 2.10 | Listing closing date (`closes_at`, ≤180 days) + 6-hourly expiry | DONE (code) | edge + fia | `lib/listings.ts`, `lib/listing-routes.ts`, `lib/match-routes.ts`, `src/index.ts`, client page | unit + PostgreSQL (expired 1 listing) | Not deployed | — |
+| 2 | Remaining Phase 2: listing attachments (R2) | NOT STARTED | — | — | — | — | With Phase 3 delivery files |
 | 1 | Remaining Phase 1: OpenAPI contract, organisation invitations, consents (needs policy docs), verification references, staff/admin tooling | NOT STARTED | — | — | — | — | Consents BLOCKED on legal docs (D-1) |
 | 2–8 | Client marketplace, shared delivery, payments, business model, agents, trust, launch | NOT STARTED | — | — | — | — | Phase 1 first; payments BLOCKED on D-1/D-2 |
 
 ## Next exact step
-Phase 2 batch 2: Match and Shortlist agent (C2) for published listings (deterministic scoring from freelancer profiles + explanation, newcomer exposure), client invitations to invite-only listings, saved freelancers, listing expiry (`closes_at`) via the 6-hourly job. Then Phase 3 (proposals on native listings → offers → versioned two-party agreement).
+Phase 3 batch 1: proposals on native listings (freelancer → listing, with price in minor units set by the freelancer), client shortlist/decline, offer → versioned two-party agreement with acceptance by both sides. Payments stay disabled (D-1/D-2).

@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ApiError, api, useSessionToken } from '@/lib/api-client';
 import { STATUS_LABELS, formatBudget, linesToList, minorToRupees, rupeesToMinor } from '@/lib/listing-format';
+import { MatchPanel, SavedFreelancers } from './match-panel';
 
 /**
  * Client project posting (Phase 2). The client describes the work, can ask the
@@ -18,7 +19,7 @@ type Brief = {
   deadline: string | null; milestones: Milestone[]; acceptance_criteria: string[]; revision_rounds: number; languages: string[];
   timezone: string; confidentiality: string; ownership_notes: string; assumptions: string[];
 };
-type Listing = { id: string; status: string; visibility: string; moderation_status: string; current_version: number; published_at: string | null; brief: Brief };
+type Listing = { id: string; status: string; visibility: string; moderation_status: string; current_version: number; published_at: string | null; closes_at: string | null; brief: Brief };
 type Draft = { title: string; outcome: string; deliverables: string[]; skills: string[]; milestones: Milestone[]; acceptance_criteria: string[]; assumptions: string[]; questions: string[]; conflicts: string[]; revision_rounds: number };
 type Assist = { draft: Draft; source: 'model' | 'template'; note?: string; message?: string };
 
@@ -26,13 +27,13 @@ type Form = {
   category_slug: string; title: string; outcome: string; description: string; deliverables: string; skills: string;
   experience_level: string; budget_model: string; budget_min: string; budget_max: string; deadline: string;
   milestones: string; acceptance: string; revision_rounds: string; confidentiality: string; visibility: string;
-  ownership_notes: string; assumptions: string;
+  ownership_notes: string; assumptions: string; closes_at: string;
 };
 
 const EMPTY: Form = {
   category_slug: '', title: '', outcome: '', description: '', deliverables: '', skills: '', experience_level: 'any',
   budget_model: 'fixed', budget_min: '', budget_max: '', deadline: '', milestones: '', acceptance: '', revision_rounds: '2',
-  confidentiality: 'standard', visibility: 'public', ownership_notes: '', assumptions: '',
+  confidentiality: 'standard', visibility: 'public', ownership_notes: '', assumptions: '', closes_at: '',
 };
 
 const ACTIONS: Record<string, { action: string; label: string }[]> = {
@@ -43,14 +44,14 @@ const ACTIONS: Record<string, { action: string; label: string }[]> = {
   hiring: [{ action: 'close', label: 'Close' }],
 };
 
-function formFromBrief(brief: Brief, visibility: string): Form {
+function formFromBrief(brief: Brief, visibility: string, closesAt: string | null): Form {
   return {
     category_slug: brief.category_slug, title: brief.title, outcome: brief.outcome, description: brief.description,
     deliverables: brief.deliverables.join('\n'), skills: brief.skills.join(', '), experience_level: brief.experience_level,
     budget_model: brief.budget_model, budget_min: minorToRupees(brief.budget_min_minor), budget_max: minorToRupees(brief.budget_max_minor),
     deadline: brief.deadline ?? '', milestones: brief.milestones.map((m) => m.title).join('\n'), acceptance: brief.acceptance_criteria.join('\n'),
     revision_rounds: String(brief.revision_rounds), confidentiality: brief.confidentiality, visibility,
-    ownership_notes: brief.ownership_notes, assumptions: brief.assumptions.join('\n'),
+    ownership_notes: brief.ownership_notes, assumptions: brief.assumptions.join('\n'), closes_at: closesAt ? closesAt.slice(0, 10) : '',
   };
 }
 
@@ -70,7 +71,7 @@ function payloadFrom(form: Form): { payload?: Record<string, unknown>; errors: R
       currency: 'INR', deadline: form.deadline || null, milestones: linesToList(form.milestones).map((title) => ({ title, description: '' })),
       acceptance_criteria: linesToList(form.acceptance), revision_rounds: Number(form.revision_rounds),
       confidentiality: form.confidentiality, visibility: form.visibility, ownership_notes: form.ownership_notes,
-      assumptions: linesToList(form.assumptions), languages: ['en'],
+      assumptions: linesToList(form.assumptions), languages: ['en'], closes_at: form.closes_at || null,
     },
   };
 }
@@ -95,6 +96,7 @@ export default function ClientProjectsPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState('');
   const [assist, setAssist] = useState<Assist | null>(null);
+  const [matchesFor, setMatchesFor] = useState<string | null>(null);
 
   const loadListings = useCallback(async (organizationId: string) => {
     if (!organizationId) return;
@@ -146,7 +148,7 @@ export default function ClientProjectsPage() {
 
   function startEdit(listing: Listing) {
     setEditing({ id: listing.id, baseVersion: listing.current_version });
-    setForm(formFromBrief(listing.brief, listing.visibility));
+    setForm(formFromBrief(listing.brief, listing.visibility, listing.closes_at));
     setAssist(null);
     setFieldErrors({});
     setNotice('');
@@ -313,7 +315,10 @@ export default function ClientProjectsPage() {
                 <div className="field"><label htmlFor="budget-min">Minimum budget (₹)</label><input id="budget-min" inputMode="decimal" value={form.budget_min} onChange={set('budget_min')} {...invalid('budget_min_minor', 'budget-min')} />{fieldError('budget_min_minor', 'budget-min')}</div>
                 <div className="field"><label htmlFor="budget-max">Maximum budget (₹)</label><input id="budget-max" inputMode="decimal" value={form.budget_max} onChange={set('budget_max')} {...invalid('budget_max_minor', 'budget-max')} />{fieldError('budget_max_minor', 'budget-max')}</div>
               </div>
-              <div className="field"><label htmlFor="deadline">Deadline</label><input id="deadline" type="date" value={form.deadline} onChange={set('deadline')} {...invalid('deadline', 'deadline')} />{fieldError('deadline', 'deadline')}</div>
+              <div className="row">
+                <div className="field"><label htmlFor="deadline">Deadline</label><input id="deadline" type="date" value={form.deadline} onChange={set('deadline')} {...invalid('deadline', 'deadline')} />{fieldError('deadline', 'deadline')}</div>
+                <div className="field"><label htmlFor="closes-at">Stop taking proposals after (optional, up to 180 days)</label><input id="closes-at" type="date" value={form.closes_at} onChange={set('closes_at')} {...invalid('closes_at', 'closes-at')} />{fieldError('closes_at', 'closes-at')}</div>
+              </div>
 
               <div className="field"><label htmlFor="milestones">Milestones (one per line)</label><textarea id="milestones" rows={3} value={form.milestones} onChange={set('milestones')} {...invalid('milestones', 'milestones')} />{fieldError('milestones', 'milestones')}</div>
               <div className="field"><label htmlFor="acceptance">Acceptance criteria (one per line)</label><textarea id="acceptance" rows={3} value={form.acceptance} onChange={set('acceptance')} {...invalid('acceptance_criteria', 'acceptance')} />{fieldError('acceptance_criteria', 'acceptance')}</div>
@@ -343,17 +348,27 @@ export default function ClientProjectsPage() {
             {listings.map((l) => (
               <div className="card item" key={l.id}>
                 <div className="row between"><b>{l.brief.title}</b><span className="badge">{STATUS_LABELS[l.status] ?? l.status} · v{l.current_version}</span></div>
-                <p className="muted">{formatBudget(l.brief.budget_min_minor, l.brief.budget_max_minor, l.brief.currency, l.brief.budget_model)} · {l.brief.deadline ? `Deadline ${l.brief.deadline}` : 'No deadline'} · {l.visibility}</p>
+                <p className="muted">{formatBudget(l.brief.budget_min_minor, l.brief.budget_max_minor, l.brief.currency, l.brief.budget_model)} · {l.brief.deadline ? `Deadline ${l.brief.deadline}` : 'No deadline'} · {l.visibility}{l.closes_at ? ` · Closes ${l.closes_at.slice(0, 10)}` : ''}</p>
                 {l.status === 'in_review' && <p className="muted">Waiting for a moderator. Edit the brief to return it to draft.</p>}
                 <div className="row">
                   {['draft', 'in_review', 'published', 'paused'].includes(l.status) && <button className="btn" disabled={busy} onClick={() => startEdit(l)}>Edit</button>}
                   {canManage && (ACTIONS[l.status] ?? []).map((a) => (
                     <button key={a.action} className={`btn${a.action === 'submit' ? ' primary' : ''}`} disabled={busy} onClick={() => void transition(l, a.action)}>{a.label}</button>
                   ))}
+                  {['draft', 'in_review', 'published', 'hiring', 'paused'].includes(l.status) && (
+                    <button className="btn" aria-expanded={matchesFor === l.id} onClick={() => setMatchesFor(matchesFor === l.id ? null : l.id)}>
+                      {matchesFor === l.id ? 'Hide suggestions' : 'Find freelancers'}
+                    </button>
+                  )}
                 </div>
+                {matchesFor === l.id && (
+                  <MatchPanel listingId={l.id} organizationId={orgId} canInvite={canManage}
+                    invitable={['published', 'hiring'].includes(l.status) && l.visibility !== 'private'} />
+                )}
               </div>
             ))}
           </section>
+          <SavedFreelancers key={orgId} organizationId={orgId} />
         </>
       )}
     </main>

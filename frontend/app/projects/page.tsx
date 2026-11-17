@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ApiError, api, useSessionToken } from '@/lib/api-client';
 import { formatBudget } from '@/lib/listing-format';
+import { Invitations, MarketplaceVisibility } from './invitations';
 
 /**
  * Native client projects for freelancers (Phase 2). Shows only published,
@@ -75,6 +76,9 @@ export default function ProjectsPage() {
         <div className="card"><p className="muted">Client-posted projects open when the client marketplace launches. External matches stay on your workspace.</p></div>
       ) : (
         <>
+          <MarketplaceVisibility />
+          <Invitations />
+          <h3>Public projects</h3>
           <form className="row" onSubmit={search} role="search">
             <div className="field">
               <label htmlFor="q">Search</label>

@@ -1,5 +1,11 @@
 # Test Status
 
+## Phase 2 batch 2 — 2026-11-17 IST (release 5.50.0)
+- Edge API (real `postgres` 3.4.9 + `bcryptjs`): **173 passed, 0 failed** (new `matching.test.ts` 22; `listings.test.ts` now 25 with closing-date tests). Typecheck clean (TS-6-only `mfa-service.ts` messages excluded, as before). Worker bundle builds (402 KB).
+- PostgreSQL 16 with the 0052 DDL: the **real route handlers** were run end to end with the real driver: create invite-only listing with closing date → publish → matches (hidden freelancer excluded, newcomer flagged) → invite-only listing hidden before invitation, visible to the invitee only → duplicate invite 409 → hidden freelancer 404 → other user's invitation 404 → accept → second answer 409 → withdraw → re-invite → saved-freelancer upsert → outsider 404 → opt-in/out → closing-date-only edit keeps version 1 → expiry marks the listing expired. `= ANY(text[])` parameter verified.
+- Frontend: typecheck 0 errors (pages, components, all 4 e2e specs incl. 2 new Playwright tests); `npm run test:unit` 10/10. Playwright runs in CI.
+- Python: `tests/test_invitations_saved_v552.py` (5 tests) compiled; runs in CI.
+
 ## Phase 2 batch 1 — 2026-11-17 IST (release 5.49.0)
 - Edge API (real `postgres` 3.4.9 + `bcryptjs`): **149 passed, 0 failed** (new `listings.test.ts` 23: validation, lifecycle, screening, public projection, Brief Builder guard/quota/fallback, routes incl. non-member 404s, owner-only transitions, version conflicts, re-screening). Typecheck clean; bundle builds.
 - PostgreSQL 16: 0051 DDL; marketplace query with bound parameters (filters, search, keyset paging; excludes draft/private/expired/closed-org); FOR UPDATE + new version; unique version, budget range, status and category FK rejections.

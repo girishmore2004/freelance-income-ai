@@ -77,6 +77,9 @@ class Profile(Base):
     preferred_work_types: Mapped[str] = mapped_column(Text, default="[\"fixed\", \"hourly\"]")
     preferred_industries: Mapped[str] = mapped_column(Text, default="[]")
     dealbreakers: Mapped[str] = mapped_column(Text, default="[]")
+    # Opt-in to being suggested to clients (migration 0052). Off by default.
+    marketplace_visible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    marketplace_visible_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     user = relationship("User", back_populates="profile")
 class Opportunity(Base):
     __tablename__ = "opportunities"
@@ -1293,4 +1296,35 @@ class ProjectListingVersion(Base):
     assumptions_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
+
+class ListingInvitation(Base):
+    """A client's invitation for one freelancer to propose on a listing (migration 0052)."""
+    __tablename__ = "listing_invitations"
+    __table_args__ = (
+        UniqueConstraint("listing_id", "freelancer_user_id", name="uq_listing_invitation"),
+        CheckConstraint("status IN ('pending', 'accepted', 'declined', 'withdrawn')", name="ck_listing_invitations_status"),
+        Index("ix_listing_invitations_freelancer", "freelancer_user_id", "created_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    listing_id: Mapped[str] = mapped_column(ForeignKey("project_listings.id", ondelete="CASCADE"), nullable=False)
+    freelancer_user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    invited_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    message: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    match_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", server_default="pending")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class SavedFreelancer(Base):
+    """A freelancer an organisation saved for later (migration 0052)."""
+    __tablename__ = "saved_freelancers"
+    __table_args__ = (UniqueConstraint("organization_id", "freelancer_user_id", name="uq_saved_freelancer"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    freelancer_user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    saved_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    note: Mapped[str] = mapped_column(String(300), nullable=False, default="", server_default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)

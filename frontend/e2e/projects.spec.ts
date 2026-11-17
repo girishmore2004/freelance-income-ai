@@ -107,3 +107,83 @@ test('freelancers see published projects and confidential clients stay anonymous
   await page.getByRole('button', { name: 'Show details' }).click();
   await expect(page.getByText('Bookings are saved')).toBeVisible();
 });
+
+const MATCH = {
+  freelancer: { user_id: 'f1', display_name: 'Asha Rao', headline: 'Next.js developer', skills: ['Next.js', 'SEO'], services: ['Website builds'], hourly_rate: 1500, currency: 'INR', weekly_hours: 25, timezone: 'Asia/Kolkata', newcomer: true },
+  score: 86, breakdown: { skills: 33, budget: 20, category: 15, availability: 10, timezone: 5 },
+  reasons: ['Has 2 of 3 requested skills: Next.js, SEO', 'Offers website development services'], missing_skills: ['Payments'],
+  newcomer_slot: true, invitation_status: null, saved: false,
+};
+
+test('client sees explained suggestions and invites a freelancer', async ({ page }) => {
+  const captured: Captured[] = [];
+  await signIn(page);
+  await page.route('**/api/v1/**', async (route: Route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname.replace(/\/+$/, '');
+    const body = request.postData() ? (JSON.parse(request.postData() as string) as Record<string, unknown>) : null;
+    captured.push({ method: request.method(), path, body });
+    const json = (status: number, payload: string) => route.fulfill({ status, contentType: 'application/json', body: payload });
+    if (path === '/api/v1/me') return json(200, ok({ id: 'u1', roles: ['client'] }));
+    if (path === '/api/v1/me/identity') return json(200, ok({ roles: ['client'], client_side_enabled: true, organizations: [{ id: 'o1', name: 'Acme Studio', membership_role: 'owner', kind: 'company' }] }));
+    if (path === '/api/v1/project-categories') return json(200, ok([CATEGORY]));
+    if (path === '/api/v1/organizations/o1/listings') {
+      return json(200, ok([{ id: 'L1', status: 'published', visibility: 'invite_only', moderation_status: 'passed', current_version: 1, published_at: '2026-11-17T00:00:00Z', closes_at: '2026-12-31T23:59:59Z', brief: { title: 'Candle shop website', category_slug: 'website_development', outcome: '', description: '', deliverables: [], skills: ['Next.js'], experience_level: 'any', budget_model: 'fixed', budget_min_minor: null, budget_max_minor: 5_000_000, currency: 'INR', deadline: null, milestones: [], acceptance_criteria: [], revision_rounds: 2, languages: ['en'], timezone: '', confidentiality: 'standard', ownership_notes: '', assumptions: [] } }]));
+    }
+    if (path === '/api/v1/listings/L1/matches') return json(200, ok({ listing_id: 'L1', candidates_considered: 4, method: 'deterministic', matches: [MATCH] }));
+    if (path === '/api/v1/listings/L1/invitations' && request.method() === 'POST') return json(201, ok({ id: 'i1', status: 'pending' }, 'Invitation sent'));
+    if (path === '/api/v1/listings/L1/invitations') return json(200, ok([]));
+    if (path === '/api/v1/organizations/o1/saved-freelancers') return json(200, ok([]));
+    return json(200, JSON.stringify([]));
+  });
+  await page.goto('/client/projects');
+  await expect(page.getByText(/Closes 2026-12-31/)).toBeVisible();
+  await page.getByRole('button', { name: 'Find freelancers' }).click();
+  await expect(page.getByText('Asha Rao')).toBeVisible();
+  await expect(page.getByText('Has 2 of 3 requested skills: Next.js, SEO')).toBeVisible();
+  await expect(page.getByLabel('Match score 86 out of 100')).toBeVisible();
+  await page.getByLabel(/Invitation message/).fill('We liked your portfolio.');
+  await page.getByRole('button', { name: 'Invite to propose' }).click();
+  await expect(page.getByText('Invitation sent to Asha Rao')).toBeVisible();
+  const invite = captured.find((c) => c.method === 'POST' && c.path === '/api/v1/listings/L1/invitations');
+  expect(invite?.body).toEqual({ freelancer_user_id: 'f1', message: 'We liked your portfolio.', match_score: 86 });
+});
+
+test('freelancer opts in to client suggestions and accepts an invitation', async ({ page }) => {
+  const captured: Captured[] = [];
+  let visible = false;
+  let status = 'pending';
+  await signIn(page);
+  await page.route('**/api/v1/**', async (route: Route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname.replace(/\/+$/, '');
+    const body = request.postData() ? (JSON.parse(request.postData() as string) as Record<string, unknown>) : null;
+    captured.push({ method: request.method(), path, body });
+    const json = (code: number, payload: string) => route.fulfill({ status: code, contentType: 'application/json', body: payload });
+    if (path === '/api/v1/me') return json(200, ok({ id: 'f1', roles: ['freelancer'] }));
+    if (path === '/api/v1/project-categories') return json(200, ok([CATEGORY]));
+    if (path === '/api/v1/marketplace/listings') return json(200, ok({ items: [], next_before: null }));
+    if (path === '/api/v1/me/marketplace-profile') {
+      if (request.method() === 'PUT') visible = Boolean(body?.visible);
+      return json(200, ok({ visible, visible_since: null, profile_complete: true, has_freelancer_role: true }));
+    }
+    if (path === '/api/v1/me/invitations') {
+      return json(200, ok([{ id: 'i1', status, message: 'We liked your portfolio.', created_at: '2026-11-17T00:00:00Z', listing_status: 'published', project: { title: 'Candle shop website', client_name: 'Acme Studio', outcome: 'Customers buy online.', budget_min_minor: null, budget_max_minor: 5_000_000, currency: 'INR', budget_model: 'fixed', deadline: null, skills: [] } }]));
+    }
+    if (path === '/api/v1/me/invitations/i1/respond') {
+      status = 'accepted';
+      return json(200, ok({ id: 'i1', status }, 'Invitation accepted'));
+    }
+    return json(200, JSON.stringify([]));
+  });
+  await page.goto('/projects');
+  await page.getByLabel('Show my profile to clients').check();
+  await expect(page.getByText(/Clients can see your name/)).toBeVisible();
+  expect(captured.find((c) => c.method === 'PUT' && c.path === '/api/v1/me/marketplace-profile')?.body).toEqual({ visible: true });
+
+  await expect(page.getByText('Candle shop website')).toBeVisible();
+  await expect(page.getByText('We liked your portfolio.')).toBeVisible();
+  await page.getByRole('button', { name: 'Accept' }).click();
+  await expect(page.getByText(/Invitation accepted/)).toBeVisible();
+  expect(captured.find((c) => c.path === '/api/v1/me/invitations/i1/respond')?.body).toEqual({ response: 'accept' });
+});
