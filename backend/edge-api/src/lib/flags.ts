@@ -1,5 +1,5 @@
 import type { Env } from "../types";
-import type { Sql } from "./core-routes";
+import type { Queryable } from "./core-routes";
 
 /**
  * Server-side feature flags (table `feature_flags`, migration 0049).
@@ -33,7 +33,7 @@ export function forcedOff(env: Env): Set<string> {
   );
 }
 
-export async function isEnabled(env: Env, sql: Sql, key: FlagKey, fallback: boolean): Promise<boolean> {
+export async function isEnabled(env: Env, sql: Queryable, key: FlagKey, fallback: boolean): Promise<boolean> {
   const off = forcedOff(env);
   if (off.has(key) || off.has("*")) return false;
   try {
