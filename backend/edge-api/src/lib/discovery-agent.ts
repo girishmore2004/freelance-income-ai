@@ -353,7 +353,7 @@ export async function draftForTopMatches(
   let drafted = 0;
 
   for (const opp of candidates) {
-    const { content, mode } = await draftProposal(env, profile, opp, null);
+    const { content, mode } = await draftProposal(env, profile, opp, null, { sql, userId });
 
     await sql`
       INSERT INTO proposals (id, user_id, opportunity_id, version, content, proposed_price, currency, status, created_at)
