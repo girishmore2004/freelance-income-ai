@@ -86,6 +86,10 @@ from .services.archive_recovery import build_verification_report, build_archive_
 from .services.notifications import send_telegram
 from fastapi import UploadFile, File
 from fastapi.responses import Response, RedirectResponse
+# Head of the Alembic chain this code expects. Update with every new migration;
+# tests/test_system_diagnostics_v542.py verifies it matches backend/alembic/versions.
+EXPECTED_MIGRATION_HEAD = "0049_feature_flags_ai_cost"
+
 app=FastAPI(title=settings.app_name, version="5.45.0", description="Human-approved freelance opportunity assistant")
 app.include_router(automation_router)
 app.include_router(agent_workflows_router)
@@ -685,7 +689,7 @@ def system_diagnostics(diagnostics_key: str = Header(default="", alias="X-Diagno
             except Exception:
                 migration_revision = None
         database_ok = True
-        migration_ok = migration_revision == "0045_mfa_and_login_lockout"
+        migration_ok = migration_revision == EXPECTED_MIGRATION_HEAD
     except Exception:
         database_ok = False
 
@@ -773,7 +777,7 @@ def system_diagnostics(diagnostics_key: str = Header(default="", alias="X-Diagno
             "database_migration": {
                 "status": "ok" if migration_ok else "mismatch",
                 "current_revision": migration_revision,
-                "expected_revision": "0045_mfa_and_login_lockout",
+                "expected_revision": EXPECTED_MIGRATION_HEAD,
             },
             "redis": {"status": "ok" if redis_ok else "error"},
             "worker": {"status": "ok" if worker_ok else "stale_or_missing",
@@ -813,7 +817,7 @@ def readiness():
         try:
             with engine.connect() as connection:
                 current_revision = connection.execute(text("SELECT version_num FROM alembic_version")).scalar()
-            checks["database_migration"] = current_revision == "0045_mfa_and_login_lockout"
+            checks["database_migration"] = current_revision == EXPECTED_MIGRATION_HEAD
             checks["production_configuration"] = validate_production_settings(settings)["valid"]
         except Exception:
             checks["database_migration"] = False
