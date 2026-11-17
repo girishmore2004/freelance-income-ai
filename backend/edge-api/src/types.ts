@@ -35,6 +35,15 @@ export interface Env {
   FREELANCE_JOBS?: QueueProducer;
   AI?: { run(model: string, input: unknown): Promise<unknown> };
   WORKERS_AI_MODEL?: string;
+  // AI cost controls (see lib/ai-governor.ts). Prices: USD per 1M tokens, from the provider's pricing page.
+  AI_QUOTA_DAILY_CALLS?: string;
+  AI_QUOTA_MONTHLY_CALLS?: string;
+  AI_GLOBAL_DAILY_BUDGET_USD?: string;
+  AI_COST_INPUT_USD_PER_MTOK?: string;
+  AI_COST_OUTPUT_USD_PER_MTOK?: string;
+  AI_BUDGET_ALERT_RATIO?: string;
+  // Comma-separated feature flag keys forced OFF (emergency kill switch; "*" = all).
+  FEATURE_FLAGS_OFF?: string;
   FREELANCER_TOKEN?: string;
   INCLUDE_JOB_BOARDS?: string;
 
@@ -46,6 +55,8 @@ export interface Env {
   PUBLIC_REGISTRATION?: string;
   REQUIRE_EMAIL_VERIFICATION?: string;
   ACCESS_TOKEN_EXPIRE_MINUTES?: string;
+  // "false" disables Authorization: Bearer for browser sessions (cookie mode only).
+  AUTH_ALLOW_BEARER?: string;
 
   LOGIN_FAILURE_LIMIT?: string;
   LOGIN_LOCKOUT_MINUTES?: string;
@@ -73,7 +84,10 @@ export interface Env {
   SMTP_FROM_NAME?: string;
   SMTP_USE_SSL?: string;
 
+  // Independent of JWT_SECRET. Base64/base64url, >= 32 bytes (a Fernet key works).
   OAUTH_ENCRYPTION_KEY?: string;
+  // Set only during key rotation; remove once the cron reports no remaining values.
+  OAUTH_ENCRYPTION_KEY_PREVIOUS?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   GOOGLE_REDIRECT_URI?: string;
