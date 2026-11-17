@@ -120,6 +120,12 @@ Set build variable `NEXT_PUBLIC_AUTH_MODE=cookie`, redeploy, sign in, and confir
 3. Give moderators the role (SQL as in Phase 4 step 3 with `'moderator'`). Sidebar → **Admin**: overview, moderation queue (Approve and publish / Return to client with a note), open reports, and — for admins — feature flags. **This is where you can now turn `marketplace.client_side` on or off without SQL.** `payments.live` is locked.
 4. The SQL moderation steps in "Phase 2 batch 1" step 5 are no longer needed.
 
+## Phase 4 batch 2 (release 5.60.0): money loop in test mode
+1. "Stage 3C Neon migrations" (expects `0061_payments_sandbox`).
+2. Deploy Edge (5.60.0), then the frontend.
+3. To test: `/finance` → approve a fee schedule; `/admin` → Feature flags → turn on **payments.sandbox** (optionally **payments.require_funding**). On an active contract: Payments → **Fund milestone** → **Complete test payment**; the freelancer delivers; the client approves → the freelancer sees the money on **Earnings** and can **Withdraw** (test payout). Everything is labelled TEST MODE; no real money moves. `/finance` → trial balance must stay balanced.
+4. Real payments: keep `payments.live` OFF (it is locked). After D-1/D-2, a live provider adapter is written and `PAYMENT_WEBHOOK_SECRET` is set as a Worker secret.
+
 ## Rollback
 - Edge or frontend: Cloudflare → Worker → **Deployments** → previous version → **Rollback**. If you roll the Edge API back, re-attach the old consumer to the queue.
 - Database: see DATABASE_MIGRATION_STATUS.md (5.45 code runs on the 0049 schema).

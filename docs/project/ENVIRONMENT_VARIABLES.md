@@ -36,3 +36,5 @@ Bindings in `wrangler.jsonc` (5.48.0): rate limiters `AUTH_RATE_LIMITER` (namesp
 
 ## Python (`backend/app`, not deployed)
 No new variables. `OAUTH_ENCRYPTION_KEY` already exists there.
+
+| `PAYMENT_WEBHOOK_SECRET` | Edge API | Secret | Not set yet | HMAC key for webhooks from the live payment provider (after D-2). While unset, `/payments/webhooks/*` answers 404. |

@@ -6,6 +6,7 @@ import { TermsForm, type Terms } from './terms-form';
 import { ContractWorkspace } from './workspace';
 import { ContractReviews } from './reviews';
 import { FeeEstimate } from './fee-estimate';
+import { PaymentsPanel } from './payments-panel';
 
 /**
  * Contracts for both parties (Phase 3). An offer becomes active only when the
@@ -20,7 +21,7 @@ type Version = Terms & {
 type Summary = { id: string; status: string; party: 'client' | 'freelancer'; client_name: string; current_version: number; activated_at: string | null; terms: Version };
 type Detail = Summary & {
   project_title: string; versions: Version[]; allowed_actions: string[]; funding: { available: boolean; message: string };
-  agreed_version: number | null; pending_change: boolean; agreed_terms: Version | null;
+  agreed_version: number | null; pending_change: boolean; agreed_terms: Version | null; can_manage?: boolean;
 };
 
 function messageOf(e: unknown): string {
@@ -173,6 +174,19 @@ export default function ContractsPage() {
                 />
               )}
 
+              {['active', 'completed', 'cancelled'].includes(detail.status) && (
+                <PaymentsPanel
+                  key={`pay-${detail.id}-${detail.status}`}
+                  contractId={detail.id}
+                  contractStatus={detail.status}
+                  party={detail.party}
+                  canManage={detail.can_manage !== false}
+                  onChanged={() => {
+                    void load();
+                    api<Detail>(`/api/v1/contracts/${detail.id}`).then((d) => { if (d.status !== detail.status) setDetail(d); }).catch(() => undefined);
+                  }}
+                />
+              )}
               {['offered', 'active', 'completed'].includes(detail.status) && (
                 <ContractWorkspace
                   key={`${detail.id}-${detail.status}`}

@@ -1674,3 +1674,122 @@ class ModerationAction(Base):
     note: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
 
+
+class PaymentIntent(Base):
+    """Funding of one contract milestone, fees locked at creation (migration 0061)."""
+    __tablename__ = "payment_intents"
+    __table_args__ = (
+        CheckConstraint("mode IN ('sandbox', 'live')", name="ck_payment_intents_mode"),
+        CheckConstraint("status IN ('created', 'funded', 'released', 'refunded', 'failed', 'cancelled')", name="ck_payment_intents_status"),
+        CheckConstraint("amount_minor > 0 AND client_fee_minor >= 0 AND freelancer_fee_minor >= 0 AND freelancer_fee_minor <= amount_minor", name="ck_payment_intents_amounts"),
+        CheckConstraint("total_minor = amount_minor + client_fee_minor", name="ck_payment_intents_total"),
+        CheckConstraint("milestone_index >= 0 AND milestone_index < 20", name="ck_payment_intents_index"),
+        Index("ix_payment_intents_contract", "contract_id", "milestone_index"),
+        Index("uq_payment_intents_open_milestone", "contract_id", "milestone_index", unique=True,
+              postgresql_where=sql_text("status IN ('created', 'funded')"), sqlite_where=sql_text("status IN ('created', 'funded')")),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    contract_id: Mapped[str] = mapped_column(ForeignKey("contracts.id", ondelete="RESTRICT"), nullable=False)
+    milestone_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    contract_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    amount_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    client_fee_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    freelancer_fee_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    total_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    fee_schedule_id: Mapped[str] = mapped_column(ForeignKey("fee_schedules.id", ondelete="RESTRICT"), nullable=False)
+    provider: Mapped[str] = mapped_column(String(30), nullable=False)
+    provider_ref: Mapped[str] = mapped_column(String(120), nullable=False, unique=True)
+    mode: Mapped[str] = mapped_column(String(10), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="created", server_default="created")
+    idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False, unique=True)
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    funded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    refunded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PaymentEvent(Base):
+    """Raw payment-provider event, unique per provider+event id (migration 0061)."""
+    __tablename__ = "payment_events"
+    __table_args__ = (
+        UniqueConstraint("provider", "event_id", name="uq_payment_events_provider_event"),
+        CheckConstraint("source IN ('webhook', 'sandbox')", name="ck_payment_events_source"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    provider: Mapped[str] = mapped_column(String(30), nullable=False)
+    event_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(60), nullable=False)
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False)
+    signature_valid: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    source: Mapped[str] = mapped_column(String(20), nullable=False)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
+
+class Payout(Base):
+    """Freelancer withdrawal from released funds (migration 0061)."""
+    __tablename__ = "payouts"
+    __table_args__ = (
+        CheckConstraint("mode IN ('sandbox', 'live')", name="ck_payouts_mode"),
+        CheckConstraint("status IN ('requested', 'paid', 'failed')", name="ck_payouts_status"),
+        CheckConstraint("amount_minor > 0", name="ck_payouts_amount"),
+        Index("ix_payouts_user", "user_id", "created_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    amount_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    provider: Mapped[str] = mapped_column(String(30), nullable=False)
+    provider_ref: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    mode: Mapped[str] = mapped_column(String(10), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="requested", server_default="requested")
+    idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class BillingInvoice(Base):
+    """Client invoice for a funded milestone (migration 0061). Sandbox ones are test documents."""
+    __tablename__ = "billing_invoices"
+    __table_args__ = (
+        CheckConstraint("mode IN ('sandbox', 'live')", name="ck_billing_invoices_mode"),
+        CheckConstraint("status IN ('paid', 'refunded')", name="ck_billing_invoices_status"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    number: Mapped[str] = mapped_column(String(40), nullable=False, unique=True)
+    mode: Mapped[str] = mapped_column(String(10), nullable=False)
+    contract_id: Mapped[str] = mapped_column(ForeignKey("contracts.id", ondelete="RESTRICT"), nullable=False)
+    payment_intent_id: Mapped[str] = mapped_column(ForeignKey("payment_intents.id", ondelete="RESTRICT"), nullable=False, unique=True)
+    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False)
+    milestone_title: Mapped[str] = mapped_column(String(160), nullable=False)
+    amount_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    client_fee_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    total_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="paid", server_default="paid")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
+
+class ContractCancellation(Base):
+    """A party's request to cancel an active contract (migration 0061)."""
+    __tablename__ = "contract_cancellations"
+    __table_args__ = (
+        CheckConstraint("requested_by_party IN ('client', 'freelancer')", name="ck_contract_cancellations_party"),
+        CheckConstraint("status IN ('open', 'accepted', 'declined', 'withdrawn')", name="ck_contract_cancellations_status"),
+        Index("uq_contract_cancellations_open", "contract_id", unique=True,
+              postgresql_where=sql_text("status = 'open'"), sqlite_where=sql_text("status = 'open'")),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    contract_id: Mapped[str] = mapped_column(ForeignKey("contracts.id", ondelete="RESTRICT"), nullable=False)
+    requested_by_party: Mapped[str] = mapped_column(String(20), nullable=False)
+    requested_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="open", server_default="open")
+    responded_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
