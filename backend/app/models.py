@@ -1559,3 +1559,58 @@ class FeeSchedule(Base):
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
 
+
+class Plan(Base):
+    """Plan catalogue with AI limits (migration 0057). Only 'free' is seeded; prices are D-14."""
+    __tablename__ = "plans"
+    __table_args__ = (
+        CheckConstraint("price_minor IS NULL OR price_minor >= 0", name="ck_plans_price"),
+        CheckConstraint("ai_daily_limit >= 0 AND ai_monthly_limit >= 0", name="ck_plans_limits"),
+        CheckConstraint("billing_interval IN ('month', 'year')", name="ck_plans_interval"),
+        CheckConstraint("status IN ('draft', 'active', 'retired')", name="ck_plans_status"),
+    )
+    code: Mapped[str] = mapped_column(String(40), primary_key=True)
+    name: Mapped[str] = mapped_column(String(80), nullable=False)
+    description: Mapped[str] = mapped_column(String(300), nullable=False, default="", server_default="")
+    price_minor: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR", server_default="INR")
+    billing_interval: Mapped[str] = mapped_column(String(10), nullable=False, default="month", server_default="month")
+    ai_daily_limit: Mapped[int] = mapped_column(Integer, nullable=False)
+    ai_monthly_limit: Mapped[int] = mapped_column(Integer, nullable=False)
+    features_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft", server_default="draft")
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=100, server_default="100")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
+
+class UserPlan(Base):
+    """A user's current plan (migration 0057). No row means the free plan."""
+    __tablename__ = "user_plans"
+    __table_args__ = (CheckConstraint("source IN ('admin', 'purchase', 'promotion')", name="ck_user_plans_source"),)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    plan_code: Mapped[str] = mapped_column(ForeignKey("plans.code", ondelete="RESTRICT"), nullable=False)
+    source: Mapped[str] = mapped_column(String(20), nullable=False, default="admin", server_default="admin")
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    granted_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+
+class AICreditLedger(Base):
+    """Signed AI credit movements (migration 0057); balance = sum(delta)."""
+    __tablename__ = "ai_credit_ledger"
+    __table_args__ = (
+        UniqueConstraint("reason", "ref", name="uq_ai_credit_ledger_ref"),
+        CheckConstraint("delta <> 0", name="ck_ai_credit_ledger_delta"),
+        CheckConstraint("reason IN ('grant', 'ai_call', 'adjustment', 'purchase', 'expiry')", name="ck_ai_credit_ledger_reason"),
+        Index("ix_ai_credit_ledger_user", "user_id", "created_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    delta: Mapped[int] = mapped_column(Integer, nullable=False)
+    reason: Mapped[str] = mapped_column(String(20), nullable=False)
+    ref: Mapped[str] = mapped_column(String(100), nullable=False)
+    note: Mapped[str] = mapped_column(String(300), nullable=False, default="", server_default="")
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+

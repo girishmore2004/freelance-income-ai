@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ApiError, api, useSessionToken } from '@/lib/api-client';
+import { PlanCard } from './plan-card';
 
 /**
  * Account & roles (Phase 1). One login, two public roles:
@@ -174,6 +175,7 @@ export default function AccountPage() {
 
       {identity && (
         <>
+          <PlanCard />
           <section className="card" aria-labelledby="roles-heading">
             <h3 id="roles-heading">Your roles</h3>
             <p className="muted">One login can both find work and hire. Your freelancer and client records stay separate.</p>

@@ -22,7 +22,7 @@ test('finance staff save a draft fee schedule as basis points', async ({ page })
   });
   await page.goto('/finance');
   await expect(page.getByText('No fee schedule yet. Fees are founder decision D-5.')).toBeVisible();
-  await page.getByLabel('Name').fill('Launch fees');
+  await page.getByLabel('Name', { exact: true }).fill('Launch fees');
   await page.getByLabel('Client fee (%)').fill('3.5');
   await page.getByLabel('Freelancer fee (%)').fill('2.5');
   await page.getByLabel('Minimum fee (₹)').fill('50');

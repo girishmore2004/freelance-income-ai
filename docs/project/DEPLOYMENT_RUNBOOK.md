@@ -100,6 +100,11 @@ Set build variable `NEXT_PUBLIC_AUTH_MODE=cookie`, redeploy, sign in, and confir
 3. Give yourself staff roles (Neon SQL Editor; replace the email): `INSERT INTO user_roles (id, user_id, role, status, granted_by) SELECT gen_random_uuid()::text, id, r, 'active', 'founder' FROM users, unnest(ARRAY['admin','finance']) AS r WHERE email = 'you@example.com' ON CONFLICT DO NOTHING;`
 4. When D-5 is decided: open `/finance` → enter the fee schedule → **Save draft** → **Approve (admin)**. Contracts then show fee estimates. Until then they say "Platform fees have not been decided yet."
 
+## Phase 5 batch 1 (release 5.55.0): plans and AI credits
+1. Neon backup branch → "Stage 3C Neon migrations" (expects `0057_plans_credits`). Check: `SELECT code, ai_daily_limit, ai_monthly_limit FROM plans;` → `free | 20 | 300`.
+2. Deploy Edge (5.55.0), then the frontend. Account → "Plan and AI usage" shows today's and this month's AI drafts.
+3. Admin (`/finance` → "Plans and AI credits"): create draft plans with limits (prices are D-14 and stay empty), Activate, give a plan to a user by email, grant AI credits (each grant is applied once).
+
 ## Rollback
 - Edge or frontend: Cloudflare → Worker → **Deployments** → previous version → **Rollback**. If you roll the Edge API back, re-attach the old consumer to the queue.
 - Database: see DATABASE_MIGRATION_STATUS.md (5.45 code runs on the 0049 schema).

@@ -1,5 +1,14 @@
 # Test Status
 
+## Phase 5 batch 1 — 2026-11-17 IST (release 5.55.0)
+- Edge API: **221 passed, 0 failed** (new `plans.test.ts` 7: plan limits from the user's plan, the free plan or the Worker defaults when plan tables are missing; one credit per call beyond the monthly limit, never beyond the daily limit; missing credit table = 0; plan validation; admin-only routes; idempotent credit grants; the free plan cannot be retired). Existing `ai-governor.test.ts` unchanged and passing. Bundle 478 KB.
+- PostgreSQL 16 with the 0057 DDL: free plan limits 20/300 apply by default; admin creates a draft plan (invalid 422, duplicate 409), cannot grant a draft (422), activates it, cannot retire `free` (409), unknown email 404, grants the plan (email match is case-insensitive) → limits switch to 2/day, 3/month → real governor calls: ok, ok, daily limit, daily limit → credit grant (repeat with the same grant id writes nothing) → ok, ok + 1 credit spent, monthly limit, monthly limit → `/me/plan` shows plan, usage and 0 credits left.
+- Frontend: typecheck 0 errors (Account plan card, admin plan tools on `/finance`, new `e2e/plans.spec.ts`; finance e2e label made exact because a "Plan name" field now exists).
+- Python: `tests/test_plans_credits_v557.py` (3 tests) compiled; runs in CI.
+
+## Phase 4 batch 1 — GitHub CI (verified)
+Green on the first push; the CI migration job ran 0056 (with the trigger SQL) on real PostgreSQL. `main` @ 6eb6041: pytest 539 passed; Playwright 29 passed / 2 skipped (bearer), 30 passed / 1 skipped (cookie). Edge API CI 214/214.
+
 ## Phase 4 batch 1 — 2026-11-17 IST (release 5.54.0)
 - Edge API: **214 passed, 0 failed** (new `ledger.test.ts` 9: entry validation incl. live refusal, natural balances, one-transaction posting and idempotent repeats, half-up rounding, minimum-fee top-up, schedule bounds, staff-only routes, approval by admin only with retirement of the previous schedule). Typecheck clean.
 - PostgreSQL 16 with the 0056 DDL and its trigger SQL (extracted verbatim from the migration): balanced sandbox entry posted; repeated idempotency key returned the same entry with nothing written; live / unbalanced / fractional entries refused by code; an unbalanced entry inserted directly with SQL **rejected by the database at commit**; UPDATE and DELETE on ledger rows **rejected by the database**; reversal entry posted; trial balance totals equal; finance API: non-staff 404, quote 409 until a schedule is approved, invalid schedule 422, finance cannot approve (403), admin approves, re-approve 409, quotes ₹10,000 → client ₹350 / freelancer ₹250, ₹500 → minimum ₹50 topped up on the client side.

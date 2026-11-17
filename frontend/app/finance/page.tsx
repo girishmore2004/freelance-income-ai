@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ApiError, api, useSessionToken } from '@/lib/api-client';
 import { formatMinor } from '@/lib/listing-format';
+import { AdminPlanTools } from './admin-plan-tools';
 
 /**
  * Staff finance page (finance/admin roles only): fee schedules and the
@@ -102,6 +103,8 @@ export default function FinancePage() {
           <button className="btn primary" type="submit" disabled={busy}>Save draft</button>
         </form>
       </section>
+
+      <AdminPlanTools />
 
       <section className="card" aria-labelledby="tb-heading">
         <h3 id="tb-heading">Sandbox trial balance</h3>
