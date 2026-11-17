@@ -2,8 +2,8 @@
 'use client';
 
 import { useEffect, useState, type FormEvent } from 'react';
+import { API_BASE as API, authFetch, useSessionToken } from '@/lib/api-client';
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 type Client = {
   id: string;
@@ -78,7 +78,7 @@ type ContractRevision = {
 };
 
 export default function ClientsPage() {
-  const [token, setToken] = useState('');
+  const [token, setToken] = useSessionToken();
   const [clients, setClients] = useState<Client[]>([]);
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [profitability, setProfitability] = useState<Record<string, unknown>>({});
@@ -139,7 +139,7 @@ export default function ClientsPage() {
   const [busy, setBusy] = useState(false);
 
   async function req(path: string, method = 'GET', body?: unknown) {
-    const response = await fetch(API + path, {
+    const response = await authFetch(API + path, {
       method,
       headers: {
         Authorization: `Bearer ${token}`,
@@ -196,11 +196,6 @@ export default function ClientsPage() {
       setBusy(false);
     }
   }
-
-  useEffect(() => {
-    const saved = localStorage.getItem('fia_token') || '';
-    setToken(saved);
-  }, []);
 
   useEffect(() => {
     if (token) void load();
