@@ -4,6 +4,7 @@ import { handleLoginRoute } from "./lib/login-route";
 import { handleAuthRoute } from "./lib/auth-routes";
 import { handleAccountRoute } from "./lib/account-routes";
 import { handleIdentityRoute } from "./lib/identity-routes";
+import { handleListingRoute } from "./lib/listing-routes";
 import { enforceRateLimit } from "./lib/rate-limit";
 import { applySessionCookies } from "./lib/auth-context";
 import { handleMfaLoginRoute } from "./lib/mfa-login-route";
@@ -387,6 +388,16 @@ async function routeRequest(
   // Core product routes: profile, dashboard, opportunities,
   // proposals, approvals
   // --------------------------------------------------
+
+  const listingResponse = await handleListingRoute(
+    request,
+    env,
+    requestId
+  );
+
+  if (listingResponse) {
+    return listingResponse;
+  }
 
   const jobResponse = await handleJobRoute(
     request,
