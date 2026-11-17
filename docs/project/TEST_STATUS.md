@@ -1,5 +1,12 @@
 # Test Status
 
+## Phase 8 batch 1 — 2026-11-17 IST (release 5.59.0)
+- Edge API: **242 passed, 0 failed** (new `public.test.ts` 3: decided values only, "not decided" fees, unavailable parts before migrations, GET-only, no login). Against PostgreSQL the route returned the free plan, `fees: not_decided`, `payments_live: false`.
+- Frontend: typecheck 0 errors (`/how-it-works`, `/pricing`, `/safety`, `/help`, links on the sign-in card, `e2e/public.spec.ts` with 2 journeys).
+
+## Phase 7 batch 1 — GitHub CI (verified)
+Green on the first push. `main` @ 2f65b5f: 1 skipped   2 skipped   36 passed (20.7s)   37 passed (14.9s) 550 passed, 6 warnings in 15.75s Edge API CI 239/239.
+
 ## Phase 7 batch 1 — 2026-11-17 IST (release 5.58.0)
 - Edge API: **239 passed, 0 failed** (new `trust.test.ts` 5: report validation, de-duplication and volume limit, staff-only endpoints, approve/return with logged reason in one transaction, action + hide pending review without deletes, admin-only flags with `payments.live` locked).
 - PostgreSQL 16 with the 0060 DDL and trigger: a fee-requesting brief was held by the screen and appeared in the queue with `upfront_fee`; return without a reason 422; returned; second decision 409; reports: invalid 422, unknown target 404, created, duplicate open report 409, self-report 422; staff saw the reporter, actioned it and the listing was hidden pending review (`in_review`, `reported:scam`); re-resolve 409; overview counts and flags; moderator cannot change flags (403); `payments.live` refused (409 `FLAG_LOCKED`); the moderation log recorded each decision and **the database refused DELETE on it**.

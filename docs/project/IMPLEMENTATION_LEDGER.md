@@ -1,6 +1,6 @@
 # Implementation Ledger
 
-Last verified checkpoint: **2026-11-17, Phase 7 batch 1** (release 5.58.0, local tests; CI result recorded in TEST_STATUS.md).
+Last verified checkpoint: **2026-11-17, Phase 8 batch 1** (release 5.59.0, local tests; CI result recorded in TEST_STATUS.md).
 
 **Deployment state 2026-11-17 18:34 IST (build #8f8b52e3, branch `cloudflare-edge-api-phase1` @ 4b683a1):** Workers Build ran `npm run check` — vitest 84/84 passed, typecheck passed. `wrangler deploy` uploaded the Worker (fetch + 6-hourly cron are live, v5.46.0) but **queue consumer registration failed** (code 11004: queue already has a consumer, the old `freelance-income-ai-consumer`). Neon migrations 0047–0049: not yet confirmed as run.
 Status values: DONE (implemented + tested here) · PARTIAL · BLOCKED · NOT STARTED.
@@ -58,6 +58,7 @@ Status values: DONE (implemented + tested here) · PARTIAL · BLOCKED · NOT STA
 | 6.2 | Deterministic client assistants: C3 Proposal Comparison (facts and flags in arrival order, never a ranking), C5 Contract and Milestone Assistant (exact split of the freelancer's price, dates to deadline, missing-term flags; client edits), C6 Review and Acceptance Assistant (criteria checklist against the delivery note; client decides) — each behind its registry switch and recorded as an agent run | DONE (code) | fia + edge | `lib/assistants.ts`, `lib/assistant-routes.ts`, `0059_assistants_live.py`, `proposals-panel.tsx`, `workspace.tsx` | `assistants.test.ts`; PostgreSQL; e2e | Not deployed | Model-assisted versions need D-13 and evaluation sets |
 | 7.1 | User reports (listing, user, proposal, message, review; reasons; one open report per target; 20 open max) with status | DONE (code) | fia + edge | `0060_trust_admin.py`, `models.py`, `lib/trust-routes.ts`, `app/projects/report-button.tsx` | `trust.test.ts`; PostgreSQL; e2e | Not deployed | Report buttons on messages and profiles |
 | 7.2 | Staff moderation: queue of listings held by the screen (approve / return with reason), report handling (action, dismiss, hide listing pending review), append-only moderation log (DB-enforced), overview (counts, queue ages, AI cost), feature flags for admins with `payments.live` locked; `/admin` page | DONE (code) | fia + edge | same + `app/admin/page.tsx` | unit + PostgreSQL + e2e | Not deployed | Account suspension (W3, human only) needs session revocation design |
+| 8.1 | Public pages without login: How it works, Pricing (live plans; fees shown only when approved; payments status), Safety, Help; linked from the sign-in card; public pricing API | DONE (code) | fia + edge | `lib/public-routes.ts`, `app/how-it-works`, `app/pricing`, `app/safety`, `app/help`, `app/public-nav.tsx` | `public.test.ts`; PostgreSQL; `e2e/public.spec.ts` | Not deployed | Terms and privacy pages need legal text (D-1) |
 | 7.3 | Disputes, appeals, policy documents, account deletion/anonymisation | NOT STARTED / BLOCKED | — | — | — | — | Policies need legal review (D-1); disputes need payments for holds |
 | 5.2 | Buying plans and credit packs | BLOCKED | — | — | — | — | Payments (D-1/D-2) |
 | 4.3 | Payment provider adapter, milestone funding, payouts, refunds, webhooks, invoices/tax | BLOCKED | — | — | — | — | D-1 (entity/tax), D-2 (provider), D-3, D-4 |
@@ -66,4 +67,4 @@ Status values: DONE (implemented + tested here) · PARTIAL · BLOCKED · NOT STA
 | 2–8 | Client marketplace, shared delivery, payments, business model, agents, trust, launch | NOT STARTED | — | — | — | — | Phase 1 first; payments BLOCKED on D-1/D-2 |
 
 ## Next exact step
-Phase 8 batch 1: public pages (how it works, pricing showing only decided values, safety, help) without login, linked from the sign-in screen; honest wording (payments not live, fees not decided). Then the launch checklist.
+Founder actions (see PROJECT_STATUS.md "What only you can do"): run migrations 0051–0060 on Neon, decide D-1/D-2/D-5/D-6/D-13/D-14/D-15, then a staged beta with the client marketplace flag on. Engineering next: account suspension and appeals (K-28), file uploads to R2 (K-26), notifications by email (D-15), payment provider adapter once D-2 is chosen.
