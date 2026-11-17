@@ -1,12 +1,12 @@
 'use client';
 import {useEffect,useState,type FormEvent} from 'react';
-const API=process.env.NEXT_PUBLIC_API_URL||'http://localhost:8000';
+import { API_BASE as API, authFetch, useSessionToken } from '@/lib/api-client';
 type Source={id:string;type:string;excerpt:string};type Turn={id:string;question:string;answer:string;sources:Source[];generation_mode:string;created_at:string};
 export default function CoachPage(){
- const [token,setToken]=useState('');const [question,setQuestion]=useState('');const [turns,setTurns]=useState<Turn[]>([]);const [busy,setBusy]=useState(false);const [error,setError]=useState('');
- async function request(path:string,method='GET',body?:object){const r=await fetch(API+path,{method,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});const data=await r.json().catch(()=>({detail:'Invalid server response'}));if(!r.ok)throw new Error(data.detail||'Request failed');return data}
+ const [token,setToken]=useSessionToken();const [question,setQuestion]=useState('');const [turns,setTurns]=useState<Turn[]>([]);const [busy,setBusy]=useState(false);const [error,setError]=useState('');
+ async function request(path:string,method='GET',body?:object){const r=await authFetch(API+path,{method,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});const data=await r.json().catch(()=>({detail:'Invalid server response'}));if(!r.ok)throw new Error(data.detail||'Request failed');return data}
  async function load(){if(!token)return;try{setTurns(await request('/api/v1/coach/history'))}catch(e:any){setError(e.message)}}
- useEffect(()=>{setToken(localStorage.getItem('fia_token')||'')},[]);useEffect(()=>{if(token)load()},[token]);
+ useEffect(()=>{if(token)load()},[token]);
  async function ask(e:FormEvent){e.preventDefault();if(!question.trim()||busy)return;setBusy(true);setError('');try{const result=await request('/api/v1/coach/ask','POST',{question});setTurns(old=>[result,...old]);setQuestion('')}catch(e:any){setError(e.message)}finally{setBusy(false)}}
  if(!token)return <main className="shell"><p>Sign in first, then open the business coach.</p><a href="/">Back to dashboard</a></main>;
  return <main className="shell"><header className="top"><div><div className="brand">AI Business Coach</div><div className="muted">Ask questions about your saved freelance business records and portfolio</div></div><nav className="row"><a className="btn" href="/agent">Action plan</a><a className="btn" href="/workspace">Workspace</a><a className="btn" href="/">Dashboard</a></nav></header>
