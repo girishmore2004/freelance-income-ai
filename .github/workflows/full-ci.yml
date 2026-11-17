@@ -132,6 +132,10 @@ jobs:
         working-directory: frontend
         run: npm run typecheck
 
+      - name: Frontend unit tests (shared API client)
+        working-directory: frontend
+        run: npm run test:unit
+
       - name: Build frontend with production API configuration
         working-directory: frontend
         env:
@@ -160,6 +164,13 @@ jobs:
         working-directory: frontend
         env:
           CI: "true"
+        run: npm run test:e2e
+
+      - name: Run browser regression suite in cookie-session mode
+        working-directory: frontend
+        env:
+          CI: "true"
+          E2E_AUTH_MODE: cookie
         run: npm run test:e2e
 
   dependency-security:
