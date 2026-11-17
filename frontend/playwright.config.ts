@@ -33,6 +33,8 @@ export default defineConfig({
         // Keep mocked API calls on the same origin as the frontend.
         env: {
           NEXT_PUBLIC_API_URL: baseURL,
+          // "cookie" runs the suite against HttpOnly cookie sessions.
+          NEXT_PUBLIC_AUTH_MODE: process.env.E2E_AUTH_MODE || '',
         },
       },
 });
