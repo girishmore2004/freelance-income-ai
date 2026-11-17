@@ -3,6 +3,8 @@ import type { Env, QueueBatch } from "./types";
 import { handleLoginRoute } from "./lib/login-route";
 import { handleAuthRoute } from "./lib/auth-routes";
 import { handleAccountRoute } from "./lib/account-routes";
+import { handleIdentityRoute } from "./lib/identity-routes";
+import { enforceRateLimit } from "./lib/rate-limit";
 import { applySessionCookies } from "./lib/auth-context";
 import { handleMfaLoginRoute } from "./lib/mfa-login-route";
 import { handleRegisterRoute } from "./lib/register-route";
@@ -60,6 +62,16 @@ async function routeRequest(
   const url = new URL(request.url);
   const path = url.pathname;
   const method = request.method.toUpperCase();
+
+  // --------------------------------------------------
+  // Throttling (Cloudflare Rate Limiting bindings)
+  // --------------------------------------------------
+
+  const limited = await enforceRateLimit(request, env, requestId);
+
+  if (limited) {
+    return limited;
+  }
 
   // --------------------------------------------------
   // Root endpoint
@@ -324,6 +336,21 @@ async function routeRequest(
 
   if (accountResponse) {
     return accountResponse;
+  }
+
+  // --------------------------------------------------
+  // Identity: roles and organisations (/me/identity, /me/roles,
+  // /organizations). Must run before the generic /me handler.
+  // --------------------------------------------------
+
+  const identityResponse = await handleIdentityRoute(
+    request,
+    env,
+    requestId
+  );
+
+  if (identityResponse) {
+    return identityResponse;
   }
 
   // --------------------------------------------------
