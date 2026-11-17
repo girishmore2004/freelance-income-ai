@@ -1,11 +1,8 @@
 
 import postgres from "postgres";
 import type { Env } from "../types";
-import {
-  authenticateAccessToken,
-  revokeAccessSession,
-  revokeAllAccessSessions
-} from "./session-service";
+import { revokeAccessSession } from "./session-service";
+import { authenticateRequest } from "./auth-context";
 import { failure, success } from "./response";
 
 function database(env: Env) {
@@ -27,50 +24,19 @@ function database(env: Env) {
   });
 }
 
-function getBearerToken(request: Request): string | null {
-  const authorization = request.headers.get("Authorization");
-
-  if (!authorization) return null;
-
-  const match = authorization.match(/^Bearer\s+(.+)$/i);
-
-  return match?.[1]?.trim() || null;
-}
-
+// Bearer or HttpOnly cookie (with CSRF check); see auth-context.ts.
 async function requireUser(
   request: Request,
   env: Env,
   requestId: string
 ) {
-  const token = getBearerToken(request);
+  const authenticated = await authenticateRequest(request, env, requestId);
 
-  if (!token) {
-    return {
-      response: failure(
-        "AUTHENTICATION_REQUIRED",
-        "Authentication required",
-        401,
-        requestId
-      )
-    };
+  if (authenticated instanceof Response) {
+    return { response: authenticated };
   }
 
-  const authenticated = await authenticateAccessToken(env, token);
-
-  if (!authenticated) {
-    return {
-      response: failure(
-        "INVALID_OR_EXPIRED_SESSION",
-        "Session is invalid, expired or revoked. Please sign in again.",
-        401,
-        requestId
-      )
-    };
-  }
-
-  return {
-    authenticated
-  };
+  return { authenticated };
 }
 
 export async function handleAuthRoute(
