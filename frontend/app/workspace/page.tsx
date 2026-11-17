@@ -1,12 +1,12 @@
 'use client';
 import {useEffect,useState} from 'react';
-const API=process.env.NEXT_PUBLIC_API_URL||'http://localhost:8000';
+import {API_BASE as API,authFetch,useSessionToken} from '@/lib/api-client';
 type Obj=Record<string,any>;
 export default function WorkspacePage(){
- const [token,setToken]=useState(''); const [data,setData]=useState<Obj>({}); const [goal,setGoal]=useState<Obj>({monthly_income_target:0,weekly_hours_target:10,monthly_proposals_target:4,monthly_outreach_target:10,currency:'INR'}); const [busy,setBusy]=useState(false); const [message,setMessage]=useState('');
- async function req(path:string,method='GET',body?:Obj){const r=await fetch(API+path,{method,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});const j=await r.json().catch(()=>({detail:'Invalid server response'}));if(!r.ok)throw new Error(j.detail||'Request failed');return j}
+ const [token,setToken]=useSessionToken(); const [data,setData]=useState<Obj>({}); const [goal,setGoal]=useState<Obj>({monthly_income_target:0,weekly_hours_target:10,monthly_proposals_target:4,monthly_outreach_target:10,currency:'INR'}); const [busy,setBusy]=useState(false); const [message,setMessage]=useState('');
+ async function req(path:string,method='GET',body?:Obj){const r=await authFetch(API+path,{method,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});const j=await r.json().catch(()=>({detail:'Invalid server response'}));if(!r.ok)throw new Error(j.detail||'Request failed');return j}
  async function load(){if(!token)return;setBusy(true);setMessage('');try{const [overview,goals,events]=await Promise.all([req('/api/v1/workspace/overview'),req('/api/v1/business-goals'),req('/api/v1/workspace/events')]);setData({...overview,events});setGoal(goals)}catch(e:any){setMessage(e.message)}finally{setBusy(false)}}
- useEffect(()=>{setToken(localStorage.getItem('fia_token')||'')},[]);useEffect(()=>{if(token)load()},[token]);
+ useEffect(()=>{if(token)load()},[token]);
  async function save(){setBusy(true);setMessage('');try{const saved=await req('/api/v1/business-goals','PUT',goal);setGoal(saved);setMessage('Business goals saved.');await load()}catch(e:any){setMessage(e.message)}finally{setBusy(false)}}
  const metrics=data.metrics||{};const money=(x:any)=>Object.entries(x||{}).map(([c,v])=>`${c} ${Number(v).toLocaleString('en-IN')}`).join(' · ')||'No paid invoices recorded this month';
  if(!token)return <main className="shell"><p>Sign in first, then open the business workspace.</p><a href="/">Back to dashboard</a></main>;
