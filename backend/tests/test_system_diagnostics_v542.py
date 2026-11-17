@@ -47,7 +47,27 @@ def test_diagnostics_route_requires_dedicated_header_secret_and_production_readi
     assert 'secrets.compare_digest' in main
     assert 'checks["database_migration"]' in main
     assert 'checks["production_configuration"]' in main
-    assert '0045_mfa_and_login_lockout' in main
+    assert 'EXPECTED_MIGRATION_HEAD' in main
+    assert '"0045_mfa_and_login_lockout"' not in main, "readiness must not pin an old revision"
+
+
+def test_expected_migration_head_matches_the_alembic_chain():
+    import re
+    root = Path(__file__).parents[1]
+    revisions, parents = set(), set()
+    for path in (root / "alembic" / "versions").glob("*.py"):
+        source = path.read_text()
+        rev = re.search(r'^revision\s*=\s*["\']([^"\']+)', source, re.M)
+        down = re.search(r'^down_revision\s*=\s*["\']([^"\']+)', source, re.M)
+        if rev:
+            revisions.add(rev.group(1))
+        if down:
+            parents.add(down.group(1))
+    heads = revisions - parents
+    assert len(heads) == 1, f"migration chain must have exactly one head, found {sorted(heads)}"
+    main = (root / "app" / "main.py").read_text()
+    declared = re.search(r'^EXPECTED_MIGRATION_HEAD\s*=\s*"([^"]+)"', main, re.M).group(1)
+    assert declared == heads.pop()
 
 
 def test_worker_publishes_expiring_multi_instance_heartbeat():
