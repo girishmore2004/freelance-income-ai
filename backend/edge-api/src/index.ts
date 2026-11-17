@@ -6,6 +6,7 @@ import { handleAccountRoute } from "./lib/account-routes";
 import { handleIdentityRoute } from "./lib/identity-routes";
 import { handleListingRoute } from "./lib/listing-routes";
 import { handleMatchRoute, runScheduledListingExpiry } from "./lib/match-routes";
+import { handleHiringRoute } from "./lib/hiring-routes";
 import { enforceRateLimit } from "./lib/rate-limit";
 import { applySessionCookies } from "./lib/auth-context";
 import { handleMfaLoginRoute } from "./lib/mfa-login-route";
@@ -389,6 +390,16 @@ async function routeRequest(
   // Core product routes: profile, dashboard, opportunities,
   // proposals, approvals
   // --------------------------------------------------
+
+  const hiringResponse = await handleHiringRoute(
+    request,
+    env,
+    requestId
+  );
+
+  if (hiringResponse) {
+    return hiringResponse;
+  }
 
   const matchResponse = await handleMatchRoute(
     request,
