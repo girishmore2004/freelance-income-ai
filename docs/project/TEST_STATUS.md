@@ -1,5 +1,14 @@
 # Test Status
 
+## Phase 4 batch 1 — 2026-11-17 IST (release 5.54.0)
+- Edge API: **214 passed, 0 failed** (new `ledger.test.ts` 9: entry validation incl. live refusal, natural balances, one-transaction posting and idempotent repeats, half-up rounding, minimum-fee top-up, schedule bounds, staff-only routes, approval by admin only with retirement of the previous schedule). Typecheck clean.
+- PostgreSQL 16 with the 0056 DDL and its trigger SQL (extracted verbatim from the migration): balanced sandbox entry posted; repeated idempotency key returned the same entry with nothing written; live / unbalanced / fractional entries refused by code; an unbalanced entry inserted directly with SQL **rejected by the database at commit**; UPDATE and DELETE on ledger rows **rejected by the database**; reversal entry posted; trial balance totals equal; finance API: non-staff 404, quote 409 until a schedule is approved, invalid schedule 422, finance cannot approve (403), admin approves, re-approve 409, quotes ₹10,000 → client ₹350 / freelancer ₹250, ₹500 → minimum ₹50 topped up on the client side.
+- Frontend: typecheck 0 errors (fee estimate on contracts, `/finance` staff page, new `e2e/finance.spec.ts` with 2 journeys, `/finance` added to sign-in guard checks).
+- Python: `tests/test_ledger_foundation_v556.py` (3 tests) compiled; runs in CI (the CI migration check runs 0056 on real PostgreSQL, including the triggers).
+
+## Phase 3 batch 3 — GitHub CI (verified)
+Green on the first push. `main` @ 1a525aa: pytest 536 passed; Playwright 26 passed / 2 skipped (bearer), 27 passed / 1 skipped (cookie). Edge API CI 205/205.
+
 ## Phase 3 batch 3 — 2026-11-17 IST (release 5.53.0)
 - Edge API: **205 passed, 0 failed** (new `review.test.ts` 6: pending-change detection and per-party actions, delivered-milestone locks, reveal rule, rating/comment validation, review routes incl. window, owner/admin, duplicates, hidden reviews; `matching.test.ts` covers the rating on cards). Typecheck clean; bundle 458 KB.
 - PostgreSQL 16 (0055 DDL + backfill), real handlers end to end: activation sets `agreed_version` → delivery → change order that alters a delivered milestone refused (422) → valid change order (adds a milestone) leaves the workspace on the agreed 2 milestones while pending → reject → accept refused (nothing pending) → new change order → **version numbering bug found and fixed** (after a rejection the next version reused number 2 and hit the unique constraint; versions now continue from the highest number) → both accept → workspace shows 3 milestones → all approved → completed → reviews: invalid rating 422, client review hidden from the freelancer, duplicate 409, freelancer review reveals both → freelancer card shows ★ 5 (1) only after reveal.

@@ -12,6 +12,7 @@ const protectedPages = [
   '/client/projects',
   '/projects',
   '/contracts',
+  '/finance',
 ];
 
 const LOGIN_PATH = '/api/v1/auth/login';

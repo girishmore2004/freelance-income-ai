@@ -1483,3 +1483,79 @@ class ContractReview(Base):
     comment: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
 
+
+class LedgerAccount(Base):
+    """Chart-of-accounts entry (migration 0056)."""
+    __tablename__ = "ledger_accounts"
+    __table_args__ = (
+        UniqueConstraint("code", "currency", name="uq_ledger_account_code"),
+        CheckConstraint("kind IN ('asset', 'liability', 'revenue', 'expense', 'equity')", name="ck_ledger_accounts_kind"),
+        CheckConstraint("owner_type IN ('platform', 'organization', 'user', 'provider')", name="ck_ledger_accounts_owner"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    code: Mapped[str] = mapped_column(String(160), nullable=False)
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    owner_type: Mapped[str] = mapped_column(String(20), nullable=False, default="platform", server_default="platform")
+    owner_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
+
+class LedgerEntry(Base):
+    """Append-only journal entry (migration 0056). Balanced and immutable in PostgreSQL via triggers."""
+    __tablename__ = "ledger_entries"
+    __table_args__ = (
+        CheckConstraint("mode IN ('sandbox', 'live')", name="ck_ledger_entries_mode"),
+        Index("ix_ledger_entries_contract", "contract_id", "created_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False, unique=True)
+    entry_type: Mapped[str] = mapped_column(String(60), nullable=False)
+    description: Mapped[str] = mapped_column(String(300), nullable=False, default="", server_default="")
+    mode: Mapped[str] = mapped_column(String(10), nullable=False)
+    contract_id: Mapped[str | None] = mapped_column(ForeignKey("contracts.id", ondelete="RESTRICT"), nullable=True)
+    reverses_entry_id: Mapped[str | None] = mapped_column(ForeignKey("ledger_entries.id", ondelete="RESTRICT"), nullable=True)
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
+
+class LedgerLine(Base):
+    """Debit or credit line of a journal entry, integer minor units (migration 0056)."""
+    __tablename__ = "ledger_lines"
+    __table_args__ = (
+        CheckConstraint("direction IN ('debit', 'credit')", name="ck_ledger_lines_direction"),
+        CheckConstraint("amount_minor > 0", name="ck_ledger_lines_amount"),
+        Index("ix_ledger_lines_entry", "entry_id"),
+        Index("ix_ledger_lines_account", "account_id"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    entry_id: Mapped[str] = mapped_column(ForeignKey("ledger_entries.id", ondelete="RESTRICT"), nullable=False)
+    account_id: Mapped[str] = mapped_column(ForeignKey("ledger_accounts.id", ondelete="RESTRICT"), nullable=False)
+    direction: Mapped[str] = mapped_column(String(6), nullable=False)
+    amount_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+
+
+class FeeSchedule(Base):
+    """Configurable platform fees in basis points (migration 0056). Not seeded: D-5."""
+    __tablename__ = "fee_schedules"
+    __table_args__ = (
+        CheckConstraint("client_fee_bps >= 0 AND client_fee_bps <= 3000", name="ck_fee_schedules_client_bps"),
+        CheckConstraint("freelancer_fee_bps >= 0 AND freelancer_fee_bps <= 3000", name="ck_fee_schedules_freelancer_bps"),
+        CheckConstraint("min_fee_minor >= 0", name="ck_fee_schedules_min"),
+        CheckConstraint("status IN ('draft', 'approved', 'retired')", name="ck_fee_schedules_status"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    client_fee_bps: Mapped[int] = mapped_column(Integer, nullable=False)
+    freelancer_fee_bps: Mapped[int] = mapped_column(Integer, nullable=False)
+    min_fee_minor: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft", server_default="draft")
+    effective_from: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    approved_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+

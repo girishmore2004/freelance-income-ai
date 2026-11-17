@@ -1,6 +1,6 @@
 # Implementation Ledger
 
-Last verified checkpoint: **2026-11-17, Phase 3 batch 3** (release 5.53.0, local tests; CI result recorded in TEST_STATUS.md).
+Last verified checkpoint: **2026-11-17, Phase 4 batch 1** (release 5.54.0, local tests; CI result recorded in TEST_STATUS.md).
 
 **Deployment state 2026-11-17 18:34 IST (build #8f8b52e3, branch `cloudflare-edge-api-phase1` @ 4b683a1):** Workers Build ran `npm run check` — vitest 84/84 passed, typecheck passed. `wrangler deploy` uploaded the Worker (fetch + 6-hourly cron are live, v5.46.0) but **queue consumer registration failed** (code 11004: queue already has a consumer, the old `freelance-income-ai-consumer`). Neon migrations 0047–0049: not yet confirmed as run.
 Status values: DONE (implemented + tested here) · PARTIAL · BLOCKED · NOT STARTED.
@@ -51,9 +51,12 @@ Status values: DONE (implemented + tested here) · PARTIAL · BLOCKED · NOT STA
 | 3.7 | Change orders on active contracts: either party proposes a new version; agreed terms keep applying until both accept; delivered milestones keep position/title/amount; reject restores the agreed version; version numbers never reused | DONE (code) | fia + edge | `0055_change_orders_reviews.py` (`agreed_version` + backfill), `contracts.ts`, `hiring-routes.ts`, `delivery-routes.ts`, `app/contracts/page.tsx` | `review.test.ts`, `hiring.test.ts`; PostgreSQL end-to-end | Not deployed | — |
 | 3.8 | Two-way reviews after completion (1–5 + comment, screened), one per party, 30-day window, hidden until both reviewed or 14 days; client reviews feed a rating on freelancer cards (display only, not used for ranking) | DONE (code) | fia + edge | `lib/review-routes.ts`, `matching.ts`, `match-routes.ts`, `app/contracts/reviews.tsx` | unit + PostgreSQL + e2e | Not deployed | Review moderation (Phase 7) |
 | 3.9 | Disputes | NOT STARTED | — | — | — | — | Phase 7 (needs staff tooling and policy) |
+| 4.1 | Double-entry ledger: accounts, journal entries, lines in minor units; idempotency key per entry; balance enforced in code and by a deferred PostgreSQL constraint trigger; append-only (UPDATE/DELETE raise); reversals; trial balance; live posting refused in code | DONE (code) | fia + edge | `0056_ledger_foundation.py`, `models.py`, `lib/ledger.ts` | `ledger.test.ts`; PostgreSQL (DB-level rejection of unbalanced and edited rows) | Not deployed | Wire to provider events once D-2 is chosen |
+| 4.2 | Fee engine + fee schedules: basis points, minimum fee, half-up rounding; draft by finance, approval by admin (previous retired); quote API; fee estimate on contracts; staff `/finance` page | DONE (code) | fia + edge | `lib/fees.ts`, `lib/finance-routes.ts`, `app/contracts/fee-estimate.tsx`, `app/finance/page.tsx` | unit + PostgreSQL + e2e | Not deployed | Founder sets fees (D-5); no schedule is seeded |
+| 4.3 | Payment provider adapter, milestone funding, payouts, refunds, webhooks, invoices/tax | BLOCKED | — | — | — | — | D-1 (entity/tax), D-2 (provider), D-3, D-4 |
 | 3.4 | Milestone funding | BLOCKED | — | — | — | — | D-1/D-2 (legal entity, payment provider); contracts show "funding not available" |
 | 1 | Remaining Phase 1: OpenAPI contract, organisation invitations, consents (needs policy docs), verification references, staff/admin tooling | NOT STARTED | — | — | — | — | Consents BLOCKED on legal docs (D-1) |
 | 2–8 | Client marketplace, shared delivery, payments, business model, agents, trust, launch | NOT STARTED | — | — | — | — | Phase 1 first; payments BLOCKED on D-1/D-2 |
 
 ## Next exact step
-Phase 4 batch 1: provider-agnostic double-entry ledger (accounts, journal entries that must balance, idempotency keys), fee configuration (no hardcoded rates; founder decision D-3 pending), a sandbox-only payment adapter interface with no live provider, all behind `payments.live` (OFF). No real money movement until D-1/D-2.
+Phase 5 batch 1: plans and AI credits as configurable data (no prices hardcoded; D-14), per-plan AI quotas wired into the existing AI governor, credit balance kept as ledger-style usage records, plan page. Charging for plans stays BLOCKED with payments (D-1/D-2).

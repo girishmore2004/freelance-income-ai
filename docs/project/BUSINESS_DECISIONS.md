@@ -18,4 +18,6 @@ No founder decisions were found recorded in the repositories or documents. Every
 | D-12 | Agent autonomy ceilings | Defaults from Master Plan 3.5 applied | — | Confirm. |
 | D-13 | AI provider/model/data policy | BLOCKED — user approval | Agent platform | Workers AI in use today. |
 | D-14 | Agent pricing/credits, plans (₹299/₹699/₹999/₹2,499; packs ₹99–₹999) | BLOCKED — user approval | Phase 5 values | Hypotheses only; build configurable. |
+| D-16 | Contact details in contract messages after hiring (currently blocked like everywhere else) | BLOCKED — user approval | Messaging policy | Keep blocked until calls/meetings exist (K-25). |
+| D-17 | Minimum-fee rule | Provisional (code) | Fee engine | Minimum applies to the combined platform fee; any top-up is charged on the client side. Change in `lib/fees.ts` if D-5 decides otherwise. |
 | D-15 | Resend account and sending domain | BLOCKED — external provider | Email verification, password reset in production | Free tier is enough for beta volumes; verify current limits on resend.com. |

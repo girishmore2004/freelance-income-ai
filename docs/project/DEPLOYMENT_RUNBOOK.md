@@ -94,6 +94,12 @@ Set build variable `NEXT_PUBLIC_AUTH_MODE=cookie`, redeploy, sign in, and confir
 2. Deploy Edge (5.53.0), then the frontend.
 3. Staging check: active contract → **Propose a change order** (e.g. add a milestone) → the other party sees the banner and **Accept change** / **Reject change**. Completed contract → both parties **Submit review**; each sees the other's review only after both reviewed.
 
+## Phase 4 batch 1 (release 5.54.0): ledger and fees (no money moves)
+1. Neon backup branch → "Stage 3C Neon migrations" (expects `0056_ledger_foundation`). Check the guards exist: `SELECT tgname FROM pg_trigger WHERE tgname LIKE 'ledger_%';` → 3 rows.
+2. Deploy Edge (5.54.0), then the frontend.
+3. Give yourself staff roles (Neon SQL Editor; replace the email): `INSERT INTO user_roles (id, user_id, role, status, granted_by) SELECT gen_random_uuid()::text, id, r, 'active', 'founder' FROM users, unnest(ARRAY['admin','finance']) AS r WHERE email = 'you@example.com' ON CONFLICT DO NOTHING;`
+4. When D-5 is decided: open `/finance` → enter the fee schedule → **Save draft** → **Approve (admin)**. Contracts then show fee estimates. Until then they say "Platform fees have not been decided yet."
+
 ## Rollback
 - Edge or frontend: Cloudflare → Worker → **Deployments** → previous version → **Rollback**. If you roll the Edge API back, re-attach the old consumer to the queue.
 - Database: see DATABASE_MIGRATION_STATUS.md (5.45 code runs on the 0049 schema).
