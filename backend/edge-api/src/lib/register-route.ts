@@ -4,6 +4,7 @@ import { hashPassword } from "./password-service";
 import { createAccessSession } from "./session-service";
 import { failure, success } from "./response";
 import { issueAccountActionTokenWith } from "./account-token-store";
+import { FLAGS, isEnabled } from "./flags";
 import { accountMailConfigured, publicAppUrl, sendAccountEmail } from "./account-mailer";
 
 function database(env: Env) {
@@ -27,10 +28,15 @@ function database(env: Env) {
 
 function validate(
   body: unknown
-): { email: string; password: string } | null {
+): { email: string; password: string; intent: "freelancer" | "client" } | null {
   if (!body || typeof body !== "object") return null;
 
-  const { email, password } = body as Record<string, unknown>;
+  const { email, password, intent } = body as Record<string, unknown>;
+
+  // Optional: which public role to start with (Master Plan: "Find work" / "Hire").
+  if (intent !== undefined && intent !== "freelancer" && intent !== "client") {
+    return null;
+  }
 
   if (typeof email !== "string" || typeof password !== "string") {
     return null;
@@ -49,7 +55,7 @@ function validate(
   // Same limits as the original FastAPI RegisterIn schema.
   if (password.length < 12 || password.length > 128) return null;
 
-  return { email: normalized, password };
+  return { email: normalized, password, intent: intent === "client" ? "client" : "freelancer" };
 }
 
 /**
@@ -111,13 +117,23 @@ export async function handleRegisterRoute(
   if (!input) {
     return failure(
       "INVALID_REGISTER_INPUT",
-      "Provide a valid email and a password of 12 to 128 characters.",
+      "Provide a valid email, a password of 12 to 128 characters and, optionally, intent \"freelancer\" or \"client\".",
       422,
       requestId
     );
   }
 
   const sql = database(env);
+
+  if (input.intent === "client" && !(await isEnabled(env, sql, FLAGS.clientMarketplace, false))) {
+    await sql.end({ timeout: 5 });
+    return failure(
+      "FEATURE_DISABLED",
+      "Hiring accounts are not open yet. Register to find work, or try again when the client marketplace launches.",
+      403,
+      requestId
+    );
+  }
 
   try {
     const passwordHash = await hashPassword(input.password);
@@ -153,6 +169,13 @@ export async function handleRegisterRoute(
           0, 'Asia/Kolkata', '["fixed", "hourly"]',
           '[]', '[]'
         )
+      `;
+
+      // Public role chosen at sign-up (migration 0050). The other role can be
+      // activated later from the account page.
+      await tx`
+        INSERT INTO user_roles (id, user_id, role, status, granted_by, created_at, updated_at)
+        VALUES (${crypto.randomUUID()}, ${userId}, ${input.intent}, 'active', 'self', now(), now())
       `;
 
       if (requireVerification) {
