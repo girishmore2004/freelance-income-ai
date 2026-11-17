@@ -1,4 +1,3 @@
-
 import { defineConfig, devices } from '@playwright/test';
 
 const baseURL =
@@ -8,6 +7,11 @@ export default defineConfig({
   testDir: './e2e',
 
   fullyParallel: true,
+
+  // CI runs against the Next.js dev server. All pages share lib/api-client.ts,
+  // so compiling one page while another is open triggers a dev-server reload
+  // that detaches form inputs mid-test. One worker in CI avoids that race.
+  workers: process.env.CI ? 1 : undefined,
 
   forbidOnly: Boolean(process.env.CI),
 
