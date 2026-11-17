@@ -31,7 +31,7 @@ Bindings added in `wrangler.jsonc`: queue **consumer** for `freelance-income-ai-
 |---|---|---|
 | `EDGE_API_ORIGIN` | Variable (wrangler) | `https://freelance-income-ai-api-edge.girishmore097.workers.dev` |
 | `EDGE_API` | Service binding (wrangler) | → `freelance-income-ai-api-edge` |
-| `NEXT_PUBLIC_AUTH_MODE` | Build variable | Leave unset (bearer) until pages are migrated; then `cookie`. |
+| `NEXT_PUBLIC_AUTH_MODE` | Build variable | Unset = bearer (current). Pages are migrated; set `cookie` once Full CI is green (both Playwright passes). |
 | `NEXT_PUBLIC_API_URL` | Build variable | Unchanged. |
 
 ## Python (`backend/app`, not deployed)
