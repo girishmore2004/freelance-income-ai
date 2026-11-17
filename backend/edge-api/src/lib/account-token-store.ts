@@ -1,4 +1,3 @@
-
 import postgres from "postgres";
 import type { Env } from "../types";
 
@@ -19,6 +18,8 @@ export interface IssuedAccountActionToken {
   token: string;
   expiresAt: Date;
 }
+
+type Sql = ReturnType<typeof postgres>;
 
 const TOKEN_BYTES = 48;
 const TOKEN_MIN_LENGTH = 32;
@@ -71,14 +72,15 @@ function generateActionToken(): string {
     .replace(/=+$/g, "");
 }
 
-async function hashActionToken(
+/** True when the value has the length the Python VerifyEmailIn/PasswordResetIn schemas accept. */
+export function isPlausibleActionToken(token: unknown): token is string {
+  return typeof token === "string" && token.length >= TOKEN_MIN_LENGTH && token.length <= TOKEN_MAX_LENGTH;
+}
+
+export async function hashActionToken(
   token: string
 ): Promise<string> {
-  if (
-    typeof token !== "string" ||
-    token.length < TOKEN_MIN_LENGTH ||
-    token.length > TOKEN_MAX_LENGTH
-  ) {
+  if (!isPlausibleActionToken(token)) {
     throw new Error("Invalid account-action token.");
   }
 
@@ -92,7 +94,7 @@ async function hashActionToken(
     .join("");
 }
 
-function createDatabaseClient(env: Env) {
+function createDatabaseClient(env: Env): Sql {
   const connectionString =
     env.HYPERDRIVE?.connectionString;
 
@@ -116,20 +118,16 @@ function createDatabaseClient(env: Env) {
 }
 
 /**
- * Issues a new account-action token.
+ * Issues a token using an existing connection or transaction.
  *
  * Matches the original Python implementation:
- * - 48 random bytes
- * - URL-safe Base64 without padding
- * - SHA-256 lowercase hexadecimal digest
- * - Previous unused tokens for the same user and purpose
- *   are invalidated.
- * - Old token records are cleaned up.
- *
- * Only the raw token is returned. It is never stored in PostgreSQL.
+ * - 48 random bytes, URL-safe Base64 without padding
+ * - SHA-256 lowercase hexadecimal digest stored, never the raw token
+ * - Previous unused tokens for the same user and purpose are invalidated
+ * - Old token records are cleaned up
  */
-export async function issueAccountActionToken(
-  env: Env,
+export async function issueAccountActionTokenWith(
+  sql: Sql,
   userId: string,
   purpose: AccountActionPurpose,
   lifetimeMinutes?: number
@@ -150,104 +148,119 @@ export async function issueAccountActionToken(
 
   const rawToken = generateActionToken();
   const tokenHash = await hashActionToken(rawToken);
-
   const now = new Date();
   const expiresAt = new Date(
     now.getTime() + lifetime * 60_000
   );
 
-  const sql = createDatabaseClient(env);
+  await sql`
+    DELETE FROM email_action_tokens
+    WHERE
+      expires_at < NOW() - INTERVAL '30 days'
+      OR used_at < NOW() - INTERVAL '30 days'
+  `;
 
-  try {
-    await sql.begin(async (tx) => {
-      // Match the original Python cleanup policy.
-      await tx`
-        DELETE FROM email_action_tokens
-        WHERE
-          expires_at < NOW() - INTERVAL '30 days'
-          OR used_at < NOW() - INTERVAL '30 days'
-      `;
+  await sql`
+    UPDATE email_action_tokens
+    SET used_at = ${now}
+    WHERE
+      user_id = ${userId}
+      AND purpose = ${purpose}
+      AND used_at IS NULL
+  `;
 
-      // Invalidate previous unused tokens for this user/action.
-      await tx`
-        UPDATE email_action_tokens
-        SET used_at = ${now}
-        WHERE
-          user_id = ${userId}
-          AND purpose = ${purpose}
-          AND used_at IS NULL
-      `;
+  // The SQLAlchemy model has no database-side default for the primary key.
+  await sql`
+    INSERT INTO email_action_tokens (
+      id, user_id, token_hash, purpose, created_at, expires_at, used_at
+    )
+    VALUES (
+      ${crypto.randomUUID()}, ${userId}, ${tokenHash}, ${purpose},
+      ${now}, ${expiresAt}, NULL
+    )
+  `;
 
-      // The existing SQLAlchemy model defines no database-side
-      // default for the primary key, so generate its UUID here.
-      await tx`
-        INSERT INTO email_action_tokens (
-          id,
-          user_id,
-          token_hash,
-          purpose,
-          created_at,
-          expires_at,
-          used_at
-        )
-        VALUES (
-          ${crypto.randomUUID()},
-          ${userId},
-          ${tokenHash},
-          ${purpose},
-          ${now},
-          ${expiresAt},
-          NULL
-        )
-      `;
-    });
-
-    return {
-      token: rawToken,
-      expiresAt
-    };
-  } finally {
-    await sql.end({ timeout: 5 });
-  }
+  return {
+    token: rawToken,
+    expiresAt
+  };
 }
 
 /**
- * Atomically consumes an account-action token.
- *
- * UPDATE ... RETURNING ensures that two simultaneous requests
- * cannot successfully consume the same token.
- *
- * Expired, used, unknown, and wrong-purpose tokens all return null.
+ * Atomically consumes a token using an existing connection or transaction.
+ * UPDATE ... RETURNING ensures two simultaneous requests cannot both succeed.
+ * Expired, used, unknown, malformed and wrong-purpose tokens all return null.
  */
-export async function consumeAccountActionToken(
-  env: Env,
+export async function consumeAccountActionTokenWith(
+  sql: Sql,
   rawToken: string,
   purpose: AccountActionPurpose
 ): Promise<AccountActionToken | null> {
   validatePurpose(purpose);
 
+  if (!isPlausibleActionToken(rawToken)) return null;
+
   const tokenHash = await hashActionToken(rawToken);
+
+  const rows = await sql<AccountActionToken[]>`
+    UPDATE email_action_tokens
+    SET used_at = NOW()
+    WHERE
+      token_hash = ${tokenHash}
+      AND purpose = ${purpose}
+      AND used_at IS NULL
+      AND expires_at > NOW()
+    RETURNING
+      id, user_id, purpose, created_at, expires_at, used_at
+  `;
+
+  return rows[0] ?? null;
+}
+
+/** Seconds since the most recent token of this purpose was issued, or null if none. */
+export async function secondsSinceLastToken(
+  sql: Sql,
+  userId: string,
+  purpose: AccountActionPurpose
+): Promise<number | null> {
+  validatePurpose(purpose);
+  const rows = await sql<{ age: number | string | null }[]>`
+    SELECT EXTRACT(EPOCH FROM (NOW() - MAX(created_at))) AS age
+    FROM email_action_tokens
+    WHERE user_id = ${userId} AND purpose = ${purpose}
+  `;
+  const age = rows[0]?.age;
+  return age === null || age === undefined ? null : Number(age);
+}
+
+/** Issues a token on its own connection (original API, kept for compatibility). */
+export async function issueAccountActionToken(
+  env: Env,
+  userId: string,
+  purpose: AccountActionPurpose,
+  lifetimeMinutes?: number
+): Promise<IssuedAccountActionToken> {
   const sql = createDatabaseClient(env);
 
   try {
-    const rows = await sql<AccountActionToken[]>`
-      UPDATE email_action_tokens
-      SET used_at = NOW()
-      WHERE
-        token_hash = ${tokenHash}
-        AND purpose = ${purpose}
-        AND used_at IS NULL
-        AND expires_at > NOW()
-      RETURNING
-        id,
-        user_id,
-        purpose,
-        created_at,
-        expires_at,
-        used_at
-    `;
+    return await sql.begin((tx) =>
+      issueAccountActionTokenWith(tx, userId, purpose, lifetimeMinutes)
+    );
+  } finally {
+    await sql.end({ timeout: 5 });
+  }
+}
 
-    return rows[0] ?? null;
+/** Consumes a token on its own connection (original API, kept for compatibility). */
+export async function consumeAccountActionToken(
+  env: Env,
+  rawToken: string,
+  purpose: AccountActionPurpose
+): Promise<AccountActionToken | null> {
+  const sql = createDatabaseClient(env);
+
+  try {
+    return await consumeAccountActionTokenWith(sql, rawToken, purpose);
   } finally {
     await sql.end({ timeout: 5 });
   }
