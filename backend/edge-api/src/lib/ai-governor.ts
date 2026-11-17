@@ -9,7 +9,11 @@ import { FLAGS, isEnabled } from "./flags";
  * Checks, in order (any failure => caller uses its deterministic fallback):
  *   1. Flag `ai.generation` (and FEATURE_FLAGS_OFF kill switch).
  *   2. Per-user daily and monthly call quotas, counted across BOTH services
- *      from `ai_usage_events` (defaults 20/day and 300/month = Python defaults).
+ *      from `ai_usage_events`. Limits come from the user's plan (`user_plans` →
+ *      `plans`, migration 0057; no row = the `free` plan) and fall back to the
+ *      Worker variables (defaults 20/day and 300/month) if plans are unavailable.
+ *      Beyond the monthly limit, one AI credit is spent per call while the
+ *      user's credit balance is positive. The daily limit is never bypassed.
  *   3. Global daily estimated spend across all users (AI_GLOBAL_DAILY_BUDGET_USD).
  *
  * A reservation row is written before the call with a worst-case cost estimate
@@ -23,7 +27,7 @@ import { FLAGS, isEnabled } from "./flags";
  */
 
 export type AiDecision =
-  | { allowed: true; eventId: string; estimatedCostMicros: number }
+  | { allowed: true; eventId: string; estimatedCostMicros: number; usedCredit?: boolean }
   | { allowed: false; reason: "disabled" | "user_daily_quota" | "user_monthly_quota" | "global_budget" | "governor_error"; message: string };
 
 export interface AiCallRequest {
@@ -51,6 +55,46 @@ export function aiLimits(env: Env) {
   };
 }
 
+export interface PlanLimits {
+  plan: string;
+  daily: number;
+  monthly: number;
+}
+
+/**
+ * The user's plan limits. Never throws: if the plan tables are missing (code
+ * deployed before migration 0057) the Worker-variable limits apply, so AI keeps
+ * working exactly as before.
+ */
+export async function planLimits(env: Env, sql: Sql, userId: string): Promise<PlanLimits> {
+  const fallback = aiLimits(env);
+  try {
+    const rows = await sql<{ code: string; ai_daily_limit: number; ai_monthly_limit: number }[]>`
+      SELECT p.code, p.ai_daily_limit, p.ai_monthly_limit
+      FROM plans p
+      LEFT JOIN user_plans up ON up.plan_code = p.code AND up.user_id = ${userId} AND (up.ends_at IS NULL OR up.ends_at > now())
+      WHERE (up.user_id IS NOT NULL) OR (p.code = 'free')
+      ORDER BY (up.user_id IS NOT NULL) DESC
+      LIMIT 1
+    `;
+    if (!rows[0]) return { plan: "default", daily: fallback.userDaily, monthly: fallback.userMonthly };
+    return { plan: rows[0].code, daily: Number(rows[0].ai_daily_limit), monthly: Number(rows[0].ai_monthly_limit) };
+  } catch (error) {
+    console.warn(JSON.stringify({ event: "ai.plan_lookup_failed", error_message: error instanceof Error ? error.message : "unknown" }));
+    return { plan: "default", daily: fallback.userDaily, monthly: fallback.userMonthly };
+  }
+}
+
+/** AI credit balance (sum of signed movements). Returns 0 if credits are unavailable. */
+export async function creditBalance(sql: Sql, userId: string): Promise<number> {
+  try {
+    const rows = await sql<{ balance: string | number | null }[]>`SELECT COALESCE(sum(delta), 0) AS balance FROM ai_credit_ledger WHERE user_id = ${userId}`;
+    return Number(rows[0]?.balance ?? 0);
+  } catch {
+    return 0;
+  }
+}
+
 /** Estimated cost in micro-USD for a call of this size. */
 export function estimateCostMicros(env: Env, inputChars: number, outputTokens: number): number {
   const limits = aiLimits(env);
@@ -67,6 +111,7 @@ export async function reserveAiCall(env: Env, sql: Sql, call: AiCallRequest): Pr
     }
 
     const limits = aiLimits(env);
+    const plan = await planLimits(env, sql, call.userId);
     const estimate = estimateCostMicros(env, call.inputChars, call.maxOutputTokens);
 
     const usage = await sql<{ user_day: string; user_month: string; global_day_micros: string | null }[]>`
@@ -81,11 +126,15 @@ export async function reserveAiCall(env: Env, sql: Sql, call: AiCallRequest): Pr
     const userMonth = Number(usage[0]?.user_month ?? 0);
     const globalDay = Number(usage[0]?.global_day_micros ?? 0);
 
-    if (userDay >= limits.userDaily) {
-      return { allowed: false, reason: "user_daily_quota", message: `Daily AI limit of ${limits.userDaily} reached. A template was used instead.` };
+    if (userDay >= plan.daily) {
+      return { allowed: false, reason: "user_daily_quota", message: `Daily AI limit of ${plan.daily} reached. A template was used instead.` };
     }
-    if (userMonth >= limits.userMonthly) {
-      return { allowed: false, reason: "user_monthly_quota", message: `Monthly AI limit of ${limits.userMonthly} reached. A template was used instead.` };
+    let useCredit = false;
+    if (userMonth >= plan.monthly) {
+      if ((await creditBalance(sql, call.userId)) <= 0) {
+        return { allowed: false, reason: "user_monthly_quota", message: `Monthly AI limit of ${plan.monthly} reached. A template was used instead.` };
+      }
+      useCredit = true;
     }
     if (globalDay + estimate > limits.globalDailyBudgetMicros) {
       console.warn(JSON.stringify({ event: "ai.budget_exhausted", alert: true, global_day_micros: globalDay, budget_micros: limits.globalDailyBudgetMicros }));
@@ -100,7 +149,14 @@ export async function reserveAiCall(env: Env, sql: Sql, call: AiCallRequest): Pr
       INSERT INTO ai_usage_events (id, user_id, operation, provider, input_chars, output_chars, created_at, estimated_cost_micros, service)
       VALUES (${eventId}, ${call.userId}, ${call.operation.slice(0, 80)}, 'workers_ai', ${Math.max(0, Math.floor(call.inputChars))}, 0, now(), ${estimate}, 'edge')
     `;
-    return { allowed: true, eventId, estimatedCostMicros: estimate };
+    if (useCredit) {
+      await sql`
+        INSERT INTO ai_credit_ledger (id, user_id, delta, reason, ref, note, created_at)
+        VALUES (${crypto.randomUUID()}, ${call.userId}, -1, 'ai_call', ${eventId}, ${call.operation.slice(0, 80)}, now())
+        ON CONFLICT (reason, ref) DO NOTHING
+      `;
+    }
+    return { allowed: true, eventId, estimatedCostMicros: estimate, usedCredit: useCredit };
   } catch (error) {
     // Fail closed: if usage cannot be checked, do not spend.
     console.error(JSON.stringify({ event: "ai.governor_failed", error_message: error instanceof Error ? error.message : "unknown" }));
