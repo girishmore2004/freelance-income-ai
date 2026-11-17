@@ -14,10 +14,17 @@
     "directory": ".open-next/assets",
     "binding": "ASSETS"
   },
+  "vars": {
+    "EDGE_API_ORIGIN": "https://freelance-income-ai-api-edge.girishmore097.workers.dev"
+  },
   "services": [
     {
       "binding": "WORKER_SELF_REFERENCE",
       "service": "freelance-income-ai"
+    },
+    {
+      "binding": "EDGE_API",
+      "service": "freelance-income-ai-api-edge"
     }
   ]
 }
