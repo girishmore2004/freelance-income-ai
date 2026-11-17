@@ -16,7 +16,9 @@ const ALLOWED_HEADERS = [
   "content-type",
   "origin",
   "x-requested-with",
-  "x-request-id"
+  "x-request-id",
+  "x-csrf-token",
+  "x-session-mode"
 ];
 
 function getAllowedOrigins(env: Env): string[] {
