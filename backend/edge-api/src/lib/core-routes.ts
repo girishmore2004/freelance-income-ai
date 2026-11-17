@@ -1,8 +1,9 @@
 import postgres from "postgres";
 import type { Env } from "../types";
-import { authenticateAccessToken } from "./session-service";
+import { authenticateRequest } from "./auth-context";
 import { failure, success } from "./response";
 import { scoreOpportunity } from "./scoring";
+import { reserveAiCall, settleAiCall } from "./ai-governor";
 import type { ScoreOpportunity, ScoreProfile } from "./scoring";
 
 export type Sql = ReturnType<typeof postgres>;
@@ -24,12 +25,6 @@ export function database(env: Env): Sql {
     idle_timeout: 5,
     connection: { application_name: "Freelance Income AI Edge API - Core" }
   });
-}
-
-function bearer(request: Request): string | null {
-  const header = request.headers.get("Authorization");
-  const match = header?.match(/^Bearer\s+(.+)$/i);
-  return match?.[1]?.trim() || null;
 }
 
 export function iso(value: unknown): string | null {
@@ -101,21 +96,9 @@ export async function requireUser(
   env: Env,
   requestId: string
 ): Promise<string | Response> {
-  const token = bearer(request);
-  if (!token) {
-    return failure("AUTHENTICATION_REQUIRED", "Authentication required", 401, requestId);
-  }
-
-  const authenticated = await authenticateAccessToken(env, token);
-  if (!authenticated) {
-    return failure(
-      "INVALID_OR_EXPIRED_SESSION",
-      "Session is invalid, expired or revoked. Please sign in again.",
-      401,
-      requestId
-    );
-  }
-
+  // Bearer or HttpOnly cookie (with CSRF check); see auth-context.ts.
+  const authenticated = await authenticateRequest(request, env, requestId);
+  if (authenticated instanceof Response) return authenticated;
   return authenticated.user.id;
 }
 
@@ -239,12 +222,18 @@ export function scoreProfile(p: Row): ScoreProfile {
 // proposal drafting (Workers AI when bound, otherwise a safe template)
 // ---------------------------------------------------------------------------
 
+export interface AiGovernance {
+  sql: Sql;
+  userId: string;
+}
+
 export async function draftProposal(
   env: Env,
   profile: Row,
   opp: Row,
-  price: number | null
-): Promise<{ content: string; mode: "model" | "safe_template" }> {
+  price: number | null,
+  governance?: AiGovernance
+): Promise<{ content: string; mode: "model" | "safe_template"; ai_note?: string }> {
   const skills = jsonList(profile.skills);
 
   const facts = {
@@ -276,7 +265,18 @@ export async function draftProposal(
     "If evidence is weak, focus on the proposed approach rather than claiming prior experience. " +
     "Never invent a delivery date or guarantee.";
 
-  if (env.AI) {
+  // No governance context means no budget check is possible: never call the model.
+  const decision = env.AI && governance
+    ? await reserveAiCall(env, governance.sql, {
+        userId: governance.userId,
+        operation: "proposal_draft",
+        inputChars: system.length + prompt.length,
+        maxOutputTokens: 900
+      })
+    : null;
+  const aiNote = decision && !decision.allowed ? decision.message : undefined;
+
+  if (env.AI && governance && decision?.allowed) {
     try {
       const result = (await env.AI.run(env.WORKERS_AI_MODEL || "@cf/meta/llama-3.1-8b-instruct", {
         messages: [
@@ -287,6 +287,7 @@ export async function draftProposal(
       })) as { response?: string } | null;
 
       const generated = result?.response?.trim();
+      await settleAiCall(env, governance.sql, decision.eventId, system.length + prompt.length, generated?.length ?? 0);
       if (generated && generated.length >= 30) return { content: generated, mode: "model" };
     } catch (error) {
       console.error(
@@ -310,7 +311,7 @@ export async function draftProposal(
     "I would be happy to discuss the scope and timeline before confirming a commitment.\n\n" +
     `Regards,\n${profile.full_name || "Your name"}`;
 
-  return { content, mode: "safe_template" };
+  return { content, mode: "safe_template", ...(aiNote ? { ai_note: aiNote } : {}) };
 }
 
 // Lists the dashboard requests that are not built on the edge API yet.
@@ -361,25 +362,19 @@ export async function handleCoreRoute(
 
   if (!known) return null;
 
-  const token = bearer(request);
-  if (!token) {
-    return failure("AUTHENTICATION_REQUIRED", "Authentication required", 401, requestId);
-  }
-
-  const authenticated = await authenticateAccessToken(env, token);
-  if (!authenticated) {
-    return failure(
-      "INVALID_OR_EXPIRED_SESSION",
-      "Session is invalid, expired or revoked. Please sign in again.",
-      401,
-      requestId
-    );
-  }
+  const authenticated = await authenticateRequest(request, env, requestId);
+  if (authenticated instanceof Response) return authenticated;
 
   const userId = authenticated.user.id;
 
   if (method === "GET" && EMPTY_LISTS.has(path)) {
-    return success([], "Not available on the edge API yet", 200, requestId);
+    // Honest status instead of an empty list that looks like real (empty) data.
+    return failure(
+      "NOT_AVAILABLE_ON_EDGE",
+      "This feature is not available on the edge API yet.",
+      501,
+      requestId
+    );
   }
 
   const sql = database(env);
@@ -620,7 +615,7 @@ export async function handleCoreRoute(
       const price = num(b.proposed_price);
       const currency = text(b.currency, 8, found[0].currency || "INR") || "INR";
 
-      const { content, mode } = await draftProposal(env, profile, found[0], price);
+      const { content, mode, ai_note } = await draftProposal(env, profile, found[0], price, { sql, userId });
       const id = crypto.randomUUID();
 
       await sql`
@@ -637,7 +632,12 @@ export async function handleCoreRoute(
       await sql`UPDATE opportunities SET status = 'drafted' WHERE id = ${found[0].id} AND user_id = ${userId} AND status = 'new'`;
 
       const saved = await sql`SELECT * FROM proposals WHERE id = ${id} LIMIT 1`;
-      return success({ ...proposalOut(saved[0]), mode }, "Proposal draft created", 201, requestId);
+      return success(
+        { ...proposalOut(saved[0]), mode, ...(ai_note ? { ai_note } : {}) },
+        ai_note ? `Proposal draft created from a template. ${ai_note}` : "Proposal draft created",
+        201,
+        requestId
+      );
     }
 
     if (proposalMatch && !proposalMatch[2] && method === "PUT") {
