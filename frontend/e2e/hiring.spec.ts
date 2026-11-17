@@ -173,3 +173,34 @@ test('freelancer delivers a milestone and the client approves it in the workspac
   await expect(page.getByText(/Milestone approved/).first()).toBeVisible();
   await expect.poll(() => captured.find((c) => c.path === '/api/v1/contracts/K1/milestones/0/review')?.body).toEqual({ decision: 'approve', note: '' });
 });
+
+test('after completion the freelancer reviews the client without seeing the hidden review first', async ({ page }) => {
+  const captured: Captured[] = [];
+  let reviewed = false;
+  await signIn(page);
+  const done = { ...VERSION, freelancer_accepted_at: '2026-11-17T01:00:00Z' };
+  await mock(page, captured, (path, method) => {
+    if (path === '/api/v1/me') return ok({ id: 'f1', roles: ['freelancer'] });
+    if (path === '/api/v1/contracts') return ok([{ id: 'K1', status: 'completed', party: 'freelancer', client_name: 'Acme Studio', current_version: 1, activated_at: null, terms: done }]);
+    if (path === '/api/v1/contracts/K1') return ok({ id: 'K1', status: 'completed', party: 'freelancer', client_name: 'Acme Studio', project_title: 'Bakery ordering website', current_version: 1, agreed_version: 1, pending_change: false, agreed_terms: null, activated_at: null, terms: done, versions: [done], allowed_actions: [], funding: { available: false, message: '' } });
+    if (path === '/api/v1/contracts/K1/workspace') return ok({ contract_id: 'K1', status: 'completed', party: 'freelancer', can_manage: true, revision_rounds: 2, currency: 'INR', milestones: [], approved_minor: 3_000_000, total_minor: 3_000_000, messages: [], activity: [], funding_note: '' });
+    if (path === '/api/v1/contracts/K1/review' && method === 'POST') {
+      reviewed = true;
+      return ok({ party: 'freelancer', can_review: false, revealed: true, mine: { party: 'freelancer', rating: 4, comment: 'Clear brief', created_at: '2026-11-18T00:00:00Z' }, theirs: { party: 'client', rating: 5, comment: 'Great work', created_at: '2026-11-18T00:00:00Z' }, theirs_submitted: true }, 'Review published');
+    }
+    if (path === '/api/v1/contracts/K1/reviews') {
+      return ok({ party: 'freelancer', can_review: !reviewed, revealed: false, mine: null, theirs: null, theirs_submitted: true });
+    }
+    return undefined;
+  });
+  await page.goto('/contracts');
+  await page.getByRole('button', { name: 'Open' }).click();
+  await expect(page.getByText(/The client has reviewed you/)).toBeVisible();
+  await expect(page.getByText('Great work')).toHaveCount(0);
+  await page.getByLabel('Rating').selectOption('4');
+  await page.getByLabel(/Comment/).fill('Clear brief');
+  await page.getByRole('button', { name: 'Submit review' }).click();
+  await expect(page.getByText('Review published')).toBeVisible();
+  await expect(page.getByText('Great work')).toBeVisible();
+  await expect.poll(() => captured.find((c) => c.path === '/api/v1/contracts/K1/review')?.body).toEqual({ rating: 4, comment: 'Clear brief' });
+});

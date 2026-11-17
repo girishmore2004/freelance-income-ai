@@ -4,6 +4,7 @@ import { ApiError, api, useSessionToken } from '@/lib/api-client';
 import { CONTRACT_LABELS, formatMinor } from '@/lib/listing-format';
 import { TermsForm, type Terms } from './terms-form';
 import { ContractWorkspace } from './workspace';
+import { ContractReviews } from './reviews';
 
 /**
  * Contracts for both parties (Phase 3). An offer becomes active only when the
@@ -16,7 +17,10 @@ type Version = Terms & {
   client_accepted_at: string | null; freelancer_accepted_at: string | null;
 };
 type Summary = { id: string; status: string; party: 'client' | 'freelancer'; client_name: string; current_version: number; activated_at: string | null; terms: Version };
-type Detail = Summary & { project_title: string; versions: Version[]; allowed_actions: string[]; funding: { available: boolean; message: string } };
+type Detail = Summary & {
+  project_title: string; versions: Version[]; allowed_actions: string[]; funding: { available: boolean; message: string };
+  agreed_version: number | null; pending_change: boolean; agreed_terms: Version | null;
+};
 
 function messageOf(e: unknown): string {
   return e instanceof Error ? e.message : 'Something went wrong. Please try again.';
@@ -115,6 +119,12 @@ export default function ContractsPage() {
           {detail?.id === c.id && t && (
             <section aria-label="Contract details">
               <p className="muted">Project: {detail.project_title} · Version {t.version} proposed by the {t.proposed_by}</p>
+              {detail.pending_change && detail.agreed_terms && (
+                <p className="notice" role="status">
+                  Change proposed (version {t.version}, total {formatMinor(t.total_minor, t.currency)}). The agreed terms (version {detail.agreed_terms.version},
+                  total {formatMinor(detail.agreed_terms.total_minor, detail.agreed_terms.currency)}) apply until both of you accept the change.
+                </p>
+              )}
               {t.scope && <p>{t.scope}</p>}
               {t.deliverables.length > 0 && <><b>Deliverables</b><ul>{t.deliverables.map((d) => <li key={d}>{d}</li>)}</ul></>}
               <table>
@@ -135,11 +145,12 @@ export default function ContractsPage() {
 
               <div className="row">
                 {detail.allowed_actions.includes('accept') && (
-                  <button className="btn primary" disabled={busy} onClick={() => void act('accept', { version: t.version }, 'Accepted')}>Accept version {t.version}</button>
+                  <button className="btn primary" disabled={busy} onClick={() => void act('accept', { version: t.version }, 'Accepted')}>{detail.pending_change ? `Accept change (version ${t.version})` : `Accept version ${t.version}`}</button>
                 )}
                 {detail.allowed_actions.includes('propose_changes') && !changing && (
-                  <button className="btn" disabled={busy} onClick={() => setChanging(true)}>Propose changes</button>
+                  <button className="btn" disabled={busy} onClick={() => setChanging(true)}>{detail.status === 'active' ? 'Propose a change order' : 'Propose changes'}</button>
                 )}
+                {detail.allowed_actions.includes('reject_change') && <button className="btn" disabled={busy} onClick={() => void act('reject-change', undefined, 'Change rejected')}>Reject change</button>}
                 {detail.allowed_actions.includes('decline') && <button className="btn" disabled={busy} onClick={() => void act('decline', undefined, 'Offer declined')}>Decline offer</button>}
                 {detail.allowed_actions.includes('withdraw') && <button className="btn" disabled={busy} onClick={() => void act('withdraw', undefined, 'Offer withdrawn')}>Withdraw offer</button>}
               </div>
@@ -170,6 +181,8 @@ export default function ContractsPage() {
                   }}
                 />
               )}
+
+              {detail.status === 'completed' && <ContractReviews contractId={detail.id} />}
 
               {detail.versions.length > 1 && (
                 <>

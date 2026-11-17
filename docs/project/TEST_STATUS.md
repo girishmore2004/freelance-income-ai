@@ -1,5 +1,14 @@
 # Test Status
 
+## Phase 3 batch 3 — 2026-11-17 IST (release 5.53.0)
+- Edge API: **205 passed, 0 failed** (new `review.test.ts` 6: pending-change detection and per-party actions, delivered-milestone locks, reveal rule, rating/comment validation, review routes incl. window, owner/admin, duplicates, hidden reviews; `matching.test.ts` covers the rating on cards). Typecheck clean; bundle 458 KB.
+- PostgreSQL 16 (0055 DDL + backfill), real handlers end to end: activation sets `agreed_version` → delivery → change order that alters a delivered milestone refused (422) → valid change order (adds a milestone) leaves the workspace on the agreed 2 milestones while pending → reject → accept refused (nothing pending) → new change order → **version numbering bug found and fixed** (after a rejection the next version reused number 2 and hit the unique constraint; versions now continue from the highest number) → both accept → workspace shows 3 milestones → all approved → completed → reviews: invalid rating 422, client review hidden from the freelancer, duplicate 409, freelancer review reveals both → freelancer card shows ★ 5 (1) only after reveal.
+- Frontend: typecheck 0 errors (change-order banner/actions, reviews panel, ratings on cards, new e2e review journey).
+- Python: `tests/test_change_orders_reviews_v555.py` (2 tests) compiled; runs in CI.
+
+## Phase 3 batch 2 — GitHub CI (verified)
+First run: 1 Playwright failure — the offer-acceptance test's catch-all mock returned `[]` for the new workspace call and the page crashed; fixed by validating the reply shape in the component (and mocking the call). Re-run on `main` @ 040ca84: pytest 534 passed; Playwright 25 passed / 2 skipped (bearer), 26 passed / 1 skipped (cookie). Edge API CI 199/199.
+
 ## Phase 3 batch 2 — 2026-11-17 IST (release 5.52.0)
 - Edge API (real `postgres` 3.4.9 + `bcryptjs`): **199 passed, 0 failed** (new `delivery.test.ts` 9: milestone state derivation, https-only links, party-only workspace, freelancer-only delivery, one open delivery per milestone, revision limit and required reason, owner/admin review, completion only when all milestones approved, message screening/closing; `hiring.test.ts` now also checks the activity-log insert). Typecheck clean; bundle 447 KB.
 - PostgreSQL 16 with the 0054 DDL, real handlers end to end: offer → message during negotiation → delivery refused before activation → accept → stranger 404 → contact-detail message 422 → client cannot deliver → http link 422 → deliver → second delivery 409 → missing milestone 404 → revision without reason 422 → revision → redeliver → revision over the 1 agreed round 409 → approve → nothing to review 409 → second milestone → approve → contract **completed**; workspace shows ₹15,000/₹15,000 approved and the full activity trail (offer.sent → terms.accepted → contract.activated → … → contract.completed); messages closed after completion.

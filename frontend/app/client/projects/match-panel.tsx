@@ -11,6 +11,7 @@ import { ApiError, api } from '@/lib/api-client';
 export type FreelancerCard = {
   user_id: string; display_name: string; headline: string; skills: string[]; services: string[];
   hourly_rate: number | null; currency: string; weekly_hours: number | null; timezone: string; newcomer: boolean;
+  rating?: { average: number; count: number } | null;
 };
 type Match = {
   freelancer: FreelancerCard; score: number; reasons: string[]; missing_skills: string[]; newcomer_slot: boolean;
@@ -109,7 +110,7 @@ export function MatchPanel({ listingId, organizationId, canInvite, invitable }: 
       {data?.matches.map((m) => (
         <div className="card item" key={m.freelancer.user_id}>
           <div className="row between">
-            <span><b>{m.freelancer.display_name}</b>{m.freelancer.newcomer && <span className="badge"> New</span>}</span>
+            <span><b>{m.freelancer.display_name}</b>{m.freelancer.newcomer && <span className="badge"> New</span>}{m.freelancer.rating && <span className="muted"> ★ {m.freelancer.rating.average} ({m.freelancer.rating.count})</span>}</span>
             <span className="badge" aria-label={`Match score ${m.score} out of 100`}>{m.score}/100</span>
           </div>
           {m.freelancer.headline && <p className="muted">{m.freelancer.headline}</p>}

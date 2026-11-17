@@ -89,6 +89,11 @@ Set build variable `NEXT_PUBLIC_AUTH_MODE=cookie`, redeploy, sign in, and confir
 2. Deploy Edge (5.52.0), then the frontend.
 3. Staging check: on an active contract → `/contracts` → Open → Workspace. Freelancer: **Deliver work** (note + https links). Client: **Review delivery** → Approve or Request revision (reason required; limited to the agreed rounds). When every milestone is approved the contract shows Completed. Messages and the activity list appear for both sides.
 
+## Phase 3 batch 3 (release 5.53.0): change orders and reviews
+1. Neon backup branch → "Stage 3C Neon migrations" (expects `0055_change_orders_reviews`). Check: `SELECT count(*) FROM contracts WHERE status IN ('active','completed') AND agreed_version IS NULL;` returns 0.
+2. Deploy Edge (5.53.0), then the frontend.
+3. Staging check: active contract → **Propose a change order** (e.g. add a milestone) → the other party sees the banner and **Accept change** / **Reject change**. Completed contract → both parties **Submit review**; each sees the other's review only after both reviewed.
+
 ## Rollback
 - Edge or frontend: Cloudflare → Worker → **Deployments** → previous version → **Rollback**. If you roll the Edge API back, re-attach the old consumer to the queue.
 - Database: see DATABASE_MIGRATION_STATUS.md (5.45 code runs on the 0049 schema).

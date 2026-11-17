@@ -1379,6 +1379,7 @@ class Contract(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
     activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    agreed_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class ContractVersion(Base):
@@ -1463,5 +1464,22 @@ class ContractEvent(Base):
     actor_party: Mapped[str] = mapped_column(String(20), nullable=False)
     event_type: Mapped[str] = mapped_column(String(60), nullable=False)
     details_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}", server_default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
+
+class ContractReview(Base):
+    """One review per party per completed contract (migration 0055)."""
+    __tablename__ = "contract_reviews"
+    __table_args__ = (
+        UniqueConstraint("contract_id", "reviewer_party", name="uq_contract_review_party"),
+        CheckConstraint("reviewer_party IN ('client', 'freelancer')", name="ck_contract_reviews_party"),
+        CheckConstraint("rating >= 1 AND rating <= 5", name="ck_contract_reviews_rating"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    contract_id: Mapped[str] = mapped_column(ForeignKey("contracts.id", ondelete="CASCADE"), nullable=False)
+    reviewer_party: Mapped[str] = mapped_column(String(20), nullable=False)
+    reviewer_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    rating: Mapped[int] = mapped_column(Integer, nullable=False)
+    comment: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
 

@@ -78,7 +78,7 @@ export function ProposalsPanel({ listingId, brief, canManage }: { listingId: str
       {items?.map((p) => (
         <div className="card item" key={p.id}>
           <div className="row between">
-            <span><b>{p.freelancer.display_name}</b>{p.invited && <span className="badge"> Invited</span>}</span>
+            <span><b>{p.freelancer.display_name}</b>{p.invited && <span className="badge"> Invited</span>}{p.freelancer.rating && <span className="muted"> ★ {p.freelancer.rating.average} ({p.freelancer.rating.count})</span>}</span>
             <span className="badge">{PROPOSAL_LABELS[p.status] ?? p.status}</span>
           </div>
           <p className="muted">
