@@ -43,6 +43,8 @@ interface World {
   revisionsUsed?: number;
   approved?: number[];
   rounds?: number;
+  requireFunding?: boolean;
+  funded?: boolean;
 }
 
 function world(opts: World = {}) {
@@ -52,8 +54,12 @@ function world(opts: World = {}) {
     revision_rounds: opts.rounds ?? 2, acceptance_json: "[]", ownership_terms: "", content_hash: "h", proposed_by: "client", created_at: T0,
     client_accepted_at: T0, freelancer_accepted_at: T0
   };
-  const fake = createFakeSql((text) => {
-    if (text.startsWith("SELECT enabled FROM feature_flags")) return [{ enabled: opts.flag ?? true }];
+  const fake = createFakeSql((text, values) => {
+    if (text.startsWith("SELECT enabled FROM feature_flags")) {
+      if (values[0] === "payments.require_funding") return [{ enabled: opts.requireFunding ?? false }];
+      return [{ enabled: opts.flag ?? true }];
+    }
+    if (text.startsWith("SELECT count(*)::int AS n FROM payment_intents")) return [{ n: opts.funded ? 1 : 0 }];
     if (text.includes("FROM organization_memberships m JOIN organizations o")) {
       const user = opts.user ?? "c1";
       if (opts.membership === null || (opts.membership === undefined && user !== "c1")) return [];
@@ -91,7 +97,7 @@ describe("delivery routes", () => {
     expect(response!.status).toBe(200);
     const json = await readJson(response!);
     expect(json.data).toMatchObject({ party: "freelancer", total_minor: 1_500_000, approved_minor: 0, revision_rounds: 2 });
-    expect(json.data.funding_note).toContain("No payment is released");
+    expect(json.data.funding_note).toContain("releases its payment");
   });
 
   it("lets only the freelancer submit, once per open milestone, on active contracts", async () => {
@@ -138,7 +144,7 @@ describe("delivery routes", () => {
     const first = await call(partial.deps, "POST", "/api/v1/contracts/K1/milestones/0/review", { decision: "approve" });
     const firstJson = await readJson(first!);
     expect(firstJson.data.contract_completed).toBe(false);
-    expect(firstJson.message).toContain("No payment is released");
+    expect(firstJson.message).toContain("No payment was released");
     expect(partial.fake.queries.some((q) => q.text.startsWith("UPDATE contracts SET status = 'completed'"))).toBe(false);
 
     const all = world({ approved: [0, 1] });
@@ -155,5 +161,14 @@ describe("delivery routes", () => {
     expect((await call(closed.deps, "POST", "/api/v1/contracts/K1/messages", { body: "Thanks!" }))!.status).toBe(409);
     const sent = world({ user: "c1", membership: "member" });
     expect((await call(sent.deps, "POST", "/api/v1/contracts/K1/messages", { body: "Looks good so far" }))!.status).toBe(201);
+  });
+
+  it("blocks delivery of unfunded milestones only when funded-first is switched on", async () => {
+    const off = world({ user: "f1" });
+    expect((await call(off.deps, "POST", "/api/v1/contracts/K1/milestones/0/submit", { note: "Mockups ready for review" }))!.status).toBe(201);
+    const blocked = world({ user: "f1", requireFunding: true });
+    expect((await readJson((await call(blocked.deps, "POST", "/api/v1/contracts/K1/milestones/0/submit", { note: "Mockups ready for review" }))!)).error!.code).toBe("MILESTONE_NOT_FUNDED");
+    const funded = world({ user: "f1", requireFunding: true, funded: true });
+    expect((await call(funded.deps, "POST", "/api/v1/contracts/K1/milestones/0/submit", { note: "Mockups ready for review" }))!.status).toBe(201);
   });
 });

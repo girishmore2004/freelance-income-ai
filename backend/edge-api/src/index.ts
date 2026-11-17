@@ -15,11 +15,13 @@ import { handleAgentRoute } from "./lib/agents";
 import { handleAssistantRoute } from "./lib/assistant-routes";
 import { handleTrustRoute } from "./lib/trust-routes";
 import { handlePublicRoute } from "./lib/public-routes";
+import { handlePaymentRoute } from "./lib/payment-routes";
+import { releasePendingApprovals } from "./lib/payments";
 import { enforceRateLimit } from "./lib/rate-limit";
 import { applySessionCookies } from "./lib/auth-context";
 import { handleMfaLoginRoute } from "./lib/mfa-login-route";
 import { handleRegisterRoute } from "./lib/register-route";
-import { handleCoreRoute } from "./lib/core-routes";
+import { database, handleCoreRoute } from "./lib/core-routes";
 import { handleWorkflowRoute } from "./lib/workflow-routes";
 import { handleApplyRoute } from "./lib/apply-routes";
 import { runScheduledReplySync, runScheduledTokenMaintenance } from "./lib/apply-agent";
@@ -399,6 +401,16 @@ async function routeRequest(
   // proposals, approvals
   // --------------------------------------------------
 
+  const paymentResponse = await handlePaymentRoute(
+    request,
+    env,
+    requestId
+  );
+
+  if (paymentResponse) {
+    return paymentResponse;
+  }
+
   const publicResponse = await handlePublicRoute(
     request,
     env,
@@ -616,6 +628,19 @@ async function routeRequest(
 // Cloudflare Worker entry point
 // ----------------------------------------------------
 
+// Retries payment releases for approved, funded milestones (e.g. after a failure at approval time).
+async function runScheduledPaymentReleases(env: Env): Promise<void> {
+  const sql = database(env);
+  try {
+    const released = await releasePendingApprovals(sql);
+    if (released) console.log(JSON.stringify({ service: "freelance-income-ai-api-edge", event: "payments.releases_retried", count: released }));
+  } catch (error) {
+    console.warn(JSON.stringify({ service: "freelance-income-ai-api-edge", event: "payments.release_retry_failed", error: error instanceof Error ? error.message : "unknown" }));
+  } finally {
+    await sql.end({ timeout: 5 });
+  }
+}
+
 export default {
   // Cron Trigger: the AI looks for new work and drafts proposals
   // for the best matches. Nothing is ever sent without approval.
@@ -634,6 +659,7 @@ export default {
     ctx.waitUntil(runScheduledReplySync(env));
     ctx.waitUntil(runScheduledTokenMaintenance(env));
     ctx.waitUntil(runScheduledListingExpiry(env));
+    ctx.waitUntil(runScheduledPaymentReleases(env));
   },
 
   // Queue consumer for freelance-income-ai-jobs (replaces the separate

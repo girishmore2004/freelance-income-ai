@@ -19,7 +19,9 @@ export const FLAGS = {
   aiGeneration: "ai.generation",
   scheduledDiscovery: "queue.scheduled_discovery",
   clientMarketplace: "marketplace.client_side",
-  paymentsLive: "payments.live"
+  paymentsLive: "payments.live",
+  paymentsSandbox: "payments.sandbox",
+  requireFunding: "payments.require_funding"
 } as const;
 
 export type FlagKey = (typeof FLAGS)[keyof typeof FLAGS];

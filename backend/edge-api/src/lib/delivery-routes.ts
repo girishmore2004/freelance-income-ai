@@ -10,6 +10,7 @@ import { screenText } from "./listings";
 import { contractVersionOut } from "./contracts";
 import type { ContractRow, ContractVersionRow, Party } from "./contracts";
 import { recordContractEvent } from "./contract-events";
+import { releaseMilestone } from "./payments";
 
 /**
  * Shared delivery workspace (Phase 3 batch 2), for the two parties of a contract:
@@ -36,7 +37,8 @@ const defaultDeps: DeliveryRouteDeps = { database, authenticate: authenticateReq
 const MAX_MESSAGE = 5000;
 const MAX_NOTE = 5000;
 const MAX_LINKS = 10;
-const NO_FUNDS = "Approval records that the work is accepted. No payment is released: payments are not enabled yet.";
+const NO_FUNDS = "Approval records that the work is accepted. No payment was released because this milestone was not funded.";
+const RELEASED = "The milestone's funds were released to the freelancer.";
 
 interface SubmissionRow {
   id: string;
@@ -205,7 +207,7 @@ export async function handleDeliveryRoute(
             }
             return { actor: e.actor_party, type: e.event_type, details, created_at: new Date(e.created_at).toISOString() };
           }),
-          funding_note: NO_FUNDS
+          funding_note: "Approving a funded milestone releases its payment to the freelancer. Unfunded milestones are approved without payment."
         },
         "Workspace",
         200,
@@ -246,6 +248,14 @@ export async function handleDeliveryRoute(
 
     if (step === "submit") {
       if (side.party !== "freelancer") return failure("FORBIDDEN", "Only the freelancer delivers work.", 403, requestId);
+      if (await isEnabled(env, sql, FLAGS.requireFunding, false)) {
+        const funded = await sql<{ n: number }[]>`
+          SELECT count(*)::int AS n FROM payment_intents WHERE contract_id = ${contract.id} AND milestone_index = ${index} AND status IN ('funded', 'released')
+        `;
+        if ((funded[0]?.n ?? 0) === 0) {
+          return failure("MILESTONE_NOT_FUNDED", "The client has not funded this milestone yet. Deliver once it is funded.", 409, requestId);
+        }
+      }
       const note = typeof payload.note === "string" ? payload.note.trim() : "";
       if (note.length < 10) return failure("INVALID_SUBMISSION", "Describe what you are delivering (at least 10 characters).", 422, requestId);
       if (note.length > MAX_NOTE) return failure("INVALID_SUBMISSION", `Keep the note under ${MAX_NOTE} characters.`, 422, requestId);
@@ -345,13 +355,24 @@ export async function handleDeliveryRoute(
         requestId
       );
     }
+    let release = "not_funded";
+    if (decision === "approve") {
+      try {
+        release = await releaseMilestone(sql, contract.id, index);
+      } catch (error) {
+        // The 6-hourly job retries releases of approved, funded milestones.
+        console.error(JSON.stringify({ service: "freelance-income-ai-api-edge", event: "payments.release_failed", alert: true, contract_id: contract.id, milestone: index, error: error instanceof Error ? error.message : "unknown" }));
+        release = "pending";
+      }
+    }
+    const paymentNote = release === "released" || release === "already" ? RELEASED : release === "pending" ? "The payment release will be retried automatically." : NO_FUNDS;
     const message =
       decision === "request_revision"
         ? "Revision requested"
         : result.completed
-          ? `All milestones approved. The contract is completed. ${NO_FUNDS}`
-          : `Milestone approved. ${NO_FUNDS}`;
-    return success({ milestone: index, state: decision === "approve" ? "approved" : "revision_requested", contract_completed: result.completed }, message, 200, requestId);
+          ? `All milestones approved. The contract is completed. ${paymentNote}`
+          : `Milestone approved. ${paymentNote}`;
+    return success({ milestone: index, state: decision === "approve" ? "approved" : "revision_requested", contract_completed: result.completed, payment: decision === "approve" ? release : null }, message, 200, requestId);
   } finally {
     await sql.end({ timeout: 5 });
   }

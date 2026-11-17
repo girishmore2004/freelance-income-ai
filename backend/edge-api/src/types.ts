@@ -78,6 +78,8 @@ export interface Env {
   PUBLIC_APP_URL?: string;
 
   EMAIL_PROVIDER?: string;
+  /** HMAC secret for webhooks of a live payment provider (not used until D-2). */
+  PAYMENT_WEBHOOK_SECRET?: string;
   RESEND_API_KEY?: string;
   RESEND_FROM_EMAIL?: string;
   RESEND_FROM_NAME?: string;

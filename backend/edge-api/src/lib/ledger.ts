@@ -68,7 +68,7 @@ export function assertValidEntry(entry: EntryInput): void {
     if (!Number.isInteger(line.amount_minor) || line.amount_minor <= 0 || line.amount_minor > MAX_LINE_MINOR) {
       throw new LedgerError("INVALID_LINES", "Line amounts must be positive whole minor units.");
     }
-    if (!/^[a-z0-9_.:-]{3,160}$/.test(line.account.code)) throw new LedgerError("INVALID_LINES", `Invalid account code "${line.account.code}".`);
+    if (!/^[A-Za-z0-9_.:-]{3,160}$/.test(line.account.code)) throw new LedgerError("INVALID_LINES", `Invalid account code "${line.account.code}".`);
     balance += line.direction === "debit" ? line.amount_minor : -line.amount_minor;
   }
   if (balance !== 0) throw new LedgerError("UNBALANCED", `Debits and credits differ by ${balance} minor units.`);
@@ -93,9 +93,16 @@ export interface PostResult {
  * Posts an entry exactly once per idempotency key. A repeated key returns the
  * existing entry without writing anything.
  */
-export async function postEntry(sql: Sql, entry: EntryInput): Promise<PostResult> {
+/** Runs `work` in a transaction, or in a savepoint when already inside one. */
+function inTransaction<T>(sql: Sql | Queryable, work: (tx: Queryable) => Promise<T>): Promise<T> {
+  const candidate = sql as { savepoint?: (cb: (tx: Queryable) => Promise<T>) => Promise<T>; begin?: (cb: (tx: Queryable) => Promise<T>) => Promise<T> };
+  if (typeof candidate.savepoint === "function") return candidate.savepoint(work);
+  return (sql as Sql).begin(work) as Promise<T>;
+}
+
+export async function postEntry(sql: Sql | Queryable, entry: EntryInput): Promise<PostResult> {
   assertValidEntry(entry);
-  return sql.begin(async (tx) => {
+  return inTransaction(sql, async (tx) => {
     const id = crypto.randomUUID();
     const inserted = await tx<{ id: string }[]>`
       INSERT INTO ledger_entries (id, idempotency_key, entry_type, description, mode, contract_id, reverses_entry_id, created_by, created_at)
@@ -120,7 +127,7 @@ export async function postEntry(sql: Sql, entry: EntryInput): Promise<PostResult
 }
 
 /** Mirror image of an entry (debits ↔ credits), linked to the original. */
-export async function reverseEntry(sql: Sql, entryId: string, idempotencyKey: string, createdBy: string | null, reason: string): Promise<PostResult> {
+export async function reverseEntry(sql: Sql | Queryable, entryId: string, idempotencyKey: string, createdBy: string | null, reason: string): Promise<PostResult> {
   const lines = await sql<{ code: string; name: string; kind: AccountKind; owner_type: OwnerType; owner_id: string | null; direction: Direction; amount_minor: string | number; currency: string; mode: LedgerMode; contract_id: string | null }[]>`
     SELECT a.code, a.name, a.kind, a.owner_type, a.owner_id, l.direction, l.amount_minor, l.currency, e.mode, e.contract_id
     FROM ledger_lines l
