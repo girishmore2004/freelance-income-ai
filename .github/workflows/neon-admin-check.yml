@@ -9,6 +9,14 @@ name: Neon - Check database and grant staff roles
 on:
   workflow_dispatch:
     inputs:
+      target:
+        description: "Which database"
+        required: true
+        default: "production"
+        type: choice
+        options:
+          - "production"
+          - "stage3c-integration-test"
       staff_email:
         description: "Email to make admin + finance + moderator (leave empty to only check)"
         required: false
@@ -28,7 +36,7 @@ jobs:
     timeout-minutes: 10
     env:
       EXPECTED_DATABASE: neondb
-      EXPECTED_NEON_HOST: ${{ vars.STAGE3C_EXPECTED_NEON_HOST }}
+      EXPECTED_NEON_HOST: ${{ inputs.target == 'production' && vars.PRODUCTION_EXPECTED_NEON_HOST || vars.STAGE3C_EXPECTED_NEON_HOST }}
     steps:
       - uses: actions/setup-python@v5
         with:
@@ -42,7 +50,7 @@ jobs:
         run: echo "::add-mask::$STAFF_EMAIL"
       - name: Check database (and grant roles if an email was given)
         env:
-          STAGE3C_DATABASE_URL: ${{ secrets.STAGE3C_DATABASE_URL }}
+          STAGE3C_DATABASE_URL: ${{ inputs.target == 'production' && secrets.PRODUCTION_DATABASE_URL || secrets.STAGE3C_DATABASE_URL }}
           STAFF_EMAIL: ${{ inputs.staff_email }}
         run: |
           python - <<'PY'
@@ -52,18 +60,21 @@ jobs:
 
           raw = os.environ.get("STAGE3C_DATABASE_URL", "").strip()
           if not raw:
-              sys.exit("STAGE3C_DATABASE_URL secret is missing.")
+              sys.exit("The database secret for this target is missing (PRODUCTION_DATABASE_URL or STAGE3C_DATABASE_URL).")
           parsed = urlsplit(raw)
           host = (parsed.hostname or "").lower().rstrip(".")
           expected = os.environ.get("EXPECTED_NEON_HOST", "").strip().lower().rstrip(".")
           if not expected or host != expected or not host.endswith(".neon.tech"):
-              sys.exit("Database host does not match the approved Neon endpoint.")
+              sys.exit("Database host does not match the approved Neon endpoint (PRODUCTION_EXPECTED_NEON_HOST or STAGE3C_EXPECTED_NEON_HOST).")
           if parsed.path.lstrip("/").split("/", 1)[0] != os.environ["EXPECTED_DATABASE"]:
               sys.exit("Unexpected database name.")
           print(f"Neon endpoint: {host.split('.')[0]}")
 
           with psycopg.connect(raw.replace("postgres://", "postgresql://", 1), connect_timeout=20) as conn:
               with conn.cursor() as cur:
+                  cur.execute("SELECT to_regclass('public.alembic_version') IS NOT NULL")
+                  if not cur.fetchone()[0]:
+                      sys.exit("This database has no alembic_version table; it has never been migrated.")
                   cur.execute("SELECT version_num FROM alembic_version")
                   print("Migration revision:", [r[0] for r in cur.fetchall()])
                   cur.execute("SELECT key, enabled FROM feature_flags ORDER BY key")
@@ -77,6 +88,9 @@ jobs:
 
                   email = os.environ.get("STAFF_EMAIL", "").strip().lower()
                   if email:
+                      cur.execute("SELECT to_regclass('public.user_roles') IS NOT NULL")
+                      if not cur.fetchone()[0]:
+                          sys.exit("Roles need migration 0050 or later. Run the migrations workflow for this database first.")
                       cur.execute("SELECT id FROM users WHERE lower(email) = %s", (email,))
                       row = cur.fetchone()
                       if not row:
