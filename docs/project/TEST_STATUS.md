@@ -1,5 +1,9 @@
 # Test Status
 
+## U7 — GitHub CI (verified, 2026-11-18)
+`main` @ 6e5b76c: pytest **569 passed**; Playwright **63 passed** (bearer), **64 passed** (cookie). Edge @ 1fe293e: Edge API CI and Full CI success, **343 passed** locally (+11 `planner.test.ts`). The first push (3dfb8c4) failed one new Playwright test: the "Resolve" action and the "Resolved" status toggle had overlapping names; the toggles were renamed "Open tickets"/"Resolved tickets" and the test uses the exact name.
+- PostgreSQL run: save, update note, unknown project 404, saved list with open state, unsave; client calendar (2 milestones and a project deadline in 92 days); visitor ticket without email 422, with email 201 (stored lower-case); signed-in ticket linked; non-staff queue 404; moderator resolved (notification to the sender), second resolve 409; admin resolved a visitor ticket; 2 entries in the moderation log.
+
 ## U5 + U6 — GitHub CI (verified, 2026-11-18)
 `main` @ 06265c8: pytest **567 passed**; Playwright **59 passed** (bearer), **60 passed** (cookie). Edge @ d06f1f5: Edge API CI and Full CI success, vitest **332 passed** (31 files). Frontend unit (node --test): **26 passed**.
 - First U5 push failed 2 Playwright tests (proposal label changed case); fixed in 06265c8, not by editing the tests.

@@ -32,6 +32,7 @@ Baseline: 2026-11-18, release 5.65.0 (all CI green). The spec (founder addendum 
 | U3 | Dashboard answering the five questions (apply next, next actions, deadlines, money waiting/earned, recommendations) for freelancers and client managers; unified discovery shipped in U2 | DONE (code, 5.68.0); saved opportunities and calendar pending |
 | U4 | AI Agent Centre: overview (agents available, my runs, failures, AI calls today, drafts waiting), per-agent usage, tools, history and an "Open" link to where each built agent works; command bar routing (U1) | DONE (code, 5.69.0); free-form tasks per agent pending (each agent acts inside its page) |
 | U5 | Posting wizard; Proposal Studio sections and version history; contract workspace tabs | DONE (code, 5.71.0); reference files on listings pending (files live in the contract workspace) |
+| U7 | Saved projects, calendar, About and Contact, support tickets in admin | DONE (code, 5.73.0) |
 | U6 | Analytics (freelancer, client, platform) from Edge data; admin user management and audit log viewer | DONE (code, 5.72.0); system health added; verification queues, source management and support tickets pending |
 
 Out of scope until decisions: live payments and payouts (D-1/D-2), legal pages text (D-1), email delivery (D-15), services catalogue pricing (D-14), Python-only tools (D-11).
