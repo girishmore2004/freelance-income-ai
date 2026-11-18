@@ -9,6 +9,7 @@ import { ContractReviews } from './reviews';
 import { FeeEstimate } from './fee-estimate';
 import { PaymentsPanel } from './payments-panel';
 import { DisputePanel } from './dispute-panel';
+import { defaultTab, tabsFor, type ContractTab } from '@/lib/contract-tabs';
 
 /**
  * Contracts for both parties (Phase 3). An offer becomes active only when the
@@ -39,6 +40,11 @@ export default function ContractsPage() {
   const [items, setItems] = useState<Summary[]>([]);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [changing, setChanging] = useState(false);
+  const [tab, setTab] = useState<ContractTab>('agreement');
+  // A status change can remove the open tab (an offer withdrawn, say): fall back to the agreement.
+  useEffect(() => {
+    if (detail && !tabsFor(detail.status).some((x) => x.key === tab)) setTab('agreement');
+  }, [detail, tab]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -65,7 +71,9 @@ export default function ContractsPage() {
     setNotice('');
     setChanging(false);
     try {
-      setDetail(await api<Detail>(`/api/v1/contracts/${id}`));
+      const d = await api<Detail>(`/api/v1/contracts/${id}`);
+      setDetail(d);
+      setTab(defaultTab(d.status));
     } catch (e) {
       setError(messageOf(e));
     }
@@ -129,6 +137,14 @@ export default function ContractsPage() {
                   total {formatMinor(detail.agreed_terms.total_minor, detail.agreed_terms.currency)}) apply until both of you accept the change.
                 </p>
               )}
+              <p className="muted">{detail.funding.message}</p>
+              <div className="tabs" role="tablist" aria-label="Contract sections">
+                {tabsFor(detail.status).map((tb) => (
+                  <button key={tb.key} type="button" role="tab" id={`tab-${detail.id}-${tb.key}`} aria-selected={tab === tb.key} aria-controls={`panel-${detail.id}-${tb.key}`} onClick={() => setTab(tb.key)}>{tb.label}</button>
+                ))}
+              </div>
+              {tab === 'agreement' && (
+                <div role="tabpanel" id={`panel-${detail.id}-agreement`} aria-labelledby={`tab-${detail.id}-agreement`}>
               {t.scope && <p>{t.scope}</p>}
               {t.deliverables.length > 0 && <><b>Deliverables</b><ul>{t.deliverables.map((d) => <li key={d}>{d}</li>)}</ul></>}
               <table>
@@ -146,7 +162,6 @@ export default function ContractsPage() {
               {detail.status === 'active' && <p className="success">Both parties accepted version {t.version}.</p>}
               {detail.status === 'completed' && <p className="success">All milestones approved. This contract is completed.</p>}
               <FeeEstimate amountMinor={t.total_minor} currency={t.currency} party={detail.party} />
-              <p className="muted">{detail.funding.message}</p>
 
               <div className="row">
                 {detail.allowed_actions.includes('accept') && (
@@ -176,6 +191,65 @@ export default function ContractsPage() {
                 />
               )}
 
+
+              {detail.versions.length > 1 && (
+                <>
+                  <b>Versions of the terms</b>
+                  <ul>{detail.versions.map((v) => <li key={v.version}>v{v.version} by the {v.proposed_by}: {formatMinor(v.total_minor, v.currency)} ({new Date(v.created_at).toLocaleDateString()})</li>)}</ul>
+                </>
+              )}
+                </div>
+              )}
+              {tab === 'delivery' && (
+                <div role="tabpanel" id={`panel-${detail.id}-delivery`} aria-labelledby={`tab-${detail.id}-delivery`}>
+              {['offered', 'active', 'completed'].includes(detail.status) && (
+                <ContractWorkspace
+                  key={`${detail.id}-${detail.status}-delivery`}
+                  contractId={detail.id}
+                  view="delivery"
+                  onChanged={() => {
+                    void load();
+                    api<Detail>(`/api/v1/contracts/${detail.id}`).then((d) => { if (d.status !== detail.status) setDetail(d); }).catch(() => undefined);
+                  }}
+                />
+              )}
+
+                </div>
+              )}
+              {tab === 'files' && (
+                <div role="tabpanel" id={`panel-${detail.id}-files`} aria-labelledby={`tab-${detail.id}-files`}>
+              {['offered', 'active', 'completed'].includes(detail.status) && (
+                <ContractWorkspace
+                  key={`${detail.id}-${detail.status}-files`}
+                  contractId={detail.id}
+                  view="files"
+                  onChanged={() => {
+                    void load();
+                    api<Detail>(`/api/v1/contracts/${detail.id}`).then((d) => { if (d.status !== detail.status) setDetail(d); }).catch(() => undefined);
+                  }}
+                />
+              )}
+
+                </div>
+              )}
+              {tab === 'messages' && (
+                <div role="tabpanel" id={`panel-${detail.id}-messages`} aria-labelledby={`tab-${detail.id}-messages`}>
+              {['offered', 'active', 'completed'].includes(detail.status) && (
+                <ContractWorkspace
+                  key={`${detail.id}-${detail.status}-messages`}
+                  contractId={detail.id}
+                  view="messages"
+                  onChanged={() => {
+                    void load();
+                    api<Detail>(`/api/v1/contracts/${detail.id}`).then((d) => { if (d.status !== detail.status) setDetail(d); }).catch(() => undefined);
+                  }}
+                />
+              )}
+
+                </div>
+              )}
+              {tab === 'payments' && (
+                <div role="tabpanel" id={`panel-${detail.id}-payments`} aria-labelledby={`tab-${detail.id}-payments`}>
               {['active', 'completed', 'cancelled'].includes(detail.status) && (
                 <PaymentsPanel
                   key={`pay-${detail.id}-${detail.status}`}
@@ -189,6 +263,10 @@ export default function ContractsPage() {
                   }}
                 />
               )}
+                </div>
+              )}
+              {tab === 'disputes' && (
+                <div role="tabpanel" id={`panel-${detail.id}-disputes`} aria-labelledby={`tab-${detail.id}-disputes`}>
               {['active', 'completed', 'cancelled'].includes(detail.status) && (
                 <DisputePanel
                   key={`dispute-${detail.id}-${detail.status}`}
@@ -200,10 +278,20 @@ export default function ContractsPage() {
                   }}
                 />
               )}
+                </div>
+              )}
+              {tab === 'reviews' && (
+                <div role="tabpanel" id={`panel-${detail.id}-reviews`} aria-labelledby={`tab-${detail.id}-reviews`}>
+              {detail.status === 'completed' && <ContractReviews contractId={detail.id} />}
+                </div>
+              )}
+              {tab === 'activity' && (
+                <div role="tabpanel" id={`panel-${detail.id}-activity`} aria-labelledby={`tab-${detail.id}-activity`}>
               {['offered', 'active', 'completed'].includes(detail.status) && (
                 <ContractWorkspace
-                  key={`${detail.id}-${detail.status}`}
+                  key={`${detail.id}-${detail.status}-activity`}
                   contractId={detail.id}
+                  view="activity"
                   onChanged={() => {
                     void load();
                     api<Detail>(`/api/v1/contracts/${detail.id}`).then((d) => { if (d.status !== detail.status) setDetail(d); }).catch(() => undefined);
@@ -211,13 +299,7 @@ export default function ContractsPage() {
                 />
               )}
 
-              {detail.status === 'completed' && <ContractReviews contractId={detail.id} />}
-
-              {detail.versions.length > 1 && (
-                <>
-                  <b>History</b>
-                  <ul>{detail.versions.map((v) => <li key={v.version}>v{v.version} by the {v.proposed_by}: {formatMinor(v.total_minor, v.currency)} ({new Date(v.created_at).toLocaleDateString()})</li>)}</ul>
-                </>
+                </div>
               )}
             </section>
           )}

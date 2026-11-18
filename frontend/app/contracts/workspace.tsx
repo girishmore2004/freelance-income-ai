@@ -32,7 +32,10 @@ function messageOf(e: unknown): string {
   return e instanceof Error ? e.message : 'Something went wrong. Please try again.';
 }
 
-export function ContractWorkspace({ contractId, onChanged }: { contractId: string; onChanged: () => void }) {
+/** Which part of the workspace a contract tab shows. */
+export type WorkspaceView = 'delivery' | 'files' | 'messages' | 'activity';
+
+export function ContractWorkspace({ contractId, onChanged, view = 'delivery' }: { contractId: string; onChanged: () => void; view?: WorkspaceView }) {
   const [ws, setWs] = useState<Workspace | null>(null);
   const [message, setMessage] = useState('');
   const [deliverFor, setDeliverFor] = useState<number | null>(null);
@@ -43,6 +46,7 @@ export function ContractWorkspace({ contractId, onChanged }: { contractId: strin
   const [checklist, setChecklist] = useState<Checklist | null>(null);
   const [files, setFiles] = useState<FilesState | null>(null);
   const [attach, setAttach] = useState<string[]>([]);
+  const [filesTried, setFilesTried] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -64,6 +68,8 @@ export function ContractWorkspace({ contractId, onChanged }: { contractId: strin
       setFiles(data && Array.isArray(data.files) && Array.isArray(data.allowed) ? data : null);
     } catch {
       setFiles(null); // Files are optional; the workspace works without them.
+    } finally {
+      setFilesTried(true);
     }
   }, [contractId]);
 
@@ -122,15 +128,14 @@ export function ContractWorkspace({ contractId, onChanged }: { contractId: strin
 
   return (
     <section className="card" aria-label="Delivery workspace">
-      <b>Workspace</b>
       <p className="muted">Approved {formatMinor(ws.approved_minor, ws.currency)} of {formatMinor(ws.total_minor, ws.currency)} · {ws.revision_rounds} revision round{ws.revision_rounds === 1 ? '' : 's'} per milestone</p>
-      <p className="muted">{ws.funding_note}</p>
+      {view === 'delivery' && <p className="muted">{ws.funding_note}</p>}
       <div aria-live="polite">
         {notice && <p className="success">{notice}</p>}
         {error && <p className="error" role="alert">{error}</p>}
       </div>
 
-      {ws.milestones.map((m) => (
+      {view === 'delivery' && ws.milestones.map((m) => (
         <div className="card item" key={m.index}>
           <div className="row between">
             <b>{m.index + 1}. {m.title}</b>
@@ -196,9 +201,10 @@ export function ContractWorkspace({ contractId, onChanged }: { contractId: strin
         </div>
       ))}
 
-      {files && <FilesPanel contractId={contractId} state={files} canUpload={open && ws.can_manage} onChanged={loadFiles} onError={setError} />}
+      {view === 'files' && !files && <p className="muted">{filesTried ? 'File sharing is not available for this contract right now. Share links in a delivery note instead.' : 'Loading files…'}</p>}
+      {view === 'files' && files && <FilesPanel contractId={contractId} state={files} canUpload={open && ws.can_manage} onChanged={loadFiles} onError={setError} />}
 
-      <b>Messages</b>
+      {view === 'messages' && <>
       {ws.messages.length === 0 && <p className="empty">No messages yet.</p>}
       <ul aria-label="Messages">
         {ws.messages.map((msg) => (
@@ -211,11 +217,12 @@ export function ContractWorkspace({ contractId, onChanged }: { contractId: strin
           <button className="btn" type="submit" disabled={busy || !message.trim()}>Send</button>
         </form>
       )}
+      </>}
 
-      {ws.activity.length > 0 && (
+      {view === 'activity' && ws.activity.length === 0 && <p className="empty">No activity yet.</p>}
+      {view === 'activity' && ws.activity.length > 0 && (
         <>
-          <b>Activity</b>
-          <ul>{ws.activity.slice(0, 15).map((a, i) => <li key={i} className="muted">{EVENT_LABELS[a.type] ?? a.type}{typeof a.details.title === 'string' ? `: ${a.details.title}` : ''} · {new Date(a.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</li>)}</ul>
+          <ul aria-label="Activity">{ws.activity.slice(0, 50).map((a, i) => <li key={i} className="muted">{EVENT_LABELS[a.type] ?? a.type}{typeof a.details.title === 'string' ? `: ${a.details.title}` : ''} · {new Date(a.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</li>)}</ul>
         </>
       )}
     </section>

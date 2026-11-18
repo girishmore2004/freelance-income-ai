@@ -1358,9 +1358,34 @@ class ListingProposal(Base):
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR", server_default="INR")
     budget_model: Mapped[str] = mapped_column(String(20), nullable=False, default="fixed", server_default="fixed")
     estimated_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sections_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    current_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    revision_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revision_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ListingProposalVersion(Base):
+    """One immutable version of a native proposal (migration 0067, Proposal Studio)."""
+    __tablename__ = "listing_proposal_versions"
+    __table_args__ = (
+        UniqueConstraint("proposal_id", "version", name="uq_listing_proposal_version"),
+        CheckConstraint("version >= 1", name="ck_listing_proposal_versions_version"),
+        CheckConstraint("price_minor > 0", name="ck_listing_proposal_versions_price"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    proposal_id: Mapped[str] = mapped_column(ForeignKey("listing_proposals.id", ondelete="CASCADE"), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    cover_letter: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    price_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    estimated_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sections_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
 
 
 class Contract(Base):

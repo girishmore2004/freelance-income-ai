@@ -5,11 +5,13 @@ import { ApiError, api, useSessionToken } from '@/lib/api-client';
 import { STATUS_LABELS, formatBudget, linesToList, minorToRupees, rupeesToMinor } from '@/lib/listing-format';
 import { MatchPanel, SavedFreelancers } from './match-panel';
 import { ProposalsPanel } from './proposals-panel';
+import { POSTING_STEPS, briefGaps, firstStepWithError } from '@/lib/posting-wizard';
 
 /**
- * Client project posting (Phase 2). The client describes the work, can ask the
- * AI Brief Builder for a draft, edits every field, sets budget and deadline
- * themselves, then saves a draft or submits. All data comes from the Edge API.
+ * Client project posting (Phase 2; ten-step wizard, spec §8). The client
+ * describes the work, can ask the AI Brief Builder for a draft, edits every
+ * field step by step, sets budget and deadline themselves, reviews the final
+ * brief, then saves a draft or submits. All data comes from the Edge API.
  */
 
 type Org = { id: string; name: string; membership_role: string };
@@ -100,6 +102,7 @@ export default function ClientProjectsPage() {
   const [assist, setAssist] = useState<Assist | null>(null);
   const [matchesFor, setMatchesFor] = useState<string | null>(null);
   const [proposalsFor, setProposalsFor] = useState<string | null>(null);
+  const [step, setStep] = useState(0);
 
   const loadListings = useCallback(async (organizationId: string) => {
     if (!organizationId) return;
@@ -142,6 +145,7 @@ export default function ClientProjectsPage() {
   function startNew() {
     setEditing({ id: null, baseVersion: 0 });
     setForm({ ...EMPTY, category_slug: categories[0]?.slug ?? '' });
+    setStep(0);
     setAssist(null);
     setNotes('');
     setFieldErrors({});
@@ -152,6 +156,7 @@ export default function ClientProjectsPage() {
   function startEdit(listing: Listing) {
     setEditing({ id: listing.id, baseVersion: listing.current_version });
     setForm(formFromBrief(listing.brief, listing.visibility, listing.closes_at));
+    setStep(2);
     setAssist(null);
     setFieldErrors({});
     setNotice('');
@@ -184,7 +189,7 @@ export default function ClientProjectsPage() {
     if (!editing) return;
     const { payload, errors } = payloadFrom(form);
     setFieldErrors(errors);
-    if (!payload) { setError('Check the highlighted fields.'); return; }
+    if (!payload) { setError('Check the highlighted fields.'); setStep(firstStepWithError(errors) ?? step); return; }
     setBusy(true);
     setError('');
     setNotice('');
@@ -203,8 +208,10 @@ export default function ClientProjectsPage() {
     } catch (e) {
       if (e instanceof ApiError && e.code === 'INVALID_BRIEF') {
         const details = e.details[0];
-        setFieldErrors(details && typeof details === 'object' ? (details as Record<string, string>) : {});
+        const errs = details && typeof details === 'object' ? (details as Record<string, string>) : {};
+        setFieldErrors(errs);
         setError('Check the highlighted fields.');
+        setStep(firstStepWithError(errs) ?? step);
       } else if (e instanceof ApiError && e.code === 'INCOMPLETE_BRIEF') {
         const details = e.details[0] as { gaps?: string[] } | undefined;
         setError(`Saved as a draft, but not submitted: ${(details?.gaps ?? []).join(' ')}`);
@@ -278,14 +285,16 @@ export default function ClientProjectsPage() {
             <form className="card" onSubmit={(e) => void save(false, e)} noValidate aria-labelledby="brief-heading">
               <h3 id="brief-heading">{editing.id ? `Edit project (new version after v${editing.baseVersion})` : 'New project'}</h3>
 
-              <div className="field">
-                <label htmlFor="category">Work category</label>
-                <select id="category" value={form.category_slug} onChange={set('category_slug')} {...invalid('category_slug', 'category')}>
-                  {categories.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
-                </select>
-                {fieldError('category_slug', 'category')}
-              </div>
-
+              <ol className="steps-nav" aria-label="Posting steps">
+                {POSTING_STEPS.map((st, i) => (
+                  <li key={st.key}>
+                    <button type="button" className={`step-btn${i === step ? ' current' : ''}`} aria-current={i === step ? 'step' : undefined} onClick={() => setStep(i)}>{i + 1}. {st.label}</button>
+                  </li>
+                ))}
+              </ol>
+              <h4>Step {step + 1} of {POSTING_STEPS.length}: {POSTING_STEPS[step].label}</h4>
+              {POSTING_STEPS[step].key === 'describe' && (
+                <>
               {!editing.id && (
                 <div className="card">
                   <label htmlFor="notes"><b>Describe the project in your own words</b> (optional AI help)</label>
@@ -304,30 +313,72 @@ export default function ClientProjectsPage() {
                 </div>
               )}
 
+              <div className="field"><label htmlFor="description">Details (shown to freelancers; add any reference links here)</label><textarea id="description" rows={4} value={form.description} onChange={set('description')} maxLength={8000} {...invalid('description', 'description')} />{fieldError('description', 'description')}</div>
+                </>
+              )}
+              {POSTING_STEPS[step].key === 'category' && (
+                <>
+              <div className="field">
+                <label htmlFor="category">Work category</label>
+                <select id="category" value={form.category_slug} onChange={set('category_slug')} {...invalid('category_slug', 'category')}>
+                  {categories.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
+                </select>
+                {fieldError('category_slug', 'category')}
+              </div>
+
+                </>
+              )}
+              {POSTING_STEPS[step].key === 'outcome' && (
+                <>
               <div className="field"><label htmlFor="title">Project title (required)</label><input id="title" value={form.title} onChange={set('title')} maxLength={160} {...invalid('title', 'title')} />{fieldError('title', 'title')}</div>
               <div className="field"><label htmlFor="outcome">Business outcome</label><textarea id="outcome" rows={3} value={form.outcome} onChange={set('outcome')} maxLength={2000} {...invalid('outcome', 'outcome')} />{fieldError('outcome', 'outcome')}</div>
-              <div className="field"><label htmlFor="description">Details</label><textarea id="description" rows={4} value={form.description} onChange={set('description')} maxLength={8000} {...invalid('description', 'description')} />{fieldError('description', 'description')}</div>
               <div className="field"><label htmlFor="deliverables">Deliverables (one per line)</label><textarea id="deliverables" rows={3} value={form.deliverables} onChange={set('deliverables')} {...invalid('deliverables', 'deliverables')} />{fieldError('deliverables', 'deliverables')}</div>
-              <div className="field"><label htmlFor="skills">Skills (comma separated)</label><input id="skills" value={form.skills} onChange={set('skills')} {...invalid('skills', 'skills')} />{fieldError('skills', 'skills')}</div>
-              <div className="field"><label htmlFor="experience">Experience level</label>
-                <select id="experience" value={form.experience_level} onChange={set('experience_level')}><option value="any">Any</option><option value="entry">Entry</option><option value="intermediate">Intermediate</option><option value="expert">Expert</option></select></div>
-
+                </>
+              )}
+              {POSTING_STEPS[step].key === 'budget' && (
+                <>
               <div className="field"><label htmlFor="budget-model">Budget type</label>
                 <select id="budget-model" value={form.budget_model} onChange={set('budget_model')}><option value="fixed">Fixed price</option><option value="hourly">Hourly</option></select></div>
               <div className="row">
                 <div className="field"><label htmlFor="budget-min">Minimum budget (₹)</label><input id="budget-min" inputMode="decimal" value={form.budget_min} onChange={set('budget_min')} {...invalid('budget_min_minor', 'budget-min')} />{fieldError('budget_min_minor', 'budget-min')}</div>
                 <div className="field"><label htmlFor="budget-max">Maximum budget (₹)</label><input id="budget-max" inputMode="decimal" value={form.budget_max} onChange={set('budget_max')} {...invalid('budget_max_minor', 'budget-max')} />{fieldError('budget_max_minor', 'budget-max')}</div>
               </div>
+                </>
+              )}
+              {POSTING_STEPS[step].key === 'timeline' && (
+                <>
               <div className="row">
                 <div className="field"><label htmlFor="deadline">Deadline</label><input id="deadline" type="date" value={form.deadline} onChange={set('deadline')} {...invalid('deadline', 'deadline')} />{fieldError('deadline', 'deadline')}</div>
                 <div className="field"><label htmlFor="closes-at">Stop taking proposals after (optional, up to 180 days)</label><input id="closes-at" type="date" value={form.closes_at} onChange={set('closes_at')} {...invalid('closes_at', 'closes-at')} />{fieldError('closes_at', 'closes-at')}</div>
               </div>
 
               <div className="field"><label htmlFor="milestones">Milestones (one per line)</label><textarea id="milestones" rows={3} value={form.milestones} onChange={set('milestones')} {...invalid('milestones', 'milestones')} />{fieldError('milestones', 'milestones')}</div>
+                </>
+              )}
+              {POSTING_STEPS[step].key === 'skills' && (
+                <>
+              <div className="field"><label htmlFor="skills">Skills (comma separated)</label><input id="skills" value={form.skills} onChange={set('skills')} {...invalid('skills', 'skills')} />{fieldError('skills', 'skills')}</div>
+              <div className="field"><label htmlFor="experience">Experience level</label>
+                <select id="experience" value={form.experience_level} onChange={set('experience_level')}><option value="any">Any</option><option value="entry">Entry</option><option value="intermediate">Intermediate</option><option value="expert">Expert</option></select></div>
+
+                </>
+              )}
+              {POSTING_STEPS[step].key === 'references' && (
+                <>
+              <p className="muted">Reference links (examples you like, current site, style guides) can go in the Details field of step 1. Files are shared privately in the contract workspace once you hire, so confidential material is never shown on the public listing.</p>
+              <button className="link" type="button" onClick={() => setStep(0)}>Add reference links to the details</button>
+                </>
+              )}
+              {POSTING_STEPS[step].key === 'acceptance' && (
+                <>
               <div className="field"><label htmlFor="acceptance">Acceptance criteria (one per line)</label><textarea id="acceptance" rows={3} value={form.acceptance} onChange={set('acceptance')} {...invalid('acceptance_criteria', 'acceptance')} />{fieldError('acceptance_criteria', 'acceptance')}</div>
               <div className="field"><label htmlFor="revisions">Included revision rounds</label><input id="revisions" type="number" min={0} max={10} value={form.revision_rounds} onChange={set('revision_rounds')} {...invalid('revision_rounds', 'revisions')} />{fieldError('revision_rounds', 'revisions')}</div>
               <div className="field"><label htmlFor="assumptions">Assumptions (one per line)</label><textarea id="assumptions" rows={2} value={form.assumptions} onChange={set('assumptions')} /></div>
               <div className="field"><label htmlFor="ownership">Ownership and licensing notes (private to your team)</label><textarea id="ownership" rows={2} value={form.ownership_notes} onChange={set('ownership_notes')} maxLength={2000} /></div>
+                </>
+              )}
+              {POSTING_STEPS[step].key === 'visibility' && (
+                <>
               <div className="row">
                 <div className="field"><label htmlFor="visibility">Visibility</label>
                   <select id="visibility" value={form.visibility} onChange={set('visibility')}><option value="public">Public</option><option value="invite_only">Invite only</option><option value="private">Private</option></select></div>
@@ -335,9 +386,35 @@ export default function ClientProjectsPage() {
                   <select id="confidentiality" value={form.confidentiality} onChange={set('confidentiality')}><option value="standard">Standard</option><option value="confidential">Confidential (hide our name and details)</option></select></div>
               </div>
 
+                </>
+              )}
+              {POSTING_STEPS[step].key === 'review' && (
+                <>
+              <div aria-label="Brief summary">
+                {briefGaps(form).length > 0
+                  ? <><p className="error">Before it can be published:</p><ul>{briefGaps(form).map((g) => <li key={g}>{g}</li>)}</ul></>
+                  : <p className="success">The brief has everything needed for publication. Check it, then submit.</p>}
+                <dl className="kv">
+                  <dt>Title</dt><dd>{form.title || '—'}</dd>
+                  <dt>Category</dt><dd>{categories.find((c) => c.slug === form.category_slug)?.name ?? form.category_slug}</dd>
+                  <dt>Outcome</dt><dd>{form.outcome || '—'}</dd>
+                  <dt>Deliverables</dt><dd>{linesToList(form.deliverables).join('; ') || '—'}</dd>
+                  <dt>Skills</dt><dd>{form.skills || '—'} · {form.experience_level}</dd>
+                  <dt>Budget</dt><dd>{form.budget_min || form.budget_max ? `₹${form.budget_min || '—'} to ₹${form.budget_max || '—'}${form.budget_model === 'hourly' ? ' per hour' : ''}` : 'Not set'}</dd>
+                  <dt>Deadline</dt><dd>{form.deadline || 'Not set'}{form.closes_at ? ` · proposals close ${form.closes_at}` : ''}</dd>
+                  <dt>Milestones</dt><dd>{linesToList(form.milestones).join('; ') || '—'}</dd>
+                  <dt>Acceptance</dt><dd>{linesToList(form.acceptance).join('; ') || '—'} · {form.revision_rounds} revision round(s)</dd>
+                  <dt>Visibility</dt><dd>{form.visibility.replace('_', ' ')} · {form.confidentiality}</dd>
+                </dl>
+                <p className="muted">Submitting sends the brief to screening; it is published when it passes. You can still edit it while it is a draft.</p>
+              </div>
+                </>
+              )}
               <div className="row">
+                {step > 0 && <button className="btn" type="button" onClick={() => setStep(step - 1)} disabled={busy}>Back</button>}
+                {step < POSTING_STEPS.length - 1 && <button className="btn primary" type="button" onClick={() => setStep(step + 1)} disabled={busy}>Next</button>}
                 <button className="btn" type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save draft'}</button>
-                {canManage && (!editing.id || listings.find((l) => l.id === editing.id)?.status === 'draft') && (
+                {step === POSTING_STEPS.length - 1 && canManage && (!editing.id || listings.find((l) => l.id === editing.id)?.status === 'draft') && (
                   <button className="btn primary" type="button" disabled={busy} onClick={() => void save(true)}>Save and submit</button>
                 )}
                 <button className="btn" type="button" onClick={() => setEditing(null)} disabled={busy}>Close</button>

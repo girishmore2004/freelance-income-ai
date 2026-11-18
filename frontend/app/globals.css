@@ -196,3 +196,15 @@ ul{padding-left:20px}
 }
 @media(max-width:700px){.grid.g3{grid-template-columns:repeat(2,minmax(0,1fr))}.hero h1{font-size:32px}}
 @media(max-width:520px){.grid{grid-template-columns:1fr 1fr}.shell{padding:16px}.top{align-items:flex-start;flex-direction:column}.topbar h1{font-size:21px}.cat-grid{grid-template-columns:1fr}.pub-nav .actions .btn:not(.primary){display:none}}
+
+/* Posting wizard steps and key-value summaries (U5) */
+.steps-nav{list-style:none;display:flex;flex-wrap:wrap;gap:6px;padding:0;margin:0 0 12px}
+.step-btn{border:1px solid var(--line);background:var(--surface2);color:var(--muted);border-radius:999px;padding:4px 10px;font-size:12.5px;cursor:pointer}
+.step-btn.current{background:var(--accent-soft);border-color:var(--accent-line);color:var(--accent2);font-weight:600}
+.kv{display:grid;grid-template-columns:minmax(110px,auto) 1fr;gap:6px 14px;margin:12px 0}
+.kv dt{color:var(--muted);font-size:13px}
+.kv dd{margin:0;overflow-wrap:anywhere}
+.tabs{display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid var(--line);margin:8px 0 12px}
+.tabs [role=tab]{border:0;background:none;padding:8px 12px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;font:inherit}
+.tabs [role=tab][aria-selected=true]{color:var(--accent2);border-bottom-color:var(--accent);font-weight:600}
+@media (max-width:640px){.kv{grid-template-columns:1fr}.kv dt{margin-top:6px}}

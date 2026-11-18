@@ -41,7 +41,7 @@ const VERSION = {
   created_at: '2026-11-17T00:00:00Z', client_accepted_at: '2026-11-17T00:00:00Z', freelancer_accepted_at: null as string | null,
 };
 
-test('freelancer sends a proposal with their own price', async ({ page }) => {
+test('freelancer checks, reviews and sends the exact proposal with their own price', async ({ page }) => {
   const captured: Captured[] = [];
   await signIn(page);
   await mock(page, captured, (path, method) => {
@@ -49,6 +49,11 @@ test('freelancer sends a proposal with their own price', async ({ page }) => {
     if (path === '/api/v1/project-categories') return ok([{ slug: 'website_development', name: 'Website development' }]);
     if (path === '/api/v1/marketplace/listings') return ok({ items: [PROJECT], next_before: null });
     if (path === '/api/v1/marketplace/listings/L1/proposals' && method === 'POST') return ok({ id: 'P1', status: 'submitted' }, 'Proposal sent');
+    if (path === '/api/v1/profile') return ok({ portfolio_links: ['https://example.dev/work/bakery'] });
+    if (path === '/api/v1/marketplace/listings/L1/proposal-check') {
+      return ok({ content_hash: 'a'.repeat(64), evidence_suggestions: [{ url: 'https://example.dev/work/bakery', matched: ['bakery'] }],
+        findings: [{ code: 'missing_assumptions', severity: 'info', field: 'sections.assumptions', message: 'State your assumptions.' }] });
+    }
     return undefined;
   });
   await page.goto('/projects');
@@ -57,11 +62,17 @@ test('freelancer sends a proposal with their own price', async ({ page }) => {
   await page.getByLabel(/How you would do the work/).fill('I have built three bakery ordering sites with Next.js and can deliver in three weeks.');
   await page.getByLabel(/Your price/).fill('30000');
   await page.getByLabel(/Estimated days/).fill('21');
-  await page.getByRole('button', { name: 'Send proposal', exact: true }).click();
+  await page.getByRole('button', { name: 'Check and preview' }).click();
+  const review = page.getByRole('region', { name: 'Review before sending' });
+  await expect(review.getByText('State your assumptions.')).toBeVisible();
+  const send = review.getByRole('button', { name: 'Send proposal', exact: true });
+  await expect(send).toBeDisabled();
+  await review.getByLabel(/I reviewed this exact proposal/).check();
+  await send.click();
   await expect(page.getByText('Proposal sent')).toBeVisible();
-  await expect.poll(() => captured.find((c) => c.method === 'POST' && c.path === '/api/v1/marketplace/listings/L1/proposals')?.body).toEqual({
-    cover_letter: 'I have built three bakery ordering sites with Next.js and can deliver in three weeks.', price_minor: 3_000_000, estimated_days: 21,
-  });
+  const sent = { cover_letter: 'I have built three bakery ordering sites with Next.js and can deliver in three weeks.', price_minor: 3_000_000, estimated_days: 21 };
+  expect(captured.find((c) => c.path === '/api/v1/marketplace/listings/L1/proposal-check')?.body).toEqual(sent);
+  await expect.poll(() => captured.find((c) => c.method === 'POST' && c.path === '/api/v1/marketplace/listings/L1/proposals')?.body).toEqual({ ...sent, approved_hash: 'a'.repeat(64) });
 });
 
 test('client turns a proposal into an offer with edited milestones', async ({ page }) => {
@@ -245,4 +256,48 @@ test('client compares proposals without a ranking and starts an offer from the s
   await expect(page.getByText('Ownership and licensing are not stated: say who owns the work and source files.')).toBeVisible();
   await expect(page.getByLabel('Milestone 2')).toHaveValue('Build');
   await expect(page.getByText('Total: ₹30,000')).toBeVisible();
+});
+
+test('freelancer adds structured sections and portfolio evidence; changing the text after review needs a new check', async ({ page }) => {
+  const captured: Captured[] = [];
+  await signIn(page);
+  await mock(page, captured, (path, method) => {
+    if (path === '/api/v1/me') return ok({ id: 'f1', roles: ['freelancer'] });
+    if (path === '/api/v1/project-categories') return ok([{ slug: 'website_development', name: 'Website development' }]);
+    if (path === '/api/v1/marketplace/listings') return ok({ items: [PROJECT], next_before: null });
+    if (path === '/api/v1/profile') return ok({ portfolio_links: ['https://example.dev/work/bakery'] });
+    if (path === '/api/v1/marketplace/listings/L1/proposal-check') return ok({ content_hash: 'b'.repeat(64), evidence_suggestions: [], findings: [] });
+    if (path === '/api/v1/marketplace/listings/L1/proposals' && method === 'POST') return ok({ id: 'P1', status: 'submitted' }, 'Proposal sent');
+    return undefined;
+  });
+  await page.goto('/projects');
+  await page.getByRole('button', { name: 'Show details' }).click();
+  await page.getByRole('button', { name: 'Send a proposal' }).click();
+  await page.getByLabel(/How you would do the work/).fill('I would build the order form in Next.js and test it end to end before launch.');
+  await page.getByLabel(/Your price/).fill('30000');
+  await page.getByText('Structured sections (recommended)').click();
+  await page.getByLabel('Deliverables (one per line)').fill('Order form\nAdmin order list');
+  await page.getByLabel(/Milestones \(one per line/).fill('Design | 10000\nBuild | 20000');
+  await page.getByLabel('Not included (one per line)').fill('Hosting fees');
+  await page.getByLabel('https://example.dev/work/bakery').check();
+  await page.getByRole('button', { name: 'Check and preview' }).click();
+  const review = page.getByRole('region', { name: 'Review before sending' });
+  await expect(review.getByText('The checks found nothing to fix.')).toBeVisible();
+  await expect(review.getByText('Build — ₹20,000')).toBeVisible();
+  // Editing after the review closes it: the approved hash would no longer match.
+  await page.getByLabel(/Your price/).fill('31000');
+  await expect(review).toHaveCount(0);
+  await page.getByLabel(/Your price/).fill('30000');
+  await page.getByRole('button', { name: 'Check and preview' }).click();
+  await review.getByLabel(/I reviewed this exact proposal/).check();
+  await review.getByRole('button', { name: 'Send proposal', exact: true }).click();
+  await expect(page.getByText('Proposal sent')).toBeVisible();
+  const body = captured.find((c) => c.method === 'POST' && c.path === '/api/v1/marketplace/listings/L1/proposals')?.body as Record<string, unknown>;
+  expect(body.approved_hash).toBe('b'.repeat(64));
+  expect(body.sections).toMatchObject({
+    deliverables: ['Order form', 'Admin order list'],
+    milestones: [{ title: 'Design', amount_minor: 1_000_000 }, { title: 'Build', amount_minor: 2_000_000 }],
+    exclusions: ['Hosting fees'],
+    evidence: [{ url: 'https://example.dev/work/bakery', note: '' }],
+  });
 });

@@ -38,6 +38,7 @@ test('client funds a milestone with a test payment and opens the test invoice', 
   });
   await page.goto('/contracts');
   await page.getByRole('button', { name: 'Open' }).click();
+  await page.getByRole('tab', { name: 'Payments' }).click();
   await expect(page.getByText('TEST MODE — no real money moves')).toBeVisible();
   await page.getByRole('button', { name: 'Fund milestone' }).click();
   await page.getByRole('button', { name: 'Complete test payment' }).click();

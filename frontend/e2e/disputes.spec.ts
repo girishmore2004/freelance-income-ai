@@ -36,6 +36,7 @@ test('a client raises a dispute and adds a statement', async ({ page }) => {
   });
   await page.goto('/contracts');
   await page.getByRole('button', { name: 'Open' }).click();
+  await page.getByRole('tab', { name: 'Disputes' }).click();
   await page.getByRole('button', { name: 'Raise a dispute' }).click();
   await page.getByLabel('What is it about?').selectOption('non_delivery');
   await page.getByLabel(/What happened/).fill(DESCRIPTION);

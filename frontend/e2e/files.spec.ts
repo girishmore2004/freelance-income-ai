@@ -42,9 +42,11 @@ test('a freelancer uploads a file and attaches it to a delivery', async ({ page 
   });
   await page.goto('/contracts');
   await page.getByRole('button', { name: 'Open' }).click();
+  await page.getByRole('tab', { name: 'Files' }).click();
   await page.getByLabel(/Add a file/).setInputFiles({ name: 'design.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.7\n') });
   await expect(page.getByText('design.pdf uploaded')).toBeVisible();
   expect(uploadContentType).toContain('multipart/form-data');
+  await page.getByRole('tab', { name: 'Milestones and delivery' }).click();
   await page.getByRole('button', { name: 'Deliver work' }).click();
   await page.getByLabel('What are you delivering?').fill('Homepage and menu designs, see the PDF.');
   await page.getByRole('checkbox', { name: 'design.pdf' }).check();
