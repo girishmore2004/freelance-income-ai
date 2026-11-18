@@ -76,6 +76,7 @@ type ProposalWithCard = ProposalRow & {
   weekly_hours: number | null;
   timezone: string | null;
   user_created_at: Date;
+  verified_at?: string | null;
 };
 
 async function proposalForUpdate(tx: Queryable, id: string): Promise<ProposalRow | null> {
@@ -512,7 +513,7 @@ export async function handleHiringRoute(
       if (!listing || !org) return failure("NOT_FOUND", "Listing not found", 404, requestId);
       const rows = await sql<(ProposalWithCard & { contract_id: string | null; contract_status: string | null })[]>`
         SELECT p.*, pr.full_name, pr.headline, pr.skills, pr.services, pr.minimum_budget, pr.hourly_rate,
-               pr.currency AS profile_currency, pr.weekly_hours, pr.timezone, u.created_at AS user_created_at,
+               pr.currency AS profile_currency, pr.weekly_hours, pr.timezone, u.created_at AS user_created_at, (to_jsonb(pr)->>'verified_at') AS verified_at,
                c.id AS contract_id, c.status AS contract_status
         FROM listing_proposals p
         JOIN users u ON u.id = p.freelancer_user_id
@@ -533,7 +534,7 @@ export async function handleHiringRoute(
               user_id: r.freelancer_user_id, full_name: r.full_name ?? "", headline: r.headline ?? "", skills: r.skills ?? "[]",
               services: r.services ?? "[]", minimum_budget: r.minimum_budget, hourly_rate: r.hourly_rate,
               currency: r.profile_currency ?? "INR", weekly_hours: r.weekly_hours,
-              timezone: r.timezone ?? "", dealbreakers: "[]", user_created_at: r.user_created_at
+              timezone: r.timezone ?? "", dealbreakers: "[]", user_created_at: r.user_created_at, verified_at: r.verified_at
             },
             now
           )

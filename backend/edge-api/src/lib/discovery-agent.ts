@@ -11,7 +11,7 @@ import { scoreOpportunity } from "./scoring";
 import { fetchJson, normalizeType, parseDate, stripHtml } from "./source-utils";
 import type { NormalizedJob } from "./source-utils";
 import { fromFreelancer, fromHackerNews, fromHimalayas, fromReddit, fromRemoteOk } from "./project-sources";
-import { recordOpportunityEvent, recordProposalVersion } from "./external-pipeline";
+import { recordOpportunityEvent, recordProposalVersion, tableExists } from "./external-pipeline";
 
 export { parseDate };
 export type { NormalizedJob };
@@ -28,6 +28,45 @@ const JOB_BOARD_SOURCES = [
   ["himalayas", fromHimalayas]
 ] as const;
 const ALL_SOURCE_NAMES = [...PROJECT_SOURCES, ...JOB_BOARD_SOURCES].map(([name]) => name);
+
+/** What staff see on the source management page (U10). */
+export const SOURCE_CATALOGUE: Array<{ code: string; label: string; kind: "project" | "job_board"; access: string }> = [
+  { code: "freelancer", label: "Freelancer.com", kind: "project", access: "Official API (FREELANCER_TOKEN optional)" },
+  { code: "hackernews", label: "Hacker News \"Who is hiring\"", kind: "project", access: "Official Algolia API" },
+  { code: "reddit", label: "Reddit r/forhire", kind: "project", access: "Public JSON feed" },
+  { code: "remotive", label: "Remotive", kind: "job_board", access: "Public API" },
+  { code: "jobicy", label: "Jobicy", kind: "job_board", access: "Public API" },
+  { code: "remoteok", label: "RemoteOK", kind: "job_board", access: "Public API" },
+  { code: "himalayas", label: "Himalayas", kind: "job_board", access: "Public API" }
+];
+
+/** Sources staff switched off; empty before migration 0071 or if the table cannot be read. */
+export async function disabledSources(sql: Sql): Promise<Set<string>> {
+  try {
+    if (!(await tableExists(sql, "discovery_sources"))) return new Set();
+    const rows = await sql<Array<{ code: string }>>`SELECT code FROM discovery_sources WHERE enabled = false`;
+    return new Set(rows.map((r) => r.code));
+  } catch {
+    return new Set();
+  }
+}
+
+/** One row per source per run so staff can see failures and volume. Never blocks discovery. */
+async function recordSourceRuns(sql: Sql, userId: string, sources: Array<{ name: string; fetched: number; error?: string }>): Promise<void> {
+  try {
+    if (!(await tableExists(sql, "discovery_source_runs"))) return;
+    for (const s of sources) {
+      await sql`
+        INSERT INTO discovery_source_runs (id, source, user_id, fetched, error, created_at)
+        VALUES (${crypto.randomUUID()}, ${s.name}, ${userId}, ${Math.max(0, s.fetched)}, ${(s.error ?? "").slice(0, 300)}, now())
+      `;
+    }
+    // Retention: 90 days is enough for trends; keeps the table small.
+    await sql`DELETE FROM discovery_source_runs WHERE created_at < now() - interval '90 days'`;
+  } catch (error) {
+    console.warn(JSON.stringify({ service: "freelance-income-ai-api-edge", event: "discovery.source_runs_failed", error: error instanceof Error ? error.message : "unknown" }));
+  }
+}
 
 /**
  * Discovery agent.
@@ -208,10 +247,11 @@ export async function runDiscovery(
   const sources: Array<{ name: string; fetched: number; error?: string }> = [];
   let jobs: NormalizedJob[] = [];
 
+  const off = await disabledSources(sql);
   const wanted = [
     ...PROJECT_SOURCES.map(([name, fn]) => [name, (t: string) => fn(t, env)] as const),
     ...(env.INCLUDE_JOB_BOARDS === "false" ? [] : JOB_BOARD_SOURCES)
-  ];
+  ].filter(([name]) => !off.has(name));
 
   const settled = await Promise.allSettled(wanted.map(([, fn]) => fn(term)));
   settled.forEach((outcome, index) => {
@@ -227,6 +267,8 @@ export async function runDiscovery(
       });
     }
   });
+
+  await recordSourceRuns(sql, userId, sources);
 
   const known = await sql`
     SELECT source, external_id, source_fingerprint FROM opportunities

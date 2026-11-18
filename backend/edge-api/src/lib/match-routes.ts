@@ -57,7 +57,7 @@ const MATCHABLE_STATUSES = ["draft", "in_review", "published", "hiring", "paused
 async function visibleCandidates(sql: Queryable, excludeOrganizationId: string): Promise<CandidateRow[]> {
   return sql<CandidateRow[]>`
     SELECT p.user_id, p.full_name, p.headline, p.skills, p.services, p.minimum_budget, p.hourly_rate,
-           p.currency, p.weekly_hours, p.timezone, p.dealbreakers, u.created_at AS user_created_at,
+           p.currency, p.weekly_hours, p.timezone, p.dealbreakers, u.created_at AS user_created_at, (to_jsonb(p)->>'verified_at') AS verified_at,
            rt.rating_avg, rt.rating_count
     FROM profiles p
     JOIN users u ON u.id = p.user_id
@@ -82,7 +82,7 @@ async function visibleCandidates(sql: Queryable, excludeOrganizationId: string):
 export async function visibleCandidate(sql: Queryable, freelancerUserId: string): Promise<CandidateRow | null> {
   const rows = await sql<CandidateRow[]>`
     SELECT p.user_id, p.full_name, p.headline, p.skills, p.services, p.minimum_budget, p.hourly_rate,
-           p.currency, p.weekly_hours, p.timezone, p.dealbreakers, u.created_at AS user_created_at,
+           p.currency, p.weekly_hours, p.timezone, p.dealbreakers, u.created_at AS user_created_at, (to_jsonb(p)->>'verified_at') AS verified_at,
            rt.rating_avg, rt.rating_count
     FROM profiles p
     JOIN users u ON u.id = p.user_id
@@ -109,7 +109,7 @@ export async function publicFreelancerPage(sql: Queryable, q: string, offset: nu
   const pattern = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
   const rows = await sql<(CandidateRow & { completed: number })[]>`
     SELECT p.user_id, p.full_name, p.headline, p.skills, p.services, p.minimum_budget, p.hourly_rate,
-           p.currency, p.weekly_hours, p.timezone, p.dealbreakers, u.created_at AS user_created_at,
+           p.currency, p.weekly_hours, p.timezone, p.dealbreakers, u.created_at AS user_created_at, (to_jsonb(p)->>'verified_at') AS verified_at,
            rt.rating_avg, rt.rating_count,
            (SELECT count(*)::int FROM contracts ct WHERE ct.freelancer_user_id = p.user_id AND ct.status = 'completed') AS completed
     FROM profiles p
@@ -282,7 +282,7 @@ export async function handleMatchRoute(
                v.version, v.title, v.category_slug, v.outcome, v.description, v.deliverables_json, v.skills_json,
                v.experience_level, v.budget_model, v.budget_min_minor, v.budget_max_minor, v.currency, v.deadline,
                v.milestones_json, v.acceptance_json, v.revision_rounds, v.languages_json, v.timezone, v.confidentiality,
-               v.ownership_notes, v.assumptions_json, v.content_hash, v.created_at AS v_created_at, o.name AS client_name
+               v.ownership_notes, v.assumptions_json, v.content_hash, v.created_at AS v_created_at, o.name AS client_name, (to_jsonb(o)->>'verified_at') AS client_verified_at
         FROM listing_invitations i
         JOIN project_listings l ON l.id = i.listing_id
         JOIN project_listing_versions v ON v.listing_id = l.id AND v.version = l.current_version
@@ -297,7 +297,7 @@ export async function handleMatchRoute(
         return {
           ...invitationOut({ ...row, created_at: row.invitation_created_at }),
           listing_status: listing.status,
-          project: publicListingOut(listing, version, row.client_name ?? "")
+          project: publicListingOut(listing, version, row.client_name ?? "", row.client_verified_at ?? null)
         };
       });
       return success(items, "Invitations", 200, requestId);
@@ -375,7 +375,7 @@ export async function handleMatchRoute(
 
       const rows = await sql<(CandidateRow & { note: string; saved_at: Date })[]>`
         SELECT p.user_id, p.full_name, p.headline, p.skills, p.services, p.minimum_budget, p.hourly_rate,
-               p.currency, p.weekly_hours, p.timezone, p.dealbreakers, u.created_at AS user_created_at,
+               p.currency, p.weekly_hours, p.timezone, p.dealbreakers, u.created_at AS user_created_at, (to_jsonb(p)->>'verified_at') AS verified_at,
                s.note, s.created_at AS saved_at
         FROM saved_freelancers s
         JOIN profiles p ON p.user_id = s.freelancer_user_id
@@ -459,7 +459,7 @@ export async function handleMatchRoute(
     if (listingInvites && method === "GET") {
       const rows = await sql<(InvitationRow & CandidateRow)[]>`
         SELECT i.*, p.full_name, p.headline, p.skills, p.services, p.minimum_budget, p.hourly_rate,
-               p.currency, p.weekly_hours, p.timezone, p.dealbreakers, p.user_id, u.created_at AS user_created_at
+               p.currency, p.weekly_hours, p.timezone, p.dealbreakers, p.user_id, u.created_at AS user_created_at, (to_jsonb(p)->>'verified_at') AS verified_at
         FROM listing_invitations i
         JOIN users u ON u.id = i.freelancer_user_id
         LEFT JOIN profiles p ON p.user_id = i.freelancer_user_id

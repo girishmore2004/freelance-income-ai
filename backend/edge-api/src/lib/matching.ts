@@ -37,6 +37,8 @@ export interface CandidateRow {
   /** Revealed client reviews (optional: only the matching queries load them). */
   rating_avg?: number | string | null;
   rating_count?: number | string | null;
+  /** Set when staff reviewed the freelancer's public evidence (U10, migration 0071). Never an identity check. */
+  verified_at?: Date | string | null;
 }
 
 export interface ListingForMatch {
@@ -72,6 +74,8 @@ export interface FreelancerCard {
   weekly_hours: number | null;
   timezone: string;
   newcomer: boolean;
+  /** Staff reviewed the freelancer's public work evidence (not an identity or KYC check). */
+  verified: boolean;
   /** Average of revealed client reviews; null until the first one. Not used for ranking. */
   rating: { average: number; count: number } | null;
 }
@@ -125,6 +129,7 @@ export function freelancerCard(row: CandidateRow, now: Date): FreelancerCard {
     weekly_hours: row.weekly_hours,
     timezone: row.timezone,
     newcomer: isNewcomer(row.user_created_at, now),
+    verified: Boolean(row.verified_at),
     rating: Number(row.rating_count ?? 0) > 0 ? { average: Math.round(Number(row.rating_avg) * 10) / 10, count: Number(row.rating_count) } : null
   };
 }

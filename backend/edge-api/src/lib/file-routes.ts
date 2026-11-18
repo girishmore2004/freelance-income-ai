@@ -90,9 +90,55 @@ export function safeFilename(name: string): { name: string; ext: string } | null
   return { name: `${stem}.${ext}`, ext };
 }
 
-async function sha256(buffer: ArrayBuffer): Promise<string> {
+export async function sha256(buffer: ArrayBuffer): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", buffer);
   return [...new Uint8Array(digest)].map((x) => x.toString(16).padStart(2, "0")).join("");
+}
+
+export type UploadRead =
+  | { ok: true; name: string; type: string; bytes: Uint8Array; buffer: ArrayBuffer }
+  | { ok: false; code: string; message: string; status: number };
+
+/** Reads multipart field `file`, checks name, size and that the bytes match the extension. Shared by contract and listing files. */
+export async function readUpload(request: Request, maxBytes: number): Promise<UploadRead> {
+  const limitText = `${Math.round(maxBytes / (1024 * 1024))} MB`;
+  const declared = Number(request.headers.get("content-length") ?? "0");
+  if (declared > maxBytes + 64 * 1024) return { ok: false, code: "FILE_TOO_LARGE", message: `Files can be up to ${limitText}.`, status: 413 };
+  let form: FormData;
+  try {
+    form = await request.formData();
+  } catch {
+    return { ok: false, code: "INVALID_UPLOAD", message: "Send the file as multipart form data in the field \"file\".", status: 422 };
+  }
+  const file = form.get("file");
+  if (!file || typeof file === "string") return { ok: false, code: "INVALID_UPLOAD", message: "Choose a file to upload.", status: 422 };
+  const named = safeFilename(file.name);
+  if (!named) return { ok: false, code: "FILE_TYPE_NOT_ALLOWED", message: `Allowed types: ${ALLOWED_EXTENSIONS.join(", ")}.`, status: 422 };
+  if (file.size <= 0) return { ok: false, code: "INVALID_UPLOAD", message: "The file is empty.", status: 422 };
+  if (file.size > maxBytes) return { ok: false, code: "FILE_TOO_LARGE", message: `Files can be up to ${limitText}.`, status: 413 };
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  const spec = EXTENSIONS[named.ext];
+  if (!bytesMatch(spec.kind, bytes)) {
+    return { ok: false, code: "FILE_TYPE_MISMATCH", message: `The file's content does not match .${named.ext}. Export it again or use another format.`, status: 422 };
+  }
+  return { ok: true, name: named.name, type: spec.type, bytes, buffer };
+}
+
+/** Download headers shared by every stored file: always an attachment, never sniffed or run. */
+export function attachmentResponse(body: ReadableStream | null, file: { filename: string; content_type: string; size_bytes: string | number }): Response {
+  const ascii = file.filename.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_");
+  return new Response(body, {
+    status: 200,
+    headers: {
+      "Content-Type": file.content_type,
+      "Content-Length": String(file.size_bytes),
+      "Content-Disposition": `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(file.filename)}`,
+      "X-Content-Type-Options": "nosniff",
+      "Content-Security-Policy": "default-src 'none'; sandbox",
+      "Cache-Control": "private, no-store"
+    }
+  });
 }
 
 interface FileRow {
@@ -179,18 +225,7 @@ export async function handleFileRoute(request: Request, env: Env, requestId: str
 
       const object = await bucket.get(file.r2_key);
       if (!object) return failure("NOT_FOUND", "File not found", 404, requestId);
-      const ascii = file.filename.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_");
-      return new Response(object.body, {
-        status: 200,
-        headers: {
-          "Content-Type": file.content_type,
-          "Content-Length": String(file.size_bytes),
-          "Content-Disposition": `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(file.filename)}`,
-          "X-Content-Type-Options": "nosniff",
-          "Content-Security-Policy": "default-src 'none'; sandbox",
-          "Cache-Control": "private, no-store"
-        }
-      });
+      return attachmentResponse(object.body, file);
     }
 
     const contract = (await sql<ContractRow[]>`SELECT * FROM contracts WHERE id = ${contractFiles![1]} LIMIT 1`)[0];
@@ -208,27 +243,11 @@ export async function handleFileRoute(request: Request, env: Env, requestId: str
     if (!bucket) return notConfigured(requestId);
     if (!side.canManage) return failure("FORBIDDEN", "Only owners and admins can add files for the client.", 403, requestId);
     if (contract.status !== "active") return failure("CONTRACT_NOT_ACTIVE", "Files can be added while the contract is active.", 409, requestId);
-    const declared = Number(request.headers.get("content-length") ?? "0");
-    if (declared > MAX_FILE_BYTES + 64 * 1024) return failure("FILE_TOO_LARGE", "Files can be up to 10 MB.", 413, requestId);
-
-    let form: FormData;
-    try {
-      form = await request.formData();
-    } catch {
-      return failure("INVALID_UPLOAD", "Send the file as multipart form data in the field \"file\".", 422, requestId);
-    }
-    const file = form.get("file");
-    if (!file || typeof file === "string") return failure("INVALID_UPLOAD", "Choose a file to upload.", 422, requestId);
-    const named = safeFilename(file.name);
-    if (!named) return failure("FILE_TYPE_NOT_ALLOWED", `Allowed types: ${ALLOWED_EXTENSIONS.join(", ")}.`, 422, requestId);
-    if (file.size <= 0) return failure("INVALID_UPLOAD", "The file is empty.", 422, requestId);
-    if (file.size > MAX_FILE_BYTES) return failure("FILE_TOO_LARGE", "Files can be up to 10 MB.", 413, requestId);
-    const buffer = await file.arrayBuffer();
-    const bytes = new Uint8Array(buffer);
-    const spec = EXTENSIONS[named.ext];
-    if (!bytesMatch(spec.kind, bytes)) {
-      return failure("FILE_TYPE_MISMATCH", `The file's content does not match .${named.ext}. Export it again or use another format.`, 422, requestId);
-    }
+    const upload = await readUpload(request, MAX_FILE_BYTES);
+    if (!upload.ok) return failure(upload.code, upload.message, upload.status, requestId);
+    const { bytes, buffer } = upload;
+    const named = { name: upload.name };
+    const spec = { type: upload.type };
 
     const usage = (await sql<{ n: number; bytes: string | number | null }[]>`
       SELECT count(*)::int AS n, COALESCE(sum(size_bytes), 0) AS bytes FROM contract_files WHERE contract_id = ${contract.id} AND status = 'ready'

@@ -48,7 +48,7 @@ export interface AnalyticsRouteDeps {
 const defaultDeps: AnalyticsRouteDeps = { database, authenticate: authenticateRequest, now: () => new Date() };
 
 /** The migration this Worker release expects (shown on the health page). */
-export const EXPECTED_MIGRATION = "0070_discussions_interviews";
+export const EXPECTED_MIGRATION = "0071_files_verification_sources";
 const MONTHS = 6;
 const PAGE = 50;
 

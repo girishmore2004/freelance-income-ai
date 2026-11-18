@@ -67,6 +67,7 @@ export type JoinedListingRow = VersionRow & {
   l_created_at: Date;
   l_updated_at: Date;
   client_name?: string;
+  client_verified_at?: string | null;
 };
 type JoinedRow = JoinedListingRow;
 
@@ -217,7 +218,7 @@ export async function handleListingRoute(
     if (marketMatch) {
       if (marketMatch[1]) {
         const rows = await sql<JoinedRow[]>`
-          SELECT l.id AS l_id, l.organization_id AS l_organization_id, l.category_slug AS l_category_slug, l.status AS l_status, l.visibility AS l_visibility, l.moderation_status AS l_moderation_status, l.moderation_notes AS l_moderation_notes, l.current_version AS l_current_version, l.published_at AS l_published_at, l.closes_at AS l_closes_at, l.created_at AS l_created_at, l.updated_at AS l_updated_at, v.*, o.name AS client_name
+          SELECT l.id AS l_id, l.organization_id AS l_organization_id, l.category_slug AS l_category_slug, l.status AS l_status, l.visibility AS l_visibility, l.moderation_status AS l_moderation_status, l.moderation_notes AS l_moderation_notes, l.current_version AS l_current_version, l.published_at AS l_published_at, l.closes_at AS l_closes_at, l.created_at AS l_created_at, l.updated_at AS l_updated_at, v.*, o.name AS client_name, (to_jsonb(o)->>'verified_at') AS client_verified_at
           FROM project_listings l
           JOIN project_listing_versions v ON v.listing_id = l.id AND v.version = l.current_version
           JOIN organizations o ON o.id = l.organization_id
@@ -231,7 +232,7 @@ export async function handleListingRoute(
         `;
         if (!rows[0]) return failure("NOT_FOUND", "Project not found", 404, requestId);
         const row = rows[0];
-        return success(publicListingOut(listingFromJoined(row), row, row.client_name ?? ""), "Project", 200, requestId);
+        return success(publicListingOut(listingFromJoined(row), row, row.client_name ?? "", row.client_verified_at ?? null), "Project", 200, requestId);
       }
 
       const category = (url.searchParams.get("category") ?? "").slice(0, 60);
@@ -240,7 +241,7 @@ export async function handleListingRoute(
       const beforeDate = before && !Number.isNaN(Date.parse(before)) ? new Date(before) : null;
       const pattern = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
       const rows = await sql<JoinedRow[]>`
-        SELECT l.id AS l_id, l.organization_id AS l_organization_id, l.category_slug AS l_category_slug, l.status AS l_status, l.visibility AS l_visibility, l.moderation_status AS l_moderation_status, l.moderation_notes AS l_moderation_notes, l.current_version AS l_current_version, l.published_at AS l_published_at, l.closes_at AS l_closes_at, l.created_at AS l_created_at, l.updated_at AS l_updated_at, v.*, o.name AS client_name
+        SELECT l.id AS l_id, l.organization_id AS l_organization_id, l.category_slug AS l_category_slug, l.status AS l_status, l.visibility AS l_visibility, l.moderation_status AS l_moderation_status, l.moderation_notes AS l_moderation_notes, l.current_version AS l_current_version, l.published_at AS l_published_at, l.closes_at AS l_closes_at, l.created_at AS l_created_at, l.updated_at AS l_updated_at, v.*, o.name AS client_name, (to_jsonb(o)->>'verified_at') AS client_verified_at
         FROM project_listings l
         JOIN project_listing_versions v ON v.listing_id = l.id AND v.version = l.current_version
         JOIN organizations o ON o.id = l.organization_id
@@ -252,7 +253,7 @@ export async function handleListingRoute(
         ORDER BY l.published_at DESC
         LIMIT ${PAGE_SIZE + 1}
       `;
-      const page = rows.slice(0, PAGE_SIZE).map((row) => publicListingOut(listingFromJoined(row), row, row.client_name ?? ""));
+      const page = rows.slice(0, PAGE_SIZE).map((row) => publicListingOut(listingFromJoined(row), row, row.client_name ?? "", row.client_verified_at ?? null));
       const next = rows.length > PAGE_SIZE ? page[page.length - 1]?.published_at ?? null : null;
       return success({ items: page, next_before: next }, "Projects", 200, requestId);
     }

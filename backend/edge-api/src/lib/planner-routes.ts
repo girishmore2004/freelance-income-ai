@@ -105,7 +105,7 @@ export function sortEvents(events: CalendarEvent[]): CalendarEvent[] {
   return [...events].sort((a, b) => a.date.localeCompare(b.date) || a.type.localeCompare(b.type) || a.title.localeCompare(b.title));
 }
 
-type SavedRow = ListingRow & VersionRow & { organization_name: string; saved_at: Date; note: string; l_created_at: Date };
+type SavedRow = ListingRow & VersionRow & { organization_name: string; client_verified_at: string | null; saved_at: Date; note: string; l_created_at: Date };
 
 async function savedListings(sql: Queryable, userId: string) {
   const rows = await sql<SavedRow[]>`
@@ -114,7 +114,7 @@ async function savedListings(sql: Queryable, userId: string) {
            v.version, v.title, v.outcome, v.description, v.deliverables_json, v.skills_json, v.experience_level, v.budget_model,
            v.budget_min_minor, v.budget_max_minor, v.currency, v.deadline, v.milestones_json, v.acceptance_json, v.revision_rounds,
            v.languages_json, v.timezone, v.confidentiality, v.ownership_notes, v.assumptions_json, v.content_hash, v.created_at,
-           o.name AS organization_name, s.created_at AS saved_at, s.note
+           o.name AS organization_name, (to_jsonb(o)->>'verified_at') AS client_verified_at, s.created_at AS saved_at, s.note
     FROM saved_listings s
     JOIN project_listings l ON l.id = s.listing_id
     JOIN project_listing_versions v ON v.listing_id = l.id AND v.version = l.current_version
@@ -124,7 +124,7 @@ async function savedListings(sql: Queryable, userId: string) {
     LIMIT ${MAX_SAVED}
   `;
   return rows.map((r) => {
-    const listing = publicListingOut(r, r, r.organization_name);
+    const listing = publicListingOut(r, r, r.organization_name, r.client_verified_at);
     const open = r.status === "published" && (!r.closes_at || new Date(r.closes_at) > new Date());
     return { ...listing, status: r.status, open, note: r.note, saved_at: new Date(r.saved_at).toISOString() };
   });

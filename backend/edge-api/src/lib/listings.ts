@@ -397,7 +397,7 @@ export function listingOut(listing: ListingRow, version: VersionRow) {
  * billing details, internal notes, ownership notes or assumptions; a
  * confidential brief also hides the client's name and the long description.
  */
-export function publicListingOut(listing: ListingRow, version: VersionRow, clientName: string) {
+export function publicListingOut(listing: ListingRow, version: VersionRow, clientName: string, clientVerifiedAt: string | Date | null = null) {
   const brief = versionOut(version);
   const confidential = brief.confidentiality === "confidential";
   return {
@@ -406,6 +406,8 @@ export function publicListingOut(listing: ListingRow, version: VersionRow, clien
     closes_at: listing.closes_at ? new Date(listing.closes_at).toISOString() : null,
     visibility: listing.visibility,
     client_name: confidential ? "Confidential client" : clientName,
+    /** Staff reviewed the client account's public evidence (not an identity check). */
+    client_verified: Boolean(clientVerifiedAt),
     title: brief.title,
     category_slug: brief.category_slug,
     outcome: brief.outcome,
