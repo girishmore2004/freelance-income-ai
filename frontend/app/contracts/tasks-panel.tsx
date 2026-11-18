@@ -149,6 +149,24 @@ export function TasksPanel({ contractId }: { contractId: string }) {
 
 type WorkspaceLite = { milestones: TimelineMilestone[]; activity: TimelineActivity[] };
 
+/** This week's progress in plain sentences, from the contract record (U14). */
+export function ProgressCard({ contractId }: { contractId: string }) {
+  const [lines, setLines] = useState<string[] | null>(null);
+  useEffect(() => {
+    api<{ lines: string[] }>(`/api/v1/contracts/${contractId}/progress`)
+      .then((r) => setLines(r && Array.isArray(r.lines) ? r.lines : null))
+      .catch(() => setLines(null));
+  }, [contractId]);
+  if (!lines) return null;
+  return (
+    <section className="card" aria-label="This week">
+      <b>This week</b>
+      <ul>{lines.map((l) => <li key={l}>{l}</li>)}</ul>
+      <p className="muted small">Sent to both sides every Monday as a notification.</p>
+    </section>
+  );
+}
+
 export function TimelinePanel({ contractId }: { contractId: string }) {
   const { state, error } = useTasks(contractId);
   const [ws, setWs] = useState<WorkspaceLite | null>(null);
@@ -164,6 +182,7 @@ export function TimelinePanel({ contractId }: { contractId: string }) {
   const KIND: Record<string, string> = { past: 'Happened', due: 'Due', overdue: 'Overdue', done: 'Done' };
   return (
     <section aria-label="Timeline">
+      <ProgressCard contractId={contractId} />
       {entries.length === 0 && <p className="empty">Nothing dated yet. Milestone and task due dates appear here.</p>}
       <ol aria-label="Timeline entries" className="timeline">
         {entries.map((e) => (

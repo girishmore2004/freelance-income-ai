@@ -42,8 +42,8 @@ export function MatchPanel({ listingId, organizationId, canInvite, invitable }: 
         api<Matches>(`/api/v1/listings/${listingId}/matches`),
         api<Invitation[]>(`/api/v1/listings/${listingId}/invitations`),
       ]);
-      setData(m);
-      setInvitations(inv);
+      setData(m && Array.isArray(m.matches) ? m : null);
+      setInvitations(Array.isArray(inv) ? inv : []);
     } catch (e) {
       setError(messageOf(e));
     } finally {

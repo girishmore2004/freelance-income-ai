@@ -10,6 +10,7 @@ import { FeeEstimate } from './fee-estimate';
 import { PaymentsPanel } from './payments-panel';
 import { DisputePanel } from './dispute-panel';
 import { HandoverPanel, TasksPanel, TimelinePanel } from './tasks-panel';
+import { HireAgain } from './hire-again';
 import { defaultTab, tabsFor, type ContractTab } from '@/lib/contract-tabs';
 
 /**
@@ -26,6 +27,7 @@ type Summary = { id: string; status: string; party: 'client' | 'freelancer'; cli
 type Detail = Summary & {
   project_title: string; versions: Version[]; allowed_actions: string[]; funding: { available: boolean; message: string };
   agreed_version: number | null; pending_change: boolean; agreed_terms: Version | null; can_manage?: boolean;
+  organization_id?: string; freelancer_user_id?: string;
 };
 
 function messageOf(e: unknown): string {
@@ -299,6 +301,9 @@ export default function ContractsPage() {
               {tab === 'reviews' && (
                 <div role="tabpanel" id={`panel-${detail.id}-reviews`} aria-labelledby={`tab-${detail.id}-reviews`}>
               {detail.status === 'completed' && <ContractReviews contractId={detail.id} />}
+              {detail.status === 'completed' && detail.party === 'client' && detail.can_manage !== false && detail.organization_id && detail.freelancer_user_id && (
+                <HireAgain organizationId={detail.organization_id} freelancerId={detail.freelancer_user_id} />
+              )}
                 </div>
               )}
               {tab === 'activity' && (

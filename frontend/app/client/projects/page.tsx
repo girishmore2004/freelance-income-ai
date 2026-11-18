@@ -232,9 +232,11 @@ export default function ClientProjectsPage() {
     setError('');
     setNotice('');
     try {
-      const result = await api<{ message?: string }>(`/api/v1/listings/${listing.id}/transition`, 'POST', { action });
-      setNotice(result.message ?? 'Updated');
+      const result = await api<{ message?: string; status?: string }>(`/api/v1/listings/${listing.id}/transition`, 'POST', { action });
       await loadListings(orgId);
+      setNotice(result?.message ?? 'Updated');
+      // Post to shortlist in one sitting: show ranked, explained matches right after publishing.
+      if (action === 'submit' && result?.status === 'published') setMatchesFor(listing.id);
     } catch (e) {
       if (e instanceof ApiError && e.code === 'INCOMPLETE_BRIEF') {
         const details = e.details[0] as { gaps?: string[] } | undefined;
