@@ -52,7 +52,8 @@ test('a freelancer replies in a proposal thread and accepts the client’s inter
 
   await page.getByLabel('Message', { exact: true }).fill('Email me at me@example.com');
   await page.getByRole('button', { name: 'Send message' }).click();
-  await expect(page.getByRole('alert')).toContainText('Keep contact and payment on the platform');
+  // Scoped: Next.js renders its own empty role=alert route announcer.
+  await expect(page.getByRole('region', { name: 'Messages and interviews' }).getByRole('alert')).toContainText('Keep contact and payment on the platform');
 
   await page.getByLabel('Message', { exact: true }).fill('Yes, Monday works.');
   await page.getByRole('button', { name: 'Send message' }).click();
