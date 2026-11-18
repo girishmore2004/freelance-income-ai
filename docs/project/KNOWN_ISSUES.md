@@ -19,12 +19,13 @@
 | K-16 | Medium | If the only owner of an organisation deletes their account, the organisation is left without an owner (membership cascades). Ownership transfer now exists (5.63.0). | Account deletion (legal, D-1) must require a transfer first. |
 | K-17 | Info | Resolved in 5.63.0: team invitations by one-time link, roles, removal, ownership transfer. Invitations are not emailed until D-15; the inviter copies the link. | — |
 | K-18 | Info | Resolved in 5.58.0: `/admin` moderation queue. | — |
-| K-19 | Low | Listing attachments (R2) are not built. Invitations and closing dates shipped in 5.50.0. | Phase 3 with the delivery workspace. |
+| K-19 | Low | Contract files shipped in 5.64.0 (needs the R2 bucket). Attachments on project listings are still not built. | Reuse `file-routes.ts` for listings when needed. |
 | K-21 | Low | Matching ranks at most 500 opted-in freelancers per request (most recently opted-in first). Fine for launch; needs SQL pre-filtering by skill/category beyond that. | Add a skills index or pgvector retrieval when visible freelancers exceed ~400. |
 | K-23 | Medium | Contract rows block deleting the user or organisation (RESTRICT) by design. There is no account-deletion flow on Edge yet; when one is built it must anonymise contract parties instead of deleting. | Phase 7 account deletion. |
 | K-24 | Low | After a freelancer has proposed on an invitation, the invitation still shows "Send a proposal"; a second attempt is refused with "Edit it instead". | Hide once `/me/proposals` is cross-checked (Phase 3 batch 2 UI pass). |
 | K-25 | Low | Contract messages block phone numbers/emails even after hiring (same rule as listings). Parties may legitimately need a call; meetings are not built. | Revisit with founder policy (D-16 proposed); add scheduled calls later. |
-| K-26 | Info | Deliveries are notes + https links only; file uploads (R2, size limits, malware scanning) are not built. | Phase 3 follow-up with R2 (K-19). |
+| K-26 | Info | Resolved in 5.64.0: deliveries can carry uploaded files (after the R2 bucket is created). | — |
+| K-32 | Medium | Uploaded files are not scanned for malware. Mitigations: allow-list of formats checked against the bytes, no HTML/SVG/scripts/executables, 10 MB limit, files shared only between the two parties (and staff), always downloaded as attachments with `nosniff` and a sandbox CSP. Office/ZIP files can still carry macros or malicious content. | Add a scanning service before opening uploads to many users; warn users to open Office files with care. |
 | K-27 | Low | The sidebar shows the Admin link to everyone; non-staff see "This page is for staff". | Hide by role when the home page is refactored. |
 | K-28 | Info | Resolved in 5.62.0: account suspension with appeals (ADR-007). | — |
 | K-29 | Low | A suspended client's already-published listings stay visible (they cannot hire or act while suspended). | Pause the organisation's listings on suspension once team ownership (invitations) exists. |

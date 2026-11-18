@@ -137,6 +137,13 @@ Set build variable `NEXT_PUBLIC_AUTH_MODE=cookie`, redeploy, sign in, and confir
 2. Deploy Edge (5.63.0), then the frontend.
 3. To try: `/account` → Client accounts → **Team** → enter an email → **Create invitation** → **Copy link** and send it yourself (email sending waits for D-15). The person signs in with that email and opens the link (`/join?...`) → **Join**.
 
+## Files (release 5.64.0): contract attachments in Cloudflare R2
+1. "Stage 3C Neon migrations" (expects `0065_contract_files`). Check: `SELECT count(*) FROM contract_files;` → 0.
+2. Deploy Edge (5.64.0), then the frontend. Without the bucket, the workspace says "File uploads are not switched on yet" and everything else works.
+3. **Create the bucket (you):** Cloudflare dashboard → https://dash.cloudflare.com → your account → **R2 Object Storage** → (first time: enable R2; the free tier includes 10 GB-month of storage) → **Create bucket** → name `freelance-income-ai-files`, location Automatic, default storage class Standard → **Create bucket**. Leave **Public access** disabled (files are only served through the API).
+4. **Switch the binding on:** in GitHub, `cloudflare-edge-api-phase1` → `backend/edge-api/wrangler.jsonc` → remove the `//` in front of the three `r2_buckets` lines → commit. Workers Builds redeploys the Edge API. (Or tell me and I will do it.) Expected: a contract's workspace shows **Add a file**. If the deploy fails with "bucket not found", the bucket name differs: fix the name in either place.
+5. Note K-32: there is no malware scanning yet.
+
 ## Rollback
 - Edge or frontend: Cloudflare → Worker → **Deployments** → previous version → **Rollback**. If you roll the Edge API back, re-attach the old consumer to the queue.
 - Database: see DATABASE_MIGRATION_STATUS.md (5.45 code runs on the 0049 schema).

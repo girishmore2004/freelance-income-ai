@@ -1889,3 +1889,29 @@ class OrganizationInvitation(Base):
     responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
 
+
+class ContractFile(Base):
+    """File attached to a contract; bytes are in R2, metadata here (migration 0065)."""
+    __tablename__ = "contract_files"
+    __table_args__ = (
+        CheckConstraint("party IN ('client', 'freelancer')", name="ck_contract_files_party"),
+        CheckConstraint("status IN ('ready', 'deleted')", name="ck_contract_files_status"),
+        CheckConstraint("size_bytes > 0", name="ck_contract_files_size"),
+        UniqueConstraint("r2_key", name="uq_contract_files_key"),
+        Index("ix_contract_files_contract", "contract_id", "created_at"),
+        Index("ix_contract_files_submission", "submission_id"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    contract_id: Mapped[str] = mapped_column(ForeignKey("contracts.id", ondelete="CASCADE"), nullable=False)
+    uploaded_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    party: Mapped[str] = mapped_column(String(20), nullable=False)
+    submission_id: Mapped[str | None] = mapped_column(ForeignKey("milestone_submissions.id", ondelete="SET NULL"), nullable=True)
+    r2_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    filename: Mapped[str] = mapped_column(String(160), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="ready", server_default="ready")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+

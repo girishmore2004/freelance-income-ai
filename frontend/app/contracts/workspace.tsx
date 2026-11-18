@@ -2,14 +2,14 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ApiError, api } from '@/lib/api-client';
 import { formatMinor, linesToList } from '@/lib/listing-format';
+import { FileLink, FilesPanel, type FilesState } from './files-panel';
 
 /**
  * Shared delivery workspace for one contract: milestones with deliveries and
- * reviews, messages between the parties, and the activity log. Approving
- * work records acceptance only; no payment is released.
+ * reviews, files, messages between the parties, and the activity log.
  */
 
-type Submission = { id: string; status: string; note: string; links: string[]; submitted_at: string; reviewed_at: string | null; review_note: string };
+type Submission = { id: string; status: string; note: string; links: string[]; submitted_at: string; reviewed_at: string | null; review_note: string; files?: { id: string; filename: string; size_bytes: number }[] };
 type MilestoneView = { index: number; title: string; amount_minor: number; due_date: string | null; state: string; revisions_used: number; submissions: Submission[] };
 type Workspace = {
   contract_id: string; status: string; party: 'client' | 'freelancer'; can_manage: boolean; revision_rounds: number; currency: string;
@@ -41,6 +41,8 @@ export function ContractWorkspace({ contractId, onChanged }: { contractId: strin
   const [reviewFor, setReviewFor] = useState<number | null>(null);
   const [reviewNote, setReviewNote] = useState('');
   const [checklist, setChecklist] = useState<Checklist | null>(null);
+  const [files, setFiles] = useState<FilesState | null>(null);
+  const [attach, setAttach] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -56,7 +58,16 @@ export function ContractWorkspace({ contractId, onChanged }: { contractId: strin
     }
   }, [contractId]);
 
-  useEffect(() => { void load(); }, [load]);
+  const loadFiles = useCallback(async () => {
+    try {
+      const data = await api<FilesState>(`/api/v1/contracts/${contractId}/files`);
+      setFiles(data && Array.isArray(data.files) && Array.isArray(data.allowed) ? data : null);
+    } catch {
+      setFiles(null); // Files are optional; the workspace works without them.
+    }
+  }, [contractId]);
+
+  useEffect(() => { void load(); void loadFiles(); }, [load, loadFiles]);
 
   async function run(work: () => Promise<{ message?: string }>, after?: () => void) {
     setBusy(true);
@@ -83,8 +94,8 @@ export function ContractWorkspace({ contractId, onChanged }: { contractId: strin
   function deliver(event: FormEvent, index: number) {
     event.preventDefault();
     void run(
-      () => api(`/api/v1/contracts/${contractId}/milestones/${index}/submit`, 'POST', { note, links: linesToList(links) }),
-      () => { setDeliverFor(null); setNote(''); setLinks(''); },
+      () => api(`/api/v1/contracts/${contractId}/milestones/${index}/submit`, 'POST', { note, links: linesToList(links), ...(attach.length ? { file_ids: attach } : {}) }),
+      () => { setDeliverFor(null); setNote(''); setLinks(''); setAttach([]); void loadFiles(); },
     );
   }
 
@@ -130,6 +141,7 @@ export function ContractWorkspace({ contractId, onChanged }: { contractId: strin
             <div key={s.id}>
               <p style={{ whiteSpace: 'pre-wrap' }}>{s.note}</p>
               {s.links.length > 0 && <ul>{s.links.map((l) => <li key={l}><a className="link" href={l} target="_blank" rel="noopener noreferrer nofollow">{l}</a></li>)}</ul>}
+              {s.files && s.files.length > 0 && <ul aria-label="Delivered files">{s.files.map((f) => <li key={f.id}><FileLink file={f} onError={setError} /></li>)}</ul>}
               {s.review_note && <p className="muted">Client: {s.review_note}</p>}
             </div>
           ))}
@@ -139,6 +151,16 @@ export function ContractWorkspace({ contractId, onChanged }: { contractId: strin
               <form onSubmit={(e) => deliver(e, m.index)}>
                 <div className="field"><label htmlFor={`note-${m.index}`}>What are you delivering?</label><textarea id={`note-${m.index}`} rows={3} maxLength={5000} value={note} onChange={(e) => setNote(e.target.value)} /></div>
                 <div className="field"><label htmlFor={`links-${m.index}`}>Links (https, one per line)</label><textarea id={`links-${m.index}`} rows={2} value={links} onChange={(e) => setLinks(e.target.value)} /></div>
+                {files && files.files.some((f) => f.mine && !f.attached) && (
+                  <fieldset>
+                    <legend>Attach uploaded files</legend>
+                    {files.files.filter((f) => f.mine && !f.attached).map((f) => (
+                      <label key={f.id} className="row">
+                        <input type="checkbox" checked={attach.includes(f.id)} onChange={(e) => setAttach((a) => (e.target.checked ? [...a, f.id] : a.filter((x) => x !== f.id)))} /> {f.filename}
+                      </label>
+                    ))}
+                  </fieldset>
+                )}
                 <div className="row">
                   <button className="btn primary" type="submit" disabled={busy}>Deliver</button>
                   <button className="btn" type="button" onClick={() => setDeliverFor(null)}>Cancel</button>
@@ -173,6 +195,8 @@ export function ContractWorkspace({ contractId, onChanged }: { contractId: strin
           )}
         </div>
       ))}
+
+      {files && <FilesPanel contractId={contractId} state={files} canUpload={open && ws.can_manage} onChanged={loadFiles} onError={setError} />}
 
       <b>Messages</b>
       {ws.messages.length === 0 && <p className="empty">No messages yet.</p>}

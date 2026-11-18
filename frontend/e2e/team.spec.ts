@@ -33,7 +33,7 @@ test('an owner invites a teammate and gets a one-time join link', async ({ page 
   await page.goto('/account');
   await page.getByText('Team (1)').click();
   await page.getByLabel('Invite by email').fill('sam@example.test');
-  await page.getByLabel('Role').selectOption('admin');
+  await page.getByLabel('Role for the invited person').selectOption('admin');
   await page.getByRole('button', { name: 'Create invitation' }).click();
   await expect(page.getByLabel(/Join link/)).toHaveValue(new RegExp(`/join\\?token=${TOKEN}$`));
   await expect(page.getByRole('list', { name: 'Pending invitations' })).toContainText('sam@example.test');

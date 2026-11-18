@@ -116,7 +116,7 @@ export function TeamPanel({ organizationId, myRole, myUserId, onLeft }: { organi
               <input id={`invite-email-${organizationId}`} type="email" autoComplete="off" value={email} onChange={(e) => setEmail(e.target.value)} />
             </div>
             <div className="field">
-              <label htmlFor={`invite-role-${organizationId}`}>Role</label>
+              <label htmlFor={`invite-role-${organizationId}`}>Role for the invited person</label>
               <select id={`invite-role-${organizationId}`} value={role} onChange={(e) => setRole(e.target.value === 'admin' ? 'admin' : 'member')}>
                 <option value="member">Member (works on projects)</option>
                 {isOwner && <option value="admin">Admin (also hires, pays and manages the team)</option>}

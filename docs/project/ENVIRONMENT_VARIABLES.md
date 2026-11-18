@@ -38,3 +38,5 @@ Bindings in `wrangler.jsonc` (5.48.0): rate limiters `AUTH_RATE_LIMITER` (namesp
 No new variables. `OAUTH_ENCRYPTION_KEY` already exists there.
 
 | `PAYMENT_WEBHOOK_SECRET` | Edge API | Secret | Not set yet | HMAC key for webhooks from the live payment provider (after D-2). While unset, `/payments/webhooks/*` answers 404. |
+| `FILES` | Edge API | R2 bucket binding (`wrangler.jsonc`, commented out) | Not set yet | Bucket `freelance-income-ai-files` for contract files. Create the bucket first, then the binding is switched on in `wrangler.jsonc` (a binding to a missing bucket fails the deploy). While unset, uploads answer 503 `FILES_NOT_CONFIGURED`. |
+
