@@ -79,3 +79,19 @@ describe("agent registry", () => {
     expect((await call(world(["admin"]).deps, "POST", "/api/v1/admin/agents/X9", { enabled: false }))!.status).toBe(404);
   });
 });
+
+const usageSession: AuthenticatedSession = { user: { id: "u1", email: "u1@x.test", email_verified: true, mfa_enabled: false }, claims: { sub: "u1", jti: "j", iat: 0, exp: 0 } };
+
+describe("my agent usage", () => {
+  it("groups my runs and AI calls by agent and survives a missing approvals table", async () => {
+    const fake = createFakeSql((text) => {
+      if (text.startsWith("SELECT * FROM agent_definitions")) return [{ code: "F4", name: "Proposal Agent", side: "freelancer", purpose: "p", autonomy_ceiling: "A2", human_gate: "g", tools_json: "[]", runtime_names_json: '["proposal_draft"]', status: "live", enabled: true }];
+      if (text.includes("FROM agent_runs WHERE user_id")) return [{ agent_name: "proposal_draft", total: 3, failed: 1, last_at: new Date("2026-11-18T05:00:00Z") }, { agent_name: "unknown", total: 9, failed: 0, last_at: null }];
+      if (text.includes("FROM ai_usage_events")) return [{ operation: "proposal_draft", today: 2, month: 5 }, { operation: "other", today: 1, month: 1 }];
+      if (text.includes("FROM approvals")) throw new Error("relation does not exist");
+      return [];
+    });
+    const res = await handleAgentRoute(jsonRequest("GET", "/api/v1/me/agent-usage"), {} as Env, "r", { database: () => fake.sql, authenticate: async () => usageSession } as AgentRouteDeps);
+    expect((await readJson(res!)).data).toEqual({ agents: { F4: { runs: 3, failed: 1, last_run_at: "2026-11-18T05:00:00.000Z", ai_calls_today: 2, ai_calls_month: 5 } }, pending_approvals: 0 });
+  });
+});

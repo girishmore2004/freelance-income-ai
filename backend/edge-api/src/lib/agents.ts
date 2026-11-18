@@ -13,6 +13,7 @@ import { loadRoles } from "./identity";
  *   GET  /api/v1/agents                      the catalogue: purpose, autonomy ceiling, human gate, status, enabled
  *   GET  /api/v1/agents/registry             same catalogue in the older dashboard shape ({name, status, mode, ...})
  *   GET  /api/v1/me/agent-runs?agent=CODE     my recent agent runs (last 50), labelled with agent codes
+ *   GET  /api/v1/me/agent-usage               per agent: my runs (total, failed) and AI model calls today / this month; pending approvals
  *   POST /api/v1/admin/agents/{code} {enabled}   admin kill switch for one agent
  *
  * The AI governor maps each model operation to its agent and refuses the call
@@ -88,7 +89,7 @@ export async function handleAgentRoute(request: Request, env: Env, requestId: st
   const method = request.method.toUpperCase();
   const toggle = path.match(/^\/api\/v1\/admin\/agents\/([A-Z]\d{1,2})$/);
   const known =
-    (method === "GET" && (path === "/api/v1/agents" || path === "/api/v1/agents/registry" || path === "/api/v1/me/agent-runs")) ||
+    (method === "GET" && (path === "/api/v1/agents" || path === "/api/v1/agents/registry" || path === "/api/v1/me/agent-runs" || path === "/api/v1/me/agent-usage")) ||
     (method === "POST" && toggle !== null);
   if (!known) return null;
 
@@ -129,6 +130,49 @@ export async function handleAgentRoute(request: Request, env: Env, requestId: st
         200,
         requestId
       );
+    }
+
+    if (path === "/api/v1/me/agent-usage") {
+      const byName = new Map<string, string>();
+      for (const a of agents) for (const name of list(a.runtime_names_json)) byName.set(name, a.code);
+      const runs = await sql<{ agent_name: string; total: number; failed: number; last_at: Date | null }[]>`
+        SELECT agent_name, count(*)::int AS total, count(*) FILTER (WHERE status IN ('failed', 'error'))::int AS failed, max(created_at) AS last_at
+        FROM agent_runs WHERE user_id = ${userId} GROUP BY agent_name
+      `;
+      let calls: { operation: string; today: number; month: number }[] = [];
+      try {
+        calls = await sql<{ operation: string; today: number; month: number }[]>`
+          SELECT operation, count(*) FILTER (WHERE created_at >= date_trunc('day', now()))::int AS today, count(*)::int AS month
+          FROM ai_usage_events WHERE user_id = ${userId} AND created_at >= date_trunc('month', now()) GROUP BY operation
+        `;
+      } catch {
+        calls = [];
+      }
+      let pendingApprovals = 0;
+      try {
+        pendingApprovals = (await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM approvals WHERE user_id = ${userId} AND decision = 'pending'`)[0]?.n ?? 0;
+      } catch {
+        pendingApprovals = 0;
+      }
+      const usage: Record<string, { runs: number; failed: number; last_run_at: string | null; ai_calls_today: number; ai_calls_month: number }> = {};
+      const slot = (code: string) => (usage[code] ??= { runs: 0, failed: 0, last_run_at: null, ai_calls_today: 0, ai_calls_month: 0 });
+      for (const r of runs) {
+        const code = byName.get(r.agent_name);
+        if (!code) continue;
+        const u = slot(code);
+        u.runs += Number(r.total);
+        u.failed += Number(r.failed);
+        const last = r.last_at ? new Date(r.last_at).toISOString() : null;
+        if (last && (!u.last_run_at || last > u.last_run_at)) u.last_run_at = last;
+      }
+      for (const c of calls) {
+        const code = AGENT_FOR_OPERATION[c.operation];
+        if (!code) continue;
+        const u = slot(code);
+        u.ai_calls_today += Number(c.today);
+        u.ai_calls_month += Number(c.month);
+      }
+      return success({ agents: usage, pending_approvals: Number(pendingApprovals) }, "Agent usage", 200, requestId);
     }
 
     // admin kill switch
