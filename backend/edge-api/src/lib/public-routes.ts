@@ -20,9 +20,59 @@ export interface PublicRouteDeps {
 
 const defaultDeps: PublicRouteDeps = { database };
 
+/** Runs a query; a table that is not migrated yet gives null. */
+async function maybe<T>(work: () => Promise<T>): Promise<T | null> {
+  try {
+    return await work();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ *   GET /api/v1/public/home      categories (with open/closed state), agents that are live or
+ *                                partly built, and real counts (published projects, freelancers
+ *                                visible to clients, completed contracts). The page shows a count
+ *                                only when it is above zero: no invented statistics.
+ */
+async function publicHome(env: Env, sql: Sql, requestId: string): Promise<Response> {
+  const categories = await maybe(() => sql<{ slug: string; name: string; enabled: boolean }[]>`
+    SELECT slug, name, enabled FROM project_categories ORDER BY sort_order, name
+  `);
+  const agents = await maybe(() => sql<{ code: string; name: string; side: string; purpose: string; status: string }[]>`
+    SELECT code, name, side, purpose, status FROM agent_definitions WHERE status IN ('live', 'partial') AND enabled = true ORDER BY side, code
+  `);
+  const counts = await maybe(() => sql<{ listings: number; freelancers: number; completed: number }[]>`
+    SELECT
+      (SELECT count(*)::int FROM project_listings WHERE status = 'published' AND visibility = 'public') AS listings,
+      (SELECT count(*)::int FROM profiles WHERE marketplace_visible = true) AS freelancers,
+      (SELECT count(*)::int FROM contracts WHERE status = 'completed') AS completed
+  `);
+  const open = await isEnabled(env, sql, FLAGS.clientMarketplace, false);
+  return success(
+    {
+      client_marketplace_open: open,
+      categories: (categories ?? []).map((c) => ({ slug: c.slug, name: c.name, open: Boolean(c.enabled) && open })),
+      agents: (agents ?? []).map((a) => ({ code: a.code, name: a.name, side: a.side, purpose: a.purpose, status: a.status })),
+      counts: counts?.[0] ? { published_projects: Number(counts[0].listings), visible_freelancers: Number(counts[0].freelancers), completed_contracts: Number(counts[0].completed) } : null
+    },
+    "Public home",
+    200,
+    requestId
+  );
+}
+
 export async function handlePublicRoute(request: Request, env: Env, requestId: string, deps: PublicRouteDeps = defaultDeps): Promise<Response | null> {
-  if (request.method.toUpperCase() !== "GET" || new URL(request.url).pathname !== "/api/v1/public/pricing") return null;
+  const path = new URL(request.url).pathname;
+  if (request.method.toUpperCase() !== "GET" || (path !== "/api/v1/public/pricing" && path !== "/api/v1/public/home")) return null;
   const sql = deps.database(env);
+  if (path === "/api/v1/public/home") {
+    try {
+      return await publicHome(env, sql, requestId);
+    } finally {
+      await sql.end({ timeout: 5 });
+    }
+  }
   try {
     let plans: Array<Record<string, unknown>> | null = null;
     try {
