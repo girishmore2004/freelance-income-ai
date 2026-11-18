@@ -9,6 +9,8 @@ import { ReportButton } from './report-button';
 import { ListingFiles } from '../client/projects/listing-files';
 import { PublicNav } from '../public-nav';
 import { ExternalOpportunities } from './external-opportunities';
+import { SavedSearches } from './saved-searches';
+import { ProfileChecklist } from './profile-checklist';
 
 type View = 'all' | 'native' | 'external' | 'saved';
 type Saved = PublicListing & { closes_at: string | null; status: string; open: boolean; note: string; saved_at: string };
@@ -97,8 +99,22 @@ export default function ProjectsPage() {
     const v = new URLSearchParams(window.location.search).get('view');
     if (v === 'native' || v === 'external' || v === 'saved') setView(v);
     void fetchPage(null, false, '', initial);
+    // Alerts link to /projects?project=<id>: open that project even when it is not on the first page.
+    const wanted = new URLSearchParams(window.location.search).get('project');
+    if (wanted && /^[\w-]{1,64}$/.test(wanted)) void openProject(wanted);
     api<Category[]>('/api/v1/project-categories').then(setCategories).catch(() => setCategories([]));
   }, [token, fetchPage]);
+
+  async function openProject(id: string) {
+    try {
+      const p = await api<PublicListing>(`/api/v1/marketplace/listings/${id}`);
+      if (p && typeof p.id === 'string') setItems((current) => [p, ...current.filter((x) => x.id !== p.id)]);
+      setView('native');
+      setOpen(id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'That project is no longer available.');
+    }
+  }
 
   function search(event: FormEvent) {
     event.preventDefault();
@@ -124,6 +140,7 @@ export default function ProjectsPage() {
         <>
           {token && (
             <>
+              <ProfileChecklist />
               <MarketplaceVisibility />
               {notice && <p className="success" role="status">{notice}</p>}
               <Invitations onProposalSent={(message) => { setNotice(message); setRefreshKey((k) => k + 1); }} />
@@ -144,6 +161,7 @@ export default function ProjectsPage() {
             </div>
             <button className="btn primary" type="submit" disabled={loading}>Search</button>
           </form>
+          {token && <SavedSearches query={applied} category={category} onOpen={(id) => void openProject(id)} />}
           {token && (
             <div className="ws-role" role="group" aria-label="Show" style={{ maxWidth: 460, margin: '4px 0 14px' }}>
               {([['all', 'All'], ['native', 'Native projects'], ['external', 'External opportunities'], ['saved', `Saved${saved && saved.length ? ` (${saved.length})` : ''}`]] as const).map(([v, label]) => (

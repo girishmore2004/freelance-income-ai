@@ -14,7 +14,7 @@ type InvitedProject = {
   title: string; client_name: string; outcome: string; budget_min_minor: number | null; budget_max_minor: number | null;
   currency: string; budget_model: string; deadline: string | null; skills: string[];
 };
-type Invitation = { id: string; listing_id: string; status: string; message: string; created_at: string; listing_status: string; project: InvitedProject };
+type Invitation = { id: string; listing_id: string; status: string; message: string; created_at: string; listing_status: string; my_proposal_id?: string | null; project: InvitedProject };
 
 function messageOf(e: unknown): string {
   return e instanceof Error ? e.message : 'Something went wrong. Please try again.';
@@ -126,7 +126,8 @@ export function Invitations({ onProposalSent }: { onProposalSent?: (message: str
             </div>
           )}
           {inv.status === 'pending' && !['published', 'hiring'].includes(inv.listing_status) && <p className="muted">This project is no longer taking proposals.</p>}
-          {['pending', 'accepted'].includes(inv.status) && inv.listing_status === 'published' && (
+          {inv.my_proposal_id && <p className="muted">You have sent a proposal for this project. Edit or follow it under “Your proposals”.</p>}
+          {!inv.my_proposal_id && ['pending', 'accepted'].includes(inv.status) && inv.listing_status === 'published' && (
             proposing === inv.id ? (
               <ProposalForm
                 listingId={inv.listing_id}

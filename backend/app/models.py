@@ -1584,6 +1584,27 @@ class ContractHandoverItem(Base):
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class SavedSearch(Base):
+    """A freelancer's saved Find work filters with optional alerts (migration 0073)."""
+    __tablename__ = "saved_searches"
+    __table_args__ = (
+        CheckConstraint("min_budget_minor IS NULL OR min_budget_minor >= 0", name="ck_saved_searches_budget"),
+        Index("ix_saved_searches_user", "user_id", "created_at"),
+        Index("ix_saved_searches_alerts", "alerts"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(80), nullable=False)
+    query: Mapped[str] = mapped_column(String(100), nullable=False, default="", server_default="")
+    category_slug: Mapped[str] = mapped_column(String(60), nullable=False, default="", server_default="")
+    min_budget_minor: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    skills_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
+    alerts: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
+
 class SavedListing(Base):
     """A freelancer's saved native project (migration 0068)."""
     __tablename__ = "saved_listings"

@@ -65,4 +65,4 @@ def test_values_are_checked():
 def test_migration_chain_and_head():
     assert 'down_revision = "0071_files_verification_sources"' in MIGRATION.read_text()
     assert len("0072_contract_tasks_handover") <= 32
-    assert 'EXPECTED_MIGRATION_HEAD = "0072_contract_tasks_handover"' in (BACKEND / "app" / "main.py").read_text()
+    assert (BACKEND / "alembic" / "versions" / "0073_saved_searches.py").exists()
