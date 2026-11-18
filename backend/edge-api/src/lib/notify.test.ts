@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Env } from "../types";
-import { handleNotificationRoute, notifyContractEvent, notifyUsers } from "./notify";
+import { handleNotificationRoute, notificationSide, notifyContractEvent, notifyUsers } from "./notify";
 import { createFakeSql, jsonRequest, readJson } from "./test-support";
 
 describe("notifications", () => {
@@ -50,5 +50,20 @@ describe("notifications", () => {
     await handleNotificationRoute(jsonRequest("POST", "/api/v1/notifications/read", { ids: ["n1", "bad id!"] }), env, "r", deps);
     const update = fake.queries.find((q) => q.text.startsWith("UPDATE notifications"))!;
     expect(update.values).toEqual(["u1", "{\"n1\"}"]);
+  });
+});
+
+describe("notification sides", () => {
+  it("follow the linked page or the user's party on the linked contract or proposal", () => {
+    const lookups = { contracts: new Map([["K1", "client" as const], ["K2", "freelancer" as const]]), proposals: new Map([["P1", "freelancer" as const]]) };
+    expect(notificationSide("/contracts#K1", lookups)).toBe("client");
+    expect(notificationSide("/contracts?contract=K2", lookups)).toBe("freelancer");
+    expect(notificationSide("/contracts#K9", lookups)).toBeNull();
+    expect(notificationSide("/inbox?proposal=P1", lookups)).toBe("freelancer");
+    expect(notificationSide("/client/projects", lookups)).toBe("client");
+    expect(notificationSide("/services?view=mine", lookups)).toBe("freelancer");
+    expect(notificationSide("/projects?project=L1", lookups)).toBe("freelancer");
+    expect(notificationSide("/account", lookups)).toBeNull();
+    expect(notificationSide("", lookups)).toBeNull();
   });
 });

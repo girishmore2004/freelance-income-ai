@@ -149,6 +149,55 @@ export interface NotifyRouteDeps {
 
 const defaultDeps: NotifyRouteDeps = { database, authenticate: authenticateRequest };
 
+export type Side = "freelancer" | "client" | null;
+
+/**
+ * Which side of a two-sided account a notification belongs to, from its link:
+ * client pages, freelancer pages, or the user's party on the linked contract or
+ * proposal. Null = account-wide (shown on both sides). Pure.
+ */
+export function notificationSide(link: string, lookups: { contracts: Map<string, Side>; proposals: Map<string, Side> }): Side {
+  const l = link || "";
+  const contract = l.match(/^\/contracts(?:#|\?contract=)([\w-]{1,64})/);
+  if (contract) return lookups.contracts.get(contract[1]) ?? null;
+  const proposal = l.match(/^\/inbox\?proposal=([\w-]{1,64})/);
+  if (proposal) return lookups.proposals.get(proposal[1]) ?? null;
+  if (/^\/client(\/|$|\?)|^\/freelancers|^\/earnings\?view=client/.test(l)) return "client";
+  if (/^\/services\?view=mine/.test(l)) return "freelancer";
+  if (/^\/services/.test(l)) return "client";
+  if (/^\/(projects|profile|opportunities|earnings)(\/|$|\?|#)/.test(l)) return "freelancer";
+  return null;
+}
+
+type NoteRow = { id: string; title: string; message: string; kind: string; link: string; read_at: Date | null; created_at: Date | null; status: string; channel: string };
+
+/** Adds `side` to notification rows with two batched lookups (no N+1). */
+async function withSides(sql: Queryable, userId: string, rows: NoteRow[]): Promise<Array<NoteRow & { side: Side }>> {
+  const contractIds = new Set<string>();
+  const proposalIds = new Set<string>();
+  for (const r of rows) {
+    const c = (r.link || "").match(/^\/contracts(?:#|\?contract=)([\w-]{1,64})/);
+    if (c) contractIds.add(c[1]);
+    const p = (r.link || "").match(/^\/inbox\?proposal=([\w-]{1,64})/);
+    if (p) proposalIds.add(p[1]);
+  }
+  const contracts = new Map<string, Side>();
+  const proposals = new Map<string, Side>();
+  if (contractIds.size) {
+    const found = await sql<Array<{ id: string; freelancer_user_id: string }>>`
+      SELECT id, freelancer_user_id FROM contracts WHERE id = ANY(${textArray([...contractIds])}::text[])
+    `.catch(() => []);
+    for (const c of found) contracts.set(c.id, c.freelancer_user_id === userId ? "freelancer" : "client");
+  }
+  if (proposalIds.size) {
+    const found = await sql<Array<{ id: string; freelancer_user_id: string }>>`
+      SELECT id, freelancer_user_id FROM listing_proposals WHERE id = ANY(${textArray([...proposalIds])}::text[])
+    `.catch(() => []);
+    for (const p of found) proposals.set(p.id, p.freelancer_user_id === userId ? "freelancer" : "client");
+  }
+  return rows.map((r) => ({ ...r, side: notificationSide(r.link, { contracts, proposals }) }));
+}
+
 export async function handleNotificationRoute(request: Request, env: Env, requestId: string, deps: NotifyRouteDeps = defaultDeps): Promise<Response | null> {
   const url = new URL(request.url);
   const path = url.pathname;
@@ -163,8 +212,16 @@ export async function handleNotificationRoute(request: Request, env: Env, reques
   const sql = deps.database(env);
   try {
     if (path === "/api/v1/notifications/unread-count") {
-      const rows = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM notifications WHERE user_id = ${userId} AND read_at IS NULL`;
-      return success({ unread: rows[0]?.n ?? 0 }, "Unread notifications", 200, requestId);
+      const total = (await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM notifications WHERE user_id = ${userId} AND read_at IS NULL`)[0]?.n ?? 0;
+      // Per-side split of the latest unread (enough for badges; the total stays exact).
+      const rows = await sql<NoteRow[]>`
+        SELECT id, title, message, kind, link, read_at, created_at, status, channel FROM notifications
+        WHERE user_id = ${userId} AND read_at IS NULL ORDER BY created_at DESC NULLS LAST LIMIT 500
+      `;
+      const sided = await withSides(sql, userId, rows);
+      const by_side = { freelancer: 0, client: 0, both: 0 };
+      for (const r of sided) by_side[r.side ?? "both"] += 1;
+      return success({ unread: total, by_side }, "Unread notifications", 200, requestId);
     }
     if (path === "/api/v1/notifications/read") {
       const payload = (await body(request)) ?? {};
@@ -175,19 +232,20 @@ export async function handleNotificationRoute(request: Request, env: Env, reques
       return success({ marked: rows.length }, "Marked as read", 200, requestId);
     }
     const unreadOnly = url.searchParams.get("unread") === "1";
-    const rows = unreadOnly
-      ? await sql<{ id: string; title: string; message: string; kind: string; link: string; read_at: Date | null; created_at: Date | null; status: string; channel: string }[]>`
+    const raw = unreadOnly
+      ? await sql<NoteRow[]>`
           SELECT id, title, message, kind, link, read_at, created_at, status, channel FROM notifications
           WHERE user_id = ${userId} AND read_at IS NULL ORDER BY created_at DESC NULLS LAST LIMIT 50
         `
-      : await sql<{ id: string; title: string; message: string; kind: string; link: string; read_at: Date | null; created_at: Date | null; status: string; channel: string }[]>`
+      : await sql<NoteRow[]>`
           SELECT id, title, message, kind, link, read_at, created_at, status, channel FROM notifications
           WHERE user_id = ${userId} ORDER BY created_at DESC NULLS LAST LIMIT 50
         `;
+    const rows = await withSides(sql, userId, raw);
     return success(
       rows.map((r) => ({
         id: r.id, title: r.title, message: r.message, kind: r.kind, link: r.link, channel: r.channel,
-        status: r.read_at ? "read" : r.status, read: Boolean(r.read_at), created_at: r.created_at ? new Date(r.created_at).toISOString() : null
+        status: r.read_at ? "read" : r.status, read: Boolean(r.read_at), created_at: r.created_at ? new Date(r.created_at).toISOString() : null, side: r.side
       })),
       "Notifications",
       200,
