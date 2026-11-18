@@ -1428,6 +1428,47 @@ class OpportunityEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
 
 
+class ProposalMessage(Base):
+    """Pre-contract discussion about a native proposal (migration 0070)."""
+    __tablename__ = "proposal_messages"
+    __table_args__ = (
+        CheckConstraint("sender_party IN ('client', 'freelancer')", name="ck_proposal_messages_party"),
+        Index("ix_proposal_messages_proposal", "proposal_id", "created_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    proposal_id: Mapped[str] = mapped_column(ForeignKey("listing_proposals.id", ondelete="CASCADE"), nullable=False)
+    sender_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    sender_party: Mapped[str] = mapped_column(String(20), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
+
+class ProposalInterview(Base):
+    """Interview slot on a native proposal (migration 0070)."""
+    __tablename__ = "proposal_interviews"
+    __table_args__ = (
+        CheckConstraint("proposed_party IN ('client', 'freelancer')", name="ck_proposal_interviews_party"),
+        CheckConstraint("mode IN ('video', 'phone', 'chat')", name="ck_proposal_interviews_mode"),
+        CheckConstraint("status IN ('proposed', 'accepted', 'declined', 'cancelled', 'completed')", name="ck_proposal_interviews_status"),
+        CheckConstraint("duration_minutes BETWEEN 15 AND 180", name="ck_proposal_interviews_duration"),
+        Index("ix_proposal_interviews_proposal", "proposal_id", "starts_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    proposal_id: Mapped[str] = mapped_column(ForeignKey("listing_proposals.id", ondelete="CASCADE"), nullable=False)
+    proposed_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    proposed_party: Mapped[str] = mapped_column(String(20), nullable=False)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=30, server_default="30")
+    mode: Mapped[str] = mapped_column(String(20), nullable=False, default="video", server_default="video")
+    meeting_link: Mapped[str] = mapped_column(String(500), nullable=False, default="", server_default="")
+    agenda: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="proposed", server_default="proposed")
+    responded_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    outcome_note: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
+
 class SavedListing(Base):
     """A freelancer's saved native project (migration 0068)."""
     __tablename__ = "saved_listings"

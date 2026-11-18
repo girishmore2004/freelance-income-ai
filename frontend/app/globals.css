@@ -223,3 +223,9 @@ ul{padding-left:20px}
 .stat .v{font-size:22px;font-weight:600;color:var(--text)}
 .stat .l{color:var(--muted);font-size:13px}
 .stat .note{color:var(--warn);font-size:12px;margin-top:4px}
+
+/* U9 conversation thread */
+.thread{list-style:none;padding:0;display:grid;gap:8px}
+.thread li{border:1px solid var(--line);border-radius:8px;padding:8px 12px;max-width:85%}
+.thread li.mine{margin-left:auto;background:var(--surface2)}
+.thread li p{margin:4px 0 0}

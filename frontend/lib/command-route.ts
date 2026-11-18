@@ -11,7 +11,8 @@ export function routeCommand(text: string): string {
     [/\b(find|search|projects?|jobs?|work|opportunit\w*)\b/, '/projects'],
     [/\b(next|todo|to do|plan|attention|pending)\b/, '/agent'],
     [/\b(agents?)\b/, '/ai-agents'],
-    [/\b(notifications?|inbox)\b/, '/notifications'],
+    [/\b(inbox|messages?|interviews?|chats?)\b/, '/inbox'],
+    [/\b(notifications?)\b/, '/notifications'],
     [/\b(teams?|invit\w*|account|roles?)\b/, '/account'],
     [/\b(password|mfa|security|sessions?)\b/, '/security'],
   ];

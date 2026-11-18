@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ApiError, api } from '@/lib/api-client';
 import { PROPOSAL_LABELS, formatMinor } from '@/lib/listing-format';
 import { safeHref } from '@/lib/safe-url';
+import { DiscussionPanel } from '../inbox/discussion-panel';
 import { EMPTY_FORM, buildPayload, formFrom, scopeSummary, type StudioForm, type StudioSections } from '@/lib/proposal-studio';
 
 /**
@@ -268,6 +269,7 @@ export function MyProposals({ refreshKey }: { refreshKey: number }) {
   const [items, setItems] = useState<Proposal[] | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [history, setHistory] = useState<string | null>(null);
+  const [talk, setTalk] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
 
@@ -319,10 +321,12 @@ export function MyProposals({ refreshKey }: { refreshKey: number }) {
             <div className="row">
               {['submitted', 'shortlisted'].includes(p.status) && <button className="btn" onClick={() => setEditing(p.id)}>Edit</button>}
               <button className="btn" aria-expanded={history === p.id} onClick={() => setHistory(history === p.id ? null : p.id)}>History</button>
+              {['submitted', 'shortlisted'].includes(p.status) && <button className="btn" aria-expanded={talk === p.id} onClick={() => setTalk(talk === p.id ? null : p.id)}>Messages and interviews</button>}
               {['submitted', 'shortlisted'].includes(p.status) && <button className="btn" onClick={() => void withdraw(p)}>Withdraw</button>}
             </div>
           )}
           {history === p.id && <History proposalId={p.id} currency={p.currency} />}
+          {talk === p.id && <DiscussionPanel proposalId={p.id} />}
           {editing === p.id && (
             <ProposalForm
               listingId={p.listing_id}

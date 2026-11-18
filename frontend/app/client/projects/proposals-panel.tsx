@@ -5,6 +5,7 @@ import { PROPOSAL_LABELS, formatMinor } from '@/lib/listing-format';
 import { TermsForm, type Terms } from '../../contracts/terms-form';
 import type { FreelancerCard } from './match-panel';
 import { ProposalHistory, SectionsView } from '../../projects/proposal-form';
+import { DiscussionPanel } from '../../inbox/discussion-panel';
 import { scopeSummary, type StudioSections } from '@/lib/proposal-studio';
 
 /**
@@ -46,6 +47,7 @@ export function ProposalsPanel({ listingId, brief, canManage }: { listingId: str
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [history, setHistory] = useState<string | null>(null);
+  const [talk, setTalk] = useState<string | null>(null);
   const [revisionFor, setRevisionFor] = useState<string | null>(null);
   const [revisionNote, setRevisionNote] = useState('');
 
@@ -177,6 +179,10 @@ export function ProposalsPanel({ listingId, brief, canManage }: { listingId: str
           {p.revision_requested_at && <p className="muted">You asked for a revision: “{p.revision_note}”. Waiting for a new version.</p>}
           <button className="link" type="button" aria-expanded={history === p.id} onClick={() => setHistory(history === p.id ? null : p.id)}>{history === p.id ? 'Hide version history' : 'Version history'}</button>
           {history === p.id && <ProposalHistory proposalId={p.id} currency={p.currency} />}
+          {['submitted', 'shortlisted'].includes(p.status) && (
+            <button className="link" type="button" aria-expanded={talk === p.id} onClick={() => setTalk(talk === p.id ? null : p.id)}>{talk === p.id ? 'Hide messages and interviews' : 'Messages and interviews'}</button>
+          )}
+          {talk === p.id && <DiscussionPanel proposalId={p.id} />}
           {p.contract_id && <p className="muted">Contract {p.contract_status}. <a className="link" href="/contracts">Open contracts</a></p>}
           {canManage && ['submitted', 'shortlisted'].includes(p.status) && offerFor?.id !== p.id && (
             <div className="row">
