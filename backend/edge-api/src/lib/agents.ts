@@ -25,7 +25,8 @@ export const AGENT_FOR_OPERATION: Record<string, string> = {
   proposal_draft: "F4",
   reply_analysis: "F9",
   brief_builder: "C1",
-  business_coach: "F11"
+  business_coach: "F11",
+  resume_extract: "F3"
 };
 
 /**
@@ -45,7 +46,8 @@ export const OPERATION_POLICY: Record<string, OperationPolicy> = {
   proposal_draft: { agent: "F4", role: "freelancer", tool: "draft", autonomy: "A2" },
   reply_analysis: { agent: "F9", role: "freelancer", tool: "draft", autonomy: "A2" },
   brief_builder: { agent: "C1", role: "client", tool: "draft", autonomy: "A2" },
-  business_coach: { agent: "F11", role: "any", tool: "analytics", autonomy: "A1" }
+  business_coach: { agent: "F11", role: "any", tool: "analytics", autonomy: "A1" },
+  resume_extract: { agent: "F3", role: "freelancer", tool: "extract", autonomy: "A2" }
 };
 
 export interface AgentPolicyRow {

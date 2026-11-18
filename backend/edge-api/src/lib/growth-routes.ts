@@ -81,16 +81,23 @@ export function profileChecklist(p: Record<string, unknown> | undefined, extra: 
   const skills = jsonList(p?.skills);
   const services = jsonList(p?.services);
   const links = jsonList(p?.portfolio_links).filter((l) => safeHttpUrl(l));
+  // A project in the profile's own list (U17) with a link counts as a link to your work.
+  try {
+    const items = JSON.parse(String(p?.portfolio_items_json ?? "[]"));
+    if (Array.isArray(items)) for (const it of items) if (safeHttpUrl(it?.link)) links.push(String(it.link));
+  } catch {
+    // malformed list: links only
+  }
   const str = (k: string) => (typeof p?.[k] === "string" ? String(p[k]).trim() : "");
   const num = (k: string) => Number(p?.[k] ?? 0);
   const items: ChecklistItem[] = [
-    { key: "name", label: "Add your name", done: str("full_name").length > 1, why: "Clients see it on every proposal.", href: "/?tab=profile" },
-    { key: "skills", label: "List at least 3 skills", done: skills.length >= 3, why: "Matching scores projects mostly on skills.", href: "/?tab=profile" },
-    { key: "headline", label: "Write a one-line headline", done: str("headline").length >= 10, why: "It is the first line clients read.", href: "/?tab=profile" },
-    { key: "portfolio", label: "Add a link to your work", done: links.length > 0, why: "Proposals can only cite work from your profile.", href: "/?tab=profile" },
-    { key: "rate", label: "Set your hourly rate or minimum budget", done: num("hourly_rate") > 0 || num("minimum_budget") > 0, why: "Budget fit is part of every match.", href: "/?tab=profile" },
-    { key: "services", label: "Describe the services you offer", done: services.length > 0, why: "Helps clients searching the directory.", href: "/?tab=profile" },
-    { key: "availability", label: "Set weekly hours and time zone", done: num("weekly_hours") > 0 && str("timezone").length > 0, why: "Clients filter by availability and time zone.", href: "/?tab=profile" },
+    { key: "name", label: "Add your name", done: str("full_name").length > 1, why: "Clients see it on every proposal.", href: "/profile" },
+    { key: "skills", label: "List at least 3 skills", done: skills.length >= 3, why: "Matching scores projects mostly on skills.", href: "/profile" },
+    { key: "headline", label: "Write a one-line headline", done: str("headline").length >= 10, why: "It is the first line clients read.", href: "/profile" },
+    { key: "portfolio", label: "Add a link to your work", done: links.length > 0, why: "Proposals can only cite work from your profile.", href: "/profile" },
+    { key: "rate", label: "Set your hourly rate or minimum budget", done: num("hourly_rate") > 0 || num("minimum_budget") > 0, why: "Budget fit is part of every match.", href: "/profile" },
+    { key: "services", label: "Describe the services you offer", done: services.length > 0, why: "Helps clients searching the directory.", href: "/profile" },
+    { key: "availability", label: "Set weekly hours and time zone", done: num("weekly_hours") > 0 && str("timezone").length > 0, why: "Clients filter by availability and time zone.", href: "/profile" },
     { key: "visible", label: "Show your profile to clients", done: extra.visible, why: "Clients can only invite freelancers who opted in.", href: "/projects" },
     { key: "first_proposal", label: "Send your first proposal", done: extra.proposals > 0, why: "Proposal Studio checks it before you send.", href: "/projects" },
     { key: "verified", label: "Ask staff to review your profile", done: extra.verified, why: "Adds a Reviewed badge clients can see.", href: "/account" }

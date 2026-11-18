@@ -39,5 +39,8 @@ describe("profile checklist", () => {
     expect(full.score).toBe(100);
     const unsafeLink = profileChecklist({ portfolio_links: '["javascript:alert(1)"]' }, { visible: false, verified: false, proposals: 0 });
     expect(unsafeLink.items.find((i) => i.key === "portfolio")?.done).toBe(false);
+    const viaProject = profileChecklist({ portfolio_items_json: '[{"title":"Shop","link":"https://shop.dev"}]' }, { visible: false, verified: false, proposals: 0 });
+    expect(viaProject.items.find((i) => i.key === "portfolio")?.done).toBe(true);
+    expect(viaProject.items.find((i) => i.key === "name")?.href).toBe("/profile");
   });
 });

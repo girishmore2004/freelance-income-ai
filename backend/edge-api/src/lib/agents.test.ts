@@ -34,7 +34,7 @@ const call = (deps: AgentRouteDeps, method: string, path: string, payload?: unkn
 
 describe("agent registry", () => {
   it("maps every AI model operation to a registered agent", () => {
-    expect(AGENT_FOR_OPERATION).toEqual({ proposal_draft: "F4", reply_analysis: "F9", brief_builder: "C1", business_coach: "F11" });
+    expect(AGENT_FOR_OPERATION).toEqual({ proposal_draft: "F4", reply_analysis: "F9", brief_builder: "C1", business_coach: "F11", resume_extract: "F3" });
   });
 
   it("treats unknown agents and a missing registry table as enabled", async () => {
