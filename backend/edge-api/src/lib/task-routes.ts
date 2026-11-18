@@ -285,9 +285,7 @@ export async function handleTaskRoute(request: Request, env: Env, requestId: str
       if (method === "GET") {
         const [rows, category] = await Promise.all([
           sql<TaskRow[]>`SELECT * FROM contract_tasks WHERE contract_id = ${contract.id} ORDER BY position ASC, created_at ASC LIMIT ${MAX_TASKS}`,
-          sql<Array<{ template_json: string }>>`
-            SELECT c.template_json FROM project_listings l JOIN project_categories c ON c.slug = l.category_slug WHERE l.id = ${contract.listing_id} LIMIT 1
-          `
+          categoryTemplate(sql, contract)
         ]);
         return success(
           { available: true, tasks: rows.map(taskOut), can_edit: canEdit, stages: parseTemplate(category[0]?.template_json ?? "").stages, milestones: milestones.map((m, index) => ({ index, title: m.title, due_date: m.due_date })) },
@@ -300,9 +298,7 @@ export async function handleTaskRoute(request: Request, env: Env, requestId: str
       if (contract.status !== "active") return failure("CONTRACT_NOT_ACTIVE", "Tasks can change while the contract is active.", 409, requestId);
 
       if (kind === "tasks/plan") {
-        const category = (await sql<Array<{ template_json: string }>>`
-          SELECT c.template_json FROM project_listings l JOIN project_categories c ON c.slug = l.category_slug WHERE l.id = ${contract.listing_id} LIMIT 1
-        `)[0];
+        const category = (await categoryTemplate(sql, contract))[0];
         const plan = planFromStages(parseTemplate(category?.template_json ?? "").stages, milestones);
         if (!plan.length) return failure("NO_STAGES", "This work category has no standard stages. Add tasks yourself.", 409, requestId);
         const created = await sql.begin(async (tx) => {
@@ -404,4 +400,20 @@ export async function handleTaskRoute(request: Request, env: Env, requestId: str
   } finally {
     await sql.end({ timeout: 5 });
   }
+}
+
+/**
+ * The work category's template for a contract: from its project, or (0075)
+ * from the ordered service when the contract came from a service order.
+ */
+async function categoryTemplate(sql: Queryable, contract: { id: string; listing_id: string | null }): Promise<Array<{ template_json: string }>> {
+  if (contract.listing_id) {
+    return sql<Array<{ template_json: string }>>`
+      SELECT c.template_json FROM project_listings l JOIN project_categories c ON c.slug = l.category_slug WHERE l.id = ${contract.listing_id} LIMIT 1
+    `;
+  }
+  return sql<Array<{ template_json: string }>>`
+    SELECT c.template_json FROM service_orders so JOIN services sv ON sv.id = so.service_id
+    JOIN project_categories c ON c.slug = sv.category_slug WHERE so.contract_id = ${contract.id} LIMIT 1
+  `.catch(() => []);
 }

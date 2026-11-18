@@ -1,3 +1,4 @@
+import { tableExists } from "./external-pipeline";
 import type { Env } from "../types";
 import type { AuthenticatedSession } from "./session-service";
 import { authenticateRequest } from "./auth-context";
@@ -48,7 +49,7 @@ export interface AnalyticsRouteDeps {
 const defaultDeps: AnalyticsRouteDeps = { database, authenticate: authenticateRequest, now: () => new Date() };
 
 /** The migration this Worker release expects (shown on the health page). */
-export const EXPECTED_MIGRATION = "0074_profile_projects";
+export const EXPECTED_MIGRATION = "0075_services_categories";
 const MONTHS = 6;
 const PAGE = 50;
 
@@ -191,12 +192,21 @@ async function clientAnalytics(sql: Queryable, organizationId: string, today: Da
       WHERE c.organization_id = ${organizationId} AND i.funded_at >= ${start}
       GROUP BY 1, 2
     `,
-    sql<Array<{ category_slug: string; mode: string; total: string | number }>>`
-      SELECT l.category_slug, i.mode, sum(i.total_minor) AS total
-      FROM payment_intents i JOIN contracts c ON c.id = i.contract_id JOIN project_listings l ON l.id = c.listing_id
-      WHERE c.organization_id = ${organizationId} AND i.funded_at IS NOT NULL
-      GROUP BY 1, 2
-    `,
+    // Service orders (0075) have no project: their category comes from the service.
+    tableExists(sql, "service_orders").then((withServices) => withServices
+      ? sql<Array<{ category_slug: string; mode: string; total: string | number }>>`
+          SELECT COALESCE(l.category_slug, s.category_slug, 'other') AS category_slug, i.mode, sum(i.total_minor) AS total
+          FROM payment_intents i JOIN contracts c ON c.id = i.contract_id LEFT JOIN project_listings l ON l.id = c.listing_id
+          LEFT JOIN LATERAL (SELECT sv.category_slug FROM service_orders so JOIN services sv ON sv.id = so.service_id WHERE so.contract_id = c.id LIMIT 1) s ON c.listing_id IS NULL
+          WHERE c.organization_id = ${organizationId} AND i.funded_at IS NOT NULL
+          GROUP BY 1, 2
+        `
+      : sql<Array<{ category_slug: string; mode: string; total: string | number }>>`
+          SELECT l.category_slug, i.mode, sum(i.total_minor) AS total
+          FROM payment_intents i JOIN contracts c ON c.id = i.contract_id JOIN project_listings l ON l.id = c.listing_id
+          WHERE c.organization_id = ${organizationId} AND i.funded_at IS NOT NULL
+          GROUP BY 1, 2
+        `),
     sql<Array<{ freelancer_user_id: string; status: string; activated_at: Date | null; completed_at: Date | null; total_minor: string | number; released_minor: string | number }>>`
       SELECT c.freelancer_user_id, c.status, c.activated_at, c.completed_at, v.total_minor,
              (SELECT COALESCE(sum(i.amount_minor), 0) FROM payment_intents i WHERE i.contract_id = c.id AND i.status = 'released') AS released_minor

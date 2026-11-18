@@ -5,6 +5,7 @@ import { success } from "./response";
 import { FLAGS, isEnabled } from "./flags";
 import { failure } from "./response";
 import { freelancerCard } from "./matching";
+import { validateProjects } from "./profile-routes";
 import { publicFreelancerPage, visibleCandidate } from "./match-routes";
 
 /**
@@ -86,8 +87,27 @@ async function publicFreelancers(env: Env, sql: Sql, url: URL, id: string | null
              OR EXISTS (SELECT 1 FROM contract_reviews rf WHERE rf.contract_id = ct.id AND rf.reviewer_party = 'freelancer'))
       ORDER BY rv.created_at DESC LIMIT 5
     `;
+    // U17 projects list and U18 published services (both tolerant before their migrations).
+    const own = (await sql<Array<{ items: string | null }>>`SELECT to_jsonb(p)->>'portfolio_items_json' AS items FROM profiles p WHERE p.user_id = ${id} LIMIT 1`)[0]?.items;
+    let projects: unknown[] = [];
+    try {
+      const parsed = JSON.parse(own || "[]");
+      const valid = validateProjects(parsed);
+      projects = valid.ok ? valid.items : [];
+    } catch {
+      projects = [];
+    }
+    const services = await sql<Array<{ id: string; title: string; min_price_minor: string | number; category_slug: string }>>`
+      SELECT s.id, s.title, s.min_price_minor, s.category_slug FROM services s JOIN project_categories c ON c.slug = s.category_slug AND c.enabled = true
+      WHERE s.freelancer_user_id = ${id} AND s.status = 'published' ORDER BY s.published_at DESC LIMIT 20
+    `.catch(() => []);
     return success(
-      { ...freelancerCard(row, now), completed_contracts: Number(completed), reviews: reviews.map((r) => ({ rating: Number(r.rating), comment: r.comment, created_at: new Date(r.created_at).toISOString() })) },
+      {
+        ...freelancerCard(row, now), completed_contracts: Number(completed),
+        reviews: reviews.map((r) => ({ rating: Number(r.rating), comment: r.comment, created_at: new Date(r.created_at).toISOString() })),
+        projects,
+        services_for_sale: services.map((x) => ({ id: x.id, title: x.title, from_price_minor: Number(x.min_price_minor), category_slug: x.category_slug }))
+      },
       "Freelancer",
       200,
       requestId

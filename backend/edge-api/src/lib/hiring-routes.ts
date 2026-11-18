@@ -165,7 +165,7 @@ async function contractVersion(sql: Queryable, contract: ContractRow): Promise<C
   );
 }
 
-async function insertContractVersion(tx: Queryable, contractId: string, version: number, terms: ContractTerms, hash: string, party: Party, userId: string): Promise<void> {
+export async function insertContractVersion(tx: Queryable, contractId: string, version: number, terms: ContractTerms, hash: string, party: Party, userId: string): Promise<void> {
   await tx`
     INSERT INTO contract_versions
       (id, contract_id, version, title, scope, deliverables_json, milestones_json, total_minor, currency, revision_rounds,
@@ -725,13 +725,21 @@ async function respondWithContract(sql: Sql, contractId: string, userId: string,
   const history = await sql<ContractVersionRow[]>`
     SELECT * FROM contract_versions WHERE contract_id = ${contractId} ORDER BY version DESC LIMIT 50
   `;
-  const header = (await sql<{ title: string; organization_name: string }[]>`
-    SELECT v.title, o.name AS organization_name
-    FROM project_listings l
-    JOIN project_listing_versions v ON v.listing_id = l.id AND v.version = l.current_version
-    JOIN organizations o ON o.id = l.organization_id
-    WHERE l.id = ${row.listing_id} LIMIT 1
-  `)[0];
+  // A contract from a service order (0075) has no project: its own title and the client account are used.
+  const header = row.listing_id
+    ? (await sql<{ title: string; organization_name: string }[]>`
+        SELECT v.title, o.name AS organization_name
+        FROM project_listings l
+        JOIN project_listing_versions v ON v.listing_id = l.id AND v.version = l.current_version
+        JOIN organizations o ON o.id = l.organization_id
+        WHERE l.id = ${row.listing_id} LIMIT 1
+      `)[0]
+    : { title: version.title, organization_name: (await sql<{ name: string }[]>`SELECT name FROM organizations WHERE id = ${row.organization_id} LIMIT 1`)[0]?.name ?? "" };
+  const serviceOrder = row.listing_id
+    ? null
+    : ((await sql<Array<{ id: string; service_id: string; package_key: string }>>`
+        SELECT id, service_id, package_key FROM service_orders WHERE contract_id = ${row.id} LIMIT 1
+      `.catch(() => []))[0] ?? null);
   return success(
     {
       id: row.id,
@@ -744,6 +752,8 @@ async function respondWithContract(sql: Sql, contractId: string, userId: string,
       party: side.party,
       can_manage: side.canManage,
       client_name: header?.organization_name ?? "",
+      source: row.listing_id ? "project" : "service_order",
+      service_order: serviceOrder,
       project_title: header?.title ?? "",
       current_version: row.current_version,
       agreed_version: row.agreed_version ?? null,

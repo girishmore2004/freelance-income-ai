@@ -37,7 +37,7 @@ export interface TrustRouteDeps {
 
 const defaultDeps: TrustRouteDeps = { database, authenticate: authenticateRequest };
 
-export const REPORT_TARGETS = ["listing", "user", "proposal", "contract_message", "review"] as const;
+export const REPORT_TARGETS = ["listing", "user", "proposal", "contract_message", "review", "service"] as const;
 export const REPORT_REASONS = ["spam", "scam", "off_platform", "abuse", "prohibited", "fake", "other"] as const;
 const MAX_OPEN_REPORTS_PER_USER = 20;
 /** Flags staff may not flip from the dashboard. */
@@ -117,6 +117,11 @@ export async function handleTrustRoute(request: Request, env: Env, requestId: st
       if (targetType === "user") {
         const exists = await sql<{ id: string }[]>`SELECT id FROM users WHERE id = ${targetId} LIMIT 1`;
         if (!exists[0]) return failure("NOT_FOUND", "User not found", 404, requestId);
+      }
+      if (targetType === "service") {
+        const exists = await sql<{ freelancer_user_id: string }[]>`SELECT freelancer_user_id FROM services WHERE id = ${targetId} AND status <> 'removed' LIMIT 1`.catch(() => []);
+        if (!exists[0]) return failure("NOT_FOUND", "Service not found", 404, requestId);
+        if (exists[0].freelancer_user_id === userId) return failure("INVALID_REPORT", "You cannot report your own service.", 422, requestId);
       }
       const open = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM reports WHERE reporter_user_id = ${userId} AND status = 'open'`;
       if ((open[0]?.n ?? 0) >= MAX_OPEN_REPORTS_PER_USER) {
@@ -243,6 +248,17 @@ export async function handleTrustRoute(request: Request, env: Env, requestId: st
             await logAction(tx, userId, "listing", report.target_id, "listing.hidden_pending_review", `Report ${report.id}: ${note}`);
           }
         }
+        if (decision === "action" && payload.hide_listing === true && report.target_type === "service") {
+          // Same rule for services: hidden pending a moderator's review, never deleted.
+          const rows = await tx<{ id: string }[]>`
+            UPDATE services SET status = 'in_review', moderation_note = ${`reported:${report.reason}`}, updated_at = now()
+            WHERE id = ${report.target_id} AND status IN ('published', 'paused') RETURNING id
+          `;
+          if (rows[0]) {
+            hidden = true;
+            await logAction(tx, userId, "service", report.target_id, "service.hidden_pending_review", `Report ${report.id}: ${note}`);
+          }
+        }
         return { code: "OK" as const, hidden };
       });
       if (result.code === "CLOSED") return failure("REPORT_CLOSED", "This report is already resolved.", 409, requestId);
@@ -254,7 +270,7 @@ export async function handleTrustRoute(request: Request, env: Env, requestId: st
         link: "/projects",
         dedupe: `report:${reportDecision[1]}`
       });
-      return success({ id: reportDecision[1], decision, listing_hidden: result.hidden }, decision === "action" ? (result.hidden ? "Report actioned; listing hidden pending review" : "Report actioned") : "Report dismissed", 200, requestId);
+      return success({ id: reportDecision[1], decision, listing_hidden: result.hidden }, decision === "action" ? (result.hidden ? "Report actioned; hidden pending review" : "Report actioned") : "Report dismissed", 200, requestId);
     }
 
     if (path === "/api/v1/admin/overview") {

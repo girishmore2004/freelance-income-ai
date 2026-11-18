@@ -208,8 +208,9 @@ export function proposalOut(row: ProposalRow) {
 
 export interface ContractRow {
   id: string;
-  listing_id: string;
-  proposal_id: string;
+  /** Null for contracts created from a service order (migration 0075). */
+  listing_id: string | null;
+  proposal_id: string | null;
   organization_id: string;
   freelancer_user_id: string;
   status: string;
