@@ -30,8 +30,8 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Clean install (no legacy peer resolution)
-        run: npm install --no-audit --no-fund
+      - name: Install exactly the locked versions (K-11)
+        run: npm ci --no-audit --no-fund
 
       - name: Typecheck
         run: npm run typecheck

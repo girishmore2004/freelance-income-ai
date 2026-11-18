@@ -231,6 +231,32 @@ async function coachEvidence(sql: Queryable, userId: string): Promise<Evidence[]
   return out.slice(0, 60);
 }
 
+/**
+ * U15 "Ask an agent": evidence about one catalogue agent — what it is for, its
+ * autonomy ceiling and human gate, and the caller's own recent runs of it.
+ * The question is still answered by F11 under the same governor and citation rules.
+ */
+export async function agentEvidence(sql: Queryable, userId: string, code: string): Promise<Evidence[] | null> {
+  const agent = (await tolerant(() => sql<Array<{ code: string; name: string; purpose: string; autonomy_ceiling: string; human_gate: string; status: string; runtime_names_json: string }>>`
+    SELECT code, name, purpose, autonomy_ceiling, human_gate, status, runtime_names_json FROM agent_definitions WHERE code = ${code} LIMIT 1
+  `))?.[0];
+  if (!agent) return null;
+  const out: Evidence[] = [{
+    id: `agent:${agent.code}`, type: "agent",
+    text: `${agent.code} ${agent.name}; status=${agent.status}; purpose=${agent.purpose}; autonomy_ceiling=${agent.autonomy_ceiling}; human_gate=${agent.human_gate}`
+  }];
+  let names: string[] = [];
+  try { const parsed = JSON.parse(agent.runtime_names_json || "[]"); names = Array.isArray(parsed) ? parsed.map(String) : []; } catch { names = []; }
+  if (names.length) {
+    const runs = await tolerant(() => sql<Array<{ id: string; status: string; summary: string; created_at: Date }>>`
+      SELECT id, status, summary, created_at FROM agent_runs
+      WHERE user_id = ${userId} AND agent_name = ANY(${textArray(names)}::text[]) ORDER BY created_at DESC LIMIT 15
+    `);
+    for (const r of runs ?? []) out.push({ id: `agent_run:${r.id}`, type: "agent_run", text: `${new Date(r.created_at).toISOString().slice(0, 16)} status=${r.status}; ${String(r.summary ?? "").slice(0, 300)}` });
+  }
+  return out;
+}
+
 export function validateCitations(answer: string, known: Set<string>): { valid: string[]; unknown: string[]; has_valid_citation: boolean } {
   const cited = [...answer.matchAll(/\[([A-Za-z0-9_:.-]+)\]/g)].map((m) => m[1]);
   const valid = [...new Set(cited.filter((c) => known.has(c)))].sort();
@@ -334,7 +360,13 @@ export async function handleBusinessRoute(request: Request, env: Env, requestId:
     const payload = (await body(request)) ?? {};
     const question = typeof payload.question === "string" ? payload.question.trim() : "";
     if (!question || question.length > 2000) return failure("INVALID_QUESTION", "Ask a question of up to 2,000 characters.", 422, requestId);
-    const evidence = await coachEvidence(sql, userId);
+    const agentCode = typeof payload.agent === "string" && /^[CFP]\d{1,2}$/.test(payload.agent) ? payload.agent : null;
+    let evidence = await coachEvidence(sql, userId);
+    if (agentCode) {
+      const extra = await agentEvidence(sql, userId, agentCode);
+      if (!extra) return failure("NOT_FOUND", "Agent not found", 404, requestId);
+      evidence = [...extra, ...evidence].slice(0, 60);
+    }
     const sources = evidence.map((e) => ({ id: e.id, type: e.type, excerpt: e.text.slice(0, 320) }));
     let answer: string;
     let mode: "llm_grounded_context" | "rules_fallback" = "rules_fallback";
@@ -355,7 +387,7 @@ export async function handleBusinessRoute(request: Request, env: Env, requestId:
           "Cite factual claims with the exact evidence IDs in square brackets, for example [contract:abc]. Give practical next steps. " +
           "Never claim to send messages, submit proposals, deliver work, issue invoices or move money. Test-mode earnings are not real income.";
         const context = evidence.map((e) => `[${e.id}] ${e.text}`).join("\n").slice(0, 12_000);
-        const prompt = `QUESTION:\n${fenceUntrusted("question", question, fenceId, 2000)}\n\nACCOUNT EVIDENCE (each line starts with its citation ID):\n${fenceUntrusted("evidence", context, fenceId, 12_000)}\n\nAnswer concisely with cited evidence IDs and next steps.`;
+        const prompt = `${agentCode ? `The question is about agent ${agentCode}; its own evidence lines come first.\n` : ""}QUESTION:\n${fenceUntrusted("question", question, fenceId, 2000)}\n\nACCOUNT EVIDENCE (each line starts with its citation ID):\n${fenceUntrusted("evidence", context, fenceId, 12_000)}\n\nAnswer concisely with cited evidence IDs and next steps.`;
         const decision = await reserveAiCall(env, sql, { userId, operation: "business_coach", inputChars: system.length + prompt.length, maxOutputTokens: 700 });
         if (!decision.allowed) {
           answer = `${decision.message} I found ${inventory()}; review them below.`;

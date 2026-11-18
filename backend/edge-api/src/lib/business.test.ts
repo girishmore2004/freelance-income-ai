@@ -145,3 +145,18 @@ describe("deadlines", () => {
     expect(upcomingDeadlines([{ ...contracts[0], milestones_json: "not json" }], new Set(), "2026-11-18")).toEqual([]);
   });
 });
+
+describe("ask an agent (U15)", () => {
+  it("adds the agent's description and the caller's runs as citable evidence", async () => {
+    const { agentEvidence } = await import("./business-routes");
+    const { createFakeSql } = await import("./test-support");
+    const fake = createFakeSql((q, values) => {
+      if (q.includes("FROM agent_definitions")) return values[0] === "F4" ? [{ code: "F4", name: "Proposal Agent", purpose: "Drafts proposals", autonomy_ceiling: "A2", human_gate: "approval", status: "live", runtime_names_json: '["proposal_agent"]' }] : [];
+      if (q.includes("FROM agent_runs")) return [{ id: "R1", status: "completed", summary: "drafted 2", created_at: new Date("2026-11-18T05:00:00Z") }];
+      return [];
+    });
+    const ev = await agentEvidence(fake.sql, "f1", "F4");
+    expect(ev?.map((e) => e.id)).toEqual(["agent:F4", "agent_run:R1"]);
+    expect(await agentEvidence(fake.sql, "f1", "C99")).toBeNull();
+  });
+});
