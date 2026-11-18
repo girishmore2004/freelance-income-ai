@@ -18,7 +18,7 @@ import { handleGrowthRoute, runDailyJobDigest } from "./lib/growth-routes";
 import { handleStatementRoute } from "./lib/statement-routes";
 import { handleProfileRoute } from "./lib/profile-routes";
 import { handleServiceRoute } from "./lib/service-routes";
-import { handleTimesheetRoute } from "./lib/timesheet-routes";
+import { autoApproveTimesheets, handleTimesheetRoute } from "./lib/timesheet-routes";
 import { handleOpsRoute } from "./lib/ops-routes";
 import { handleSupportRoute } from "./lib/support-routes";
 import { handleListingRoute } from "./lib/listing-routes";
@@ -764,6 +764,8 @@ async function runScheduledProgressDigests(env: Env): Promise<void> {
     if (sent) console.log(JSON.stringify({ service: "freelance-income-ai-api-edge", event: "progress_digest.sent", contracts: sent }));
     const digests = await runDailyJobDigest(sql, now);
     if (digests) console.log(JSON.stringify({ service: "freelance-income-ai-api-edge", event: "jobs_digest.sent", users: digests }));
+    const approved = await autoApproveTimesheets(sql, now);
+    if (approved) console.log(JSON.stringify({ service: "freelance-income-ai-api-edge", event: "timesheets.auto_approved", weeks: approved }));
   } finally {
     await sql.end({ timeout: 5 });
   }

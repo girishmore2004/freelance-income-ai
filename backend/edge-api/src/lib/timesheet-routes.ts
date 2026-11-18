@@ -31,6 +31,30 @@ import type { IntentRow } from "./payments";
  * and the client approves every week explicitly before paying it.
  */
 
+/** Decision D-22 (2026-11-18): a week the client has not reviewed is approved after this many days, as on Upwork. */
+export const AUTO_APPROVE_DAYS = 5;
+
+/**
+ * Approves submitted weeks left unreviewed for AUTO_APPROVE_DAYS. Approval only:
+ * no money moves until the client pays the week. Run by the cron; idempotent.
+ */
+export async function autoApproveTimesheets(sql: Queryable, now: Date): Promise<number> {
+  if (!(await tableExists(sql, "contract_timesheets"))) return 0;
+  const cutoff = new Date(now.getTime() - AUTO_APPROVE_DAYS * 86_400_000).toISOString();
+  const due = await sql<Array<{ id: string; contract_id: string; week_start: Date | string; amount_minor: string | number | null }>>`
+    UPDATE contract_timesheets SET status = 'approved', decided_at = now(), decided_by = NULL,
+      client_note = ${`Approved automatically: not reviewed within ${AUTO_APPROVE_DAYS} days`}, updated_at = now()
+    WHERE status = 'submitted' AND submitted_at < ${cutoff}
+    RETURNING id, contract_id, week_start, amount_minor
+  `;
+  for (const s of due) {
+    await recordContractEvent(sql, s.contract_id, null, "system", "timesheet.approved", {
+      week_start: day(s.week_start), amount_minor: Number(s.amount_minor ?? 0), automatic: true
+    }).catch(() => undefined);
+  }
+  return due.length;
+}
+
 export interface TimesheetRouteDeps {
   database: (env: Env) => Sql;
   authenticate: (request: Request, env: Env, requestId: string) => Promise<AuthenticatedSession | Response>;
