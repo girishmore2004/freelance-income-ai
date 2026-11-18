@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import { api, useSessionToken } from '@/lib/api-client';
+import { AskAgent } from './ask-agent';
 
 /**
  * AI agents (Phase 6): the governed catalogue from Master Plan v2 with each
@@ -131,6 +132,7 @@ export default function AiAgentsPage() {
                     {(agentRuns[a.code] ?? []).length === 0 ? <p className="muted small">{agentRuns[a.code] ? 'No runs for you yet.' : 'Loading…'}</p> : (
                       <ul>{agentRuns[a.code].map((r) => <li key={r.id} className="small">{r.status} · {r.summary} <span className="muted">{new Date(r.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span></li>)}</ul>
                     )}
+                    {['live', 'partial'].includes(a.status) && <AskAgent code={a.code} name={`${a.code} ${a.name}`} />}
                   </details>
                 </div>
                 {isAdmin && ['live', 'partial'].includes(a.status) && (
