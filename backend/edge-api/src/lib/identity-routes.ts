@@ -30,6 +30,7 @@ import type { OrganizationInput } from "./identity";
  *   GET    /api/v1/organizations/{id}          member only (404 otherwise)
  *   PATCH  /api/v1/organizations/{id} {...}    owner/admin only
  *   GET    /api/v1/organizations/{id}/members  member only
+ *   (team invitations, roles, removal and ownership transfer: team-routes.ts)
  *
  * The client side is behind the `marketplace.client_side` flag (default OFF):
  * activating "client" and creating organisations return 403 FEATURE_DISABLED
@@ -78,7 +79,7 @@ export async function handleIdentityRoute(
         isEnabled(env, sql, FLAGS.clientMarketplace, false)
       ]);
       return success(
-        { roles, organizations: organizations.map(organizationOut), client_side_enabled: clientSideEnabled },
+        { user_id: userId, roles, organizations: organizations.map(organizationOut), client_side_enabled: clientSideEnabled },
         "Identity",
         200,
         requestId

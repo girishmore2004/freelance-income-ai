@@ -4,6 +4,7 @@ import { handleLoginRoute } from "./lib/login-route";
 import { handleAuthRoute } from "./lib/auth-routes";
 import { handleAccountRoute } from "./lib/account-routes";
 import { handleIdentityRoute } from "./lib/identity-routes";
+import { handleTeamRoute } from "./lib/team-routes";
 import { handleListingRoute } from "./lib/listing-routes";
 import { handleMatchRoute, runScheduledListingExpiry } from "./lib/match-routes";
 import { handleHiringRoute } from "./lib/hiring-routes";
@@ -357,6 +358,16 @@ async function routeRequest(
   // Identity: roles and organisations (/me/identity, /me/roles,
   // /organizations). Must run before the generic /me handler.
   // --------------------------------------------------
+
+  const teamResponse = await handleTeamRoute(
+    request,
+    env,
+    requestId
+  );
+
+  if (teamResponse) {
+    return teamResponse;
+  }
 
   const identityResponse = await handleIdentityRoute(
     request,
