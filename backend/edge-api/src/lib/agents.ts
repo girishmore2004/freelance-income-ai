@@ -23,7 +23,8 @@ import { loadRoles } from "./identity";
 export const AGENT_FOR_OPERATION: Record<string, string> = {
   proposal_draft: "F4",
   reply_analysis: "F9",
-  brief_builder: "C1"
+  brief_builder: "C1",
+  business_coach: "F11"
 };
 
 /** True unless the agent is registered and switched off. Missing table (pre-0058) = enabled. */
