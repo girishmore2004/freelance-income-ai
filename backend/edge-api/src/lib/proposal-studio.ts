@@ -198,6 +198,7 @@ export interface Finding {
     | "missing_assumptions"
     | "missing_exclusions"
     | "no_evidence"
+    | "near_duplicate"
     | "revisions_below_brief";
   severity: FindingSeverity;
   field: string;

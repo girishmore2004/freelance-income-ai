@@ -1,4 +1,5 @@
 import type { Env } from "../types";
+import { NOT_AVAILABLE, isBlocked } from "./fair-proposals";
 import type { AuthenticatedSession } from "./session-service";
 import { authenticateRequest } from "./auth-context";
 import { body, database, jsonList, textArray } from "./core-routes";
@@ -395,6 +396,7 @@ export async function handleServiceRoute(request: Request, env: Env, requestId: 
       if (row.freelancer_user_id === userId) return failure("OWN_SERVICE", "You cannot order your own service.", 409, requestId);
       const member = await organizationForMember(sql, row.freelancer_user_id, orgId);
       if (member) return failure("OWN_SERVICE", "The freelancer is a member of this client account.", 409, requestId);
+      if (await isBlocked(sql, row.freelancer_user_id, orgId)) return failure("NOT_AVAILABLE", NOT_AVAILABLE, 403, requestId);
       const pkg = packagesOf(row).find((p) => p.key === key);
       if (!pkg) return failure("INVALID_ORDER", "Choose one of the service's packages.", 422, requestId, [{ package: "Choose a package." }]);
       if (requirements.length > 3000) return failure("INVALID_ORDER", "Check the highlighted fields.", 422, requestId, [{ requirements: "Keep it under 3,000 characters." }]);

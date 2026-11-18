@@ -1,4 +1,5 @@
 import { tableExists } from "./external-pipeline";
+import { intakeOf, isBlocked, loadQuota, nearDuplicate } from "./fair-proposals";
 import type { Env } from "../types";
 import { notifyUsers, organizationManagers } from "./notify";
 import type { AuthenticatedSession } from "./session-service";
@@ -127,7 +128,7 @@ async function insertProposalVersion(tx: Queryable, proposalId: string, version:
 async function draftForListing(env: Env, sql: Sql, userId: string, listingId: string, rawPrice: unknown, requestId: string): Promise<Response> {
   const rows = await sql<(VersionRow & { visibility: string; status: string; is_member: boolean; invited: boolean })[]>`
     SELECT v.*, l.visibility, l.status,
-           EXISTS (SELECT 1 FROM organization_memberships m WHERE m.organization_id = l.organization_id AND m.user_id = ${userId}) AS is_member,
+           EXISTS (SELECT 1 FROM organization_memberships m WHERE m.organization_id = l.organization_id AND m.user_id = ${userId} AND m.status = 'active') AS is_member,
            EXISTS (SELECT 1 FROM listing_invitations i WHERE i.listing_id = l.id AND i.freelancer_user_id = ${userId} AND i.status IN ('pending', 'accepted')) AS invited
     FROM project_listings l
     JOIN project_listing_versions v ON v.listing_id = l.id AND v.version = l.current_version
@@ -263,7 +264,7 @@ export async function handleHiringRoute(
         SELECT l.*, v.budget_model, v.currency,
                (SELECT i.id FROM listing_invitations i
                  WHERE i.listing_id = l.id AND i.freelancer_user_id = ${userId} AND i.status IN ('pending', 'accepted') LIMIT 1) AS invitation_id,
-               EXISTS (SELECT 1 FROM organization_memberships m WHERE m.organization_id = l.organization_id AND m.user_id = ${userId}) AS is_member
+               EXISTS (SELECT 1 FROM organization_memberships m WHERE m.organization_id = l.organization_id AND m.user_id = ${userId} AND m.status = 'active') AS is_member
         FROM project_listings l
         JOIN project_listing_versions v ON v.listing_id = l.id AND v.version = l.current_version
         JOIN organizations o ON o.id = l.organization_id
@@ -273,6 +274,8 @@ export async function handleHiringRoute(
       const listing = rows[0];
       const visible = listing && (listing.visibility === "public" || listing.invitation_id !== null);
       if (!listing || !visible || listing.is_member) return failure("NOT_FOUND", "Project not found", 404, requestId);
+      // A block either way hides the project (neutral answer: the blocked side is not told).
+      if (await isBlocked(sql, userId, listing.organization_id)) return failure("NOT_FOUND", "Project not found", 404, requestId);
       if (isCheck) {
         const brief = (await sql<VersionRow[]>`
           SELECT * FROM project_listing_versions WHERE listing_id = ${listing.id} AND version = ${listing.current_version} LIMIT 1
@@ -285,8 +288,19 @@ export async function handleHiringRoute(
           evidence,
           deps.now()
         );
+        // Quality gate (Master Plan B12): flag a near-copy of a proposal sent to another project.
+        const copy = await nearDuplicate(sql, userId, listing.id, input.cover_letter);
+        if (copy) {
+          findings.push({
+            code: "near_duplicate",
+            severity: "warn",
+            field: "cover_letter",
+            message: `This introduction is ${Math.round(copy.similarity * 100)}% the same as the one you sent for "${copy.project_title}". Clients notice copied proposals; write to this client's project.`
+          });
+        }
+        const [quota, intake] = await Promise.all([loadQuota(sql, userId), intakeOf(sql, listing.id)]);
         return success(
-          { content_hash: parsed.hash, findings, evidence_suggestions: rankEvidence(evidence.portfolio_links, { title: b.title, skills: b.skills }) },
+          { content_hash: parsed.hash, findings, evidence_suggestions: rankEvidence(evidence.portfolio_links, { title: b.title, skills: b.skills }), quota, accepting_proposals: !intake.closed },
           findings.some((f) => f.severity === "warn") ? "Review the flagged points before submitting" : "No problems found",
           200,
           requestId
@@ -294,6 +308,12 @@ export async function handleHiringRoute(
       }
       if (listing.status !== "published" || (listing.closes_at && new Date(listing.closes_at) <= deps.now())) {
         return failure("LISTING_NOT_OPEN", "This project is not taking proposals.", 409, requestId);
+      }
+      const intake = await intakeOf(sql, listing.id);
+      if (intake.closed) return failure("PROPOSALS_CLOSED", "The client has stopped taking new proposals for this project.", 409, requestId);
+      const quota = await loadQuota(sql, userId);
+      if (quota.remaining <= 0) {
+        return failure("PROPOSAL_LIMIT", `You have sent ${quota.used} proposals in the last 7 days, your limit for now. ${quota.explanation}`, 429, requestId, [{ quota }]);
       }
       const newId = crypto.randomUUID();
       const inserted = ready
@@ -321,6 +341,10 @@ export async function handleHiringRoute(
             RETURNING *
           `;
       if (!inserted[0]) return failure("ALREADY_PROPOSED", "You already sent a proposal for this project. Edit it instead.", 409, requestId);
+      // Reaching the client's cap closes the project to new proposals.
+      if (intake.max_proposals !== null && intake.received + 1 >= intake.max_proposals) {
+        await sql`UPDATE project_listings SET proposals_closed_at = now(), updated_at = now() WHERE id = ${listing.id} AND proposals_closed_at IS NULL`;
+      }
       if (listing.invitation_id) {
         await sql`UPDATE listing_invitations SET status = 'accepted', responded_at = COALESCE(responded_at, now()) WHERE id = ${listing.invitation_id} AND status = 'pending'`;
       }

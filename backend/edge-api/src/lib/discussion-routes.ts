@@ -1,4 +1,5 @@
 import type { Env } from "../types";
+import { NOT_AVAILABLE, isBlocked } from "./fair-proposals";
 import type { AuthenticatedSession } from "./session-service";
 import { authenticateRequest } from "./auth-context";
 import { body, database } from "./core-routes";
@@ -257,6 +258,7 @@ export async function handleDiscussionRoute(request: Request, env: Env, requestI
 
       if (!OPEN.includes(access.status)) return failure("DISCUSSION_CLOSED", "Discussion is open while the proposal is submitted or shortlisted. After an offer, use the contract messages.", 409, requestId);
       const payload = (await body(request)) ?? {};
+      if (await isBlocked(sql, access.freelancer_user_id, access.organization_id)) return failure("NOT_AVAILABLE", NOT_AVAILABLE, 403, requestId);
 
       if (action === "messages") {
         const text = typeof payload.body === "string" ? payload.body.trim() : "";

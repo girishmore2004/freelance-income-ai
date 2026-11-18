@@ -1,8 +1,9 @@
 import type { Env } from "../types";
+import { blockedOrganizations, proposalBucket } from "./fair-proposals";
 import type { AuthenticatedSession } from "./session-service";
 import { alertSavedSearches } from "./growth-routes";
 import { authenticateRequest } from "./auth-context";
-import { body, database } from "./core-routes";
+import { body, database, textArray } from "./core-routes";
 import type { Queryable, Sql } from "./core-routes";
 import { failure, success } from "./response";
 import { FLAGS, isEnabled } from "./flags";
@@ -69,6 +70,9 @@ export type JoinedListingRow = VersionRow & {
   l_updated_at: Date;
   client_name?: string;
   client_verified_at?: string | null;
+  l_proposals_closed_at?: string | null;
+  l_max_proposals?: string | null;
+  l_proposal_count?: number | string | null;
 };
 type JoinedRow = JoinedListingRow;
 
@@ -174,6 +178,13 @@ function briefFromVersion(v: VersionRow, visibility: string): Brief {
   };
 }
 
+/** Whether a public project still takes proposals, and how many it has (a range, as on Upwork). */
+function intakeOut(row: { l_proposals_closed_at?: string | null; l_max_proposals?: string | null; l_proposal_count?: number | string | null }) {
+  const count = Number(row.l_proposal_count ?? 0);
+  const max = row.l_max_proposals === null || row.l_max_proposals === undefined ? null : Number(row.l_max_proposals);
+  return { accepting_proposals: !row.l_proposals_closed_at && (max === null || count < max), proposals: proposalBucket(count) };
+}
+
 export async function handleListingRoute(
   request: Request,
   env: Env,
@@ -217,9 +228,11 @@ export async function handleListingRoute(
 
     // ---------------- marketplace (freelancer view) ----------------
     if (marketMatch) {
+      // Projects of client accounts blocked with this freelancer (either way) are hidden.
+      const blocked = viewerId ? await blockedOrganizations(sql, viewerId) : [];
       if (marketMatch[1]) {
         const rows = await sql<JoinedRow[]>`
-          SELECT l.id AS l_id, l.organization_id AS l_organization_id, l.category_slug AS l_category_slug, l.status AS l_status, l.visibility AS l_visibility, l.moderation_status AS l_moderation_status, l.moderation_notes AS l_moderation_notes, l.current_version AS l_current_version, l.published_at AS l_published_at, l.closes_at AS l_closes_at, l.created_at AS l_created_at, l.updated_at AS l_updated_at, v.*, o.name AS client_name, (to_jsonb(o)->>'verified_at') AS client_verified_at
+          SELECT l.id AS l_id, l.organization_id AS l_organization_id, l.category_slug AS l_category_slug, l.status AS l_status, l.visibility AS l_visibility, l.moderation_status AS l_moderation_status, l.moderation_notes AS l_moderation_notes, l.current_version AS l_current_version, l.published_at AS l_published_at, l.closes_at AS l_closes_at, l.created_at AS l_created_at, l.updated_at AS l_updated_at, v.*, o.name AS client_name, (to_jsonb(o)->>'verified_at') AS client_verified_at, (to_jsonb(l)->>'proposals_closed_at') AS l_proposals_closed_at, (to_jsonb(l)->>'max_proposals') AS l_max_proposals, (SELECT count(*)::int FROM listing_proposals lp WHERE lp.listing_id = l.id AND lp.status <> 'withdrawn') AS l_proposal_count
           FROM project_listings l
           JOIN project_listing_versions v ON v.listing_id = l.id AND v.version = l.current_version
           JOIN organizations o ON o.id = l.organization_id
@@ -229,11 +242,12 @@ export async function handleListingRoute(
               WHERE i.listing_id = l.id AND i.freelancer_user_id = ${viewerId} AND i.status IN ('pending', 'accepted')
             ))
             AND (l.closes_at IS NULL OR l.closes_at > now()) AND o.status = 'active'
+            AND NOT (l.organization_id = ANY(${textArray(blocked)}::text[]))
           LIMIT 1
         `;
         if (!rows[0]) return failure("NOT_FOUND", "Project not found", 404, requestId);
         const row = rows[0];
-        return success(publicListingOut(listingFromJoined(row), row, row.client_name ?? "", row.client_verified_at ?? null), "Project", 200, requestId);
+        return success({ ...publicListingOut(listingFromJoined(row), row, row.client_name ?? "", row.client_verified_at ?? null), ...intakeOut(row) }, "Project", 200, requestId);
       }
 
       const category = (url.searchParams.get("category") ?? "").slice(0, 60);
@@ -242,7 +256,7 @@ export async function handleListingRoute(
       const beforeDate = before && !Number.isNaN(Date.parse(before)) ? new Date(before) : null;
       const pattern = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
       const rows = await sql<JoinedRow[]>`
-        SELECT l.id AS l_id, l.organization_id AS l_organization_id, l.category_slug AS l_category_slug, l.status AS l_status, l.visibility AS l_visibility, l.moderation_status AS l_moderation_status, l.moderation_notes AS l_moderation_notes, l.current_version AS l_current_version, l.published_at AS l_published_at, l.closes_at AS l_closes_at, l.created_at AS l_created_at, l.updated_at AS l_updated_at, v.*, o.name AS client_name, (to_jsonb(o)->>'verified_at') AS client_verified_at
+        SELECT l.id AS l_id, l.organization_id AS l_organization_id, l.category_slug AS l_category_slug, l.status AS l_status, l.visibility AS l_visibility, l.moderation_status AS l_moderation_status, l.moderation_notes AS l_moderation_notes, l.current_version AS l_current_version, l.published_at AS l_published_at, l.closes_at AS l_closes_at, l.created_at AS l_created_at, l.updated_at AS l_updated_at, v.*, o.name AS client_name, (to_jsonb(o)->>'verified_at') AS client_verified_at, (to_jsonb(l)->>'proposals_closed_at') AS l_proposals_closed_at, (to_jsonb(l)->>'max_proposals') AS l_max_proposals, (SELECT count(*)::int FROM listing_proposals lp WHERE lp.listing_id = l.id AND lp.status <> 'withdrawn') AS l_proposal_count
         FROM project_listings l
         JOIN project_listing_versions v ON v.listing_id = l.id AND v.version = l.current_version
         JOIN organizations o ON o.id = l.organization_id
@@ -251,10 +265,11 @@ export async function handleListingRoute(
           AND (${category} = '' OR l.category_slug = ${category})
           AND (${q} = '' OR v.title ILIKE ${pattern} OR v.outcome ILIKE ${pattern})
           AND (${beforeDate}::timestamptz IS NULL OR l.published_at < ${beforeDate})
+          AND NOT (l.organization_id = ANY(${textArray(blocked)}::text[]))
         ORDER BY l.published_at DESC
         LIMIT ${PAGE_SIZE + 1}
       `;
-      const page = rows.slice(0, PAGE_SIZE).map((row) => publicListingOut(listingFromJoined(row), row, row.client_name ?? "", row.client_verified_at ?? null));
+      const page = rows.slice(0, PAGE_SIZE).map((row) => ({ ...publicListingOut(listingFromJoined(row), row, row.client_name ?? "", row.client_verified_at ?? null), ...intakeOut(row) }));
       const next = rows.length > PAGE_SIZE ? page[page.length - 1]?.published_at ?? null : null;
       return success({ items: page, next_before: next }, "Projects", 200, requestId);
     }

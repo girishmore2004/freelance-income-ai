@@ -320,7 +320,7 @@ export async function handleAgentToolRoute(request: Request, env: Env, requestId
       if (!(await agentEnabled(sql, "F5"))) return failure("AGENT_DISABLED", "Price advice is switched off by the platform.", 403, requestId);
       const rows = await sql<(VersionRow & { visibility: string; status: string; is_member: boolean; invited: boolean })[]>`
         SELECT v.*, l.visibility, l.status,
-               EXISTS (SELECT 1 FROM organization_memberships m WHERE m.organization_id = l.organization_id AND m.user_id = ${userId}) AS is_member,
+               EXISTS (SELECT 1 FROM organization_memberships m WHERE m.organization_id = l.organization_id AND m.user_id = ${userId} AND m.status = 'active') AS is_member,
                EXISTS (SELECT 1 FROM listing_invitations i WHERE i.listing_id = l.id AND i.freelancer_user_id = ${userId} AND i.status IN ('pending', 'accepted')) AS invited
         FROM project_listings l JOIN project_listing_versions v ON v.listing_id = l.id AND v.version = l.current_version
         JOIN organizations o ON o.id = l.organization_id

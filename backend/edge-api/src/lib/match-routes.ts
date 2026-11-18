@@ -1,4 +1,5 @@
 import type { Env } from "../types";
+import { NOT_AVAILABLE, blockedFreelancers, isBlocked } from "./fair-proposals";
 import { notifyUsers, organizationManagers } from "./notify";
 import type { AuthenticatedSession } from "./session-service";
 import { authenticateRequest } from "./auth-context";
@@ -426,7 +427,9 @@ export async function handleMatchRoute(
         timezone: brief.timezone
       };
       const now = deps.now();
-      const candidates = await visibleCandidates(sql, org.id);
+      // Freelancers blocked with this client account (either way) are not suggested.
+      const blocked = new Set(await blockedFreelancers(sql, org.id));
+      const candidates = (await visibleCandidates(sql, org.id)).filter((c) => !blocked.has(c.user_id));
       const matches = shortlist(target, candidates, now);
       const ids = matches.map((m) => m.freelancer.user_id);
       const invited = ids.length
@@ -524,6 +527,7 @@ export async function handleMatchRoute(
     // invited even when they are not listed in discovery (still not if suspended or not a freelancer).
     const candidate = (await visibleCandidate(sql, freelancerId)) ?? (await pastCollaborator(sql, freelancerId, org.id));
     if (!candidate) return failure("NOT_FOUND", "Freelancer not found", 404, requestId);
+    if (await isBlocked(sql, freelancerId, org.id)) return failure("NOT_AVAILABLE", NOT_AVAILABLE, 403, requestId);
     const score = typeof payload.match_score === "number" && Number.isInteger(payload.match_score) && payload.match_score >= 0 && payload.match_score <= 100 ? payload.match_score : null;
 
     const result = await sql.begin(async (tx) => {
