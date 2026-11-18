@@ -1,4 +1,5 @@
 'use client';
+import { LegacyGate } from '../legacy-gate';
 import { useEffect, useState } from 'react';
 import { API_BASE as API, authFetch, useSessionToken } from '@/lib/api-client';
 
@@ -15,7 +16,7 @@ type Run = {
     communication?:{review_count?:number;recommendations?:Array<{email_id:string;subject:string;sender:string;category:string;urgency:string;urgency_score:number;urgency_reasons:string[];follow_up:any;reply_guidance:string;portfolio_sources:Array<{type:string;label:string;chunk_id?:string}>;linked_project:any}>;policy?:string};
   };
 };
-export default function AgentWorkflowsPage() {
+function AgentWorkflowsPage() {
   const [token, setToken] = useSessionToken();
   const [runs, setRuns] = useState<Run[]>([]);
   const [selected, setSelected] = useState<Run|null>(null);
@@ -137,4 +138,12 @@ export default function AgentWorkflowsPage() {
       <p className="muted">This workflow is read-only. It does not send messages, submit proposals, deliver work, issue invoices or move money.</p>
     </section>}
   </main>;
+}
+
+export default function Page() {
+  return (
+    <LegacyGate title={"Multi-agent workflows"} summary={"Long-running AI workflows from the Python service."} alternatives={[{ href: "/ai-agents", label: "AI agents", note: "which agents are live, with on/off switches" }, { href: "/agent", label: "Action plan", note: "deterministic next steps" }, { href: "/coach", label: "AI coach", note: "questions about your own records" }]}>
+      <AgentWorkflowsPage />
+    </LegacyGate>
+  );
 }

@@ -2,7 +2,7 @@
 
 | ID | Severity | Issue | Plan |
 |---|---|---|---|
-| K-01 | High | 12 of 13 frontend pages depend on Python routes that are not deployed; about 100 route references fail in production. | Decision D-11, then port or hide per page behind flags. |
+| K-01 | Medium | Reduced in 5.65.0: `/security` works on Edge; `/workspace`, `/agent` and `/coach` are ported to Edge; the other 8 Python-only pages (delivery governance, analytics, clients, client insights, agent workflows, external marketplaces, opportunity intelligence, invoice payments) show an honest notice with working alternatives instead of failing. Some home-page widgets (tasks, milestones, invoices, research) still answer 501. The Python coach's portfolio-document retrieval is not ported (F11 is `partial`). | Decision D-11: port further families to Edge, or host Python and serve them. |
 | K-02 | High | Browser token stays in `localStorage` until `NEXT_PUBLIC_AUTH_MODE=cookie` is set. All pages now use the shared client (batch 2), so this is a configuration switch. | Switch after Full CI is green (runbook "Cookie sessions"). |
 | K-03 | Low | Resolved in 5.48.0 with Cloudflare `ratelimits` (approximate, per location). Strict global limits would need a Durable Object. | Monitor `rate_limit.exceeded`. |
 | K-04 | Medium | MFA TOTP secrets (both services) are encrypted with a key derived from `JWT_SECRET`/`SECRET_KEY`; rotating it locks MFA users out. | Add `MFA_ENCRYPTION_KEY` with dual-key read in both services. |

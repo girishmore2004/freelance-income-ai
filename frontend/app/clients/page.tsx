@@ -1,3 +1,4 @@
+import { LegacyGate } from '../legacy-gate';
 
 'use client';
 
@@ -77,7 +78,7 @@ type ContractRevision = {
   created_at: string;
 };
 
-export default function ClientsPage() {
+function ClientsPage() {
   const [token, setToken] = useSessionToken();
   const [clients, setClients] = useState<Client[]>([]);
   const [contracts, setContracts] = useState<Contract[]>([]);
@@ -1483,5 +1484,13 @@ export default function ClientsPage() {
         evidence. No email is sent automatically.
       </footer>
     </main>
+  );
+}
+
+export default function Page() {
+  return (
+    <LegacyGate title={"Clients"} summary={"Your own client records, contracts, scope changes and communications."} alternatives={[{ href: "/contracts", label: "Contracts", note: "everyone you work with on the marketplace, with terms, messages and history" }, { href: "/workspace", label: "Business workspace", note: "an overview across your work" }]}>
+      <ClientsPage />
+    </LegacyGate>
   );
 }

@@ -1,8 +1,9 @@
 'use client';
+import { LegacyGate } from '../legacy-gate';
 import {useEffect,useState} from 'react';
 import {API_BASE as API,authFetch,useSessionToken} from '@/lib/api-client';
 type Item=Record<string,any>;
-export default function MarketplacesPage(){
+function MarketplacesPage(){
  const [token,setToken]=useSessionToken(); const [providers,setProviders]=useState<Item[]>([]);
  const [apps,setApps]=useState<Item[]>([]); const [credentialStatus,setCredentialStatus]=useState<Item>({}); const [opportunities,setOpportunities]=useState<Item[]>([]);
  const [provider,setProvider]=useState('manual'); const [opportunity,setOpportunity]=useState('');
@@ -59,4 +60,12 @@ export default function MarketplacesPage(){
  <h2 style={{marginTop:32}}>Application pipeline</h2><div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}><thead><tr>{['Provider','Opportunity','Status','External reference','Created'].map(x=><th key={x} style={{textAlign:'left',padding:8,borderBottom:'1px solid #ccc'}}>{x}</th>)}</tr></thead><tbody>{apps.map(a=><tr key={a.id}>{[a.provider,a.opportunity_id,a.status,a.external_application_id||'—',new Date(a.created_at).toLocaleDateString()].map((x,i)=><td key={i} style={{padding:8,borderBottom:'1px solid #eee'}}>{x}</td>)}</tr>)}</tbody></table></div>
  <p style={{marginTop:20,fontSize:13,color:'#666'}}>Approval and submission endpoints record your manual action. They do not contact the marketplace. Access-mode settings are informational metadata. Upwork API verification requires a successful authenticated GraphQL search.</p>
  </main>
+}
+
+export default function Page() {
+  return (
+    <LegacyGate title={"External marketplaces"} summary={"Upwork connection, saved searches and imported applications."} alternatives={[{ href: "/projects", label: "Find work", note: "projects posted on this marketplace" }, { href: "/", label: "Dashboard", note: "discovery from approved public job sources" }]}>
+      <MarketplacesPage />
+    </LegacyGate>
+  );
 }

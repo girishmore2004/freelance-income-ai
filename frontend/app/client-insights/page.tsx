@@ -1,9 +1,10 @@
 'use client';
+import { LegacyGate } from '../legacy-gate';
 import {useEffect,useState} from 'react';
 import {API_BASE as API,authFetch,useSessionToken} from '@/lib/api-client';
 type Client={id:string;name:string;company?:string};
 type Data=Record<string,any>;
-export default function ClientInsightsPage(){
+function ClientInsightsPage(){
  const [token,setToken]=useSessionToken(),[clients,setClients]=useState<Client[]>([]),[clientId,setClientId]=useState('');
  const [insights,setInsights]=useState<Data|null>(null),[profit,setProfit]=useState<Data|null>(null),[costs,setCosts]=useState<Data[]>([]);
  const [form,setForm]=useState({project_id:'',category:'software',description:'',amount:'',currency:'INR',cost_date:new Date().toISOString().slice(0,10),evidence_reference:''});
@@ -55,4 +56,12 @@ export default function ClientInsightsPage(){
   </section>
   <section style={{marginTop:18}}><h2>Recorded direct costs</h2>{costs.map(c=><p key={c.id}>{c.cost_date} · {c.category} · {c.description} · {c.currency} {money(c.amount)} {c.evidence_reference?`· Evidence: ${c.evidence_reference}`:''}</p>)}{!costs.length&&<p>No direct cost entries recorded.</p>}</section>
  </main>;
+}
+
+export default function Page() {
+  return (
+    <LegacyGate title={"Client insights"} summary={"Cost and profitability per client."} alternatives={[{ href: "/earnings", label: "Earnings", note: "what each contract paid you" }, { href: "/contracts", label: "Contracts", note: "milestones and payments per client" }]}>
+      <ClientInsightsPage />
+    </LegacyGate>
+  );
 }

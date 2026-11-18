@@ -22,6 +22,17 @@ Envelope (Edge): `{ success, message, data, error: {code, details} | null, meta 
 
 Do not change `NEXT_PUBLIC_API_URL`/proxy targets per page until its families are served.
 
+**Legacy page status (5.65.0)** — the table above is the original audit.
+
+| Page | State now |
+|---|---|
+| `/security` | Works: every call is served by the Edge API (sessions, MFA, password, sign-out everywhere). |
+| `/workspace`, `/agent`, `/coach` | Works: ported to Edge (`business-routes.ts`) and extended with marketplace data. |
+| `/delivery`, `/analytics`, `/clients`, `/client-insights`, `/agent-workflows`, `/marketplaces`, `/opportunity-intelligence`, `/payments` | Behind `LegacyGate`: a clear notice with links to the marketplace pages that do the same job, instead of failing calls. Build variable `NEXT_PUBLIC_LEGACY_PYTHON_PAGES=true` shows the original page (useful only once its routes are served; D-11). |
+| `/` (home) | Works for the Edge-served parts; some older widgets (tasks, milestones, invoices, research) still show "not available on Edge" (501). |
+
+**Business workspace (5.65.0):** `GET/PUT /business-goals`, `GET /workspace/overview` (adds `active_contracts_as_freelancer`, `active_contracts_as_client`, `deliveries_awaiting_client`, `deliveries_to_review`, `released_this_month_minor`; legacy counts are `null` when that kind of record is unavailable), `GET /workspace/events`, `GET /agent/action-plan?limit=` (`{as_of_date, actions[{priority, category, title, reason, evidence, suggested_action, due_date, requires_human_approval, href}], total_actionable_records, returned_actions, policy}`), `POST /coach/ask {question}` (`generation_mode: llm_grounded_context | rules_fallback`, `citation_validation`), `GET /coach/history`. All responses use the standard envelope.
+
 ## Route-family ownership (proposed with ADR-006 option A)
 
 | Family | Owner now | Status |

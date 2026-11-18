@@ -144,6 +144,11 @@ Set build variable `NEXT_PUBLIC_AUTH_MODE=cookie`, redeploy, sign in, and confir
 4. **Switch the binding on:** in GitHub, `cloudflare-edge-api-phase1` → `backend/edge-api/wrangler.jsonc` → remove the `//` in front of the three `r2_buckets` lines → commit. Workers Builds redeploys the Edge API. (Or tell me and I will do it.) Expected: a contract's workspace shows **Add a file**. If the deploy fails with "bucket not found", the bucket name differs: fix the name in either place.
 5. Note K-32: there is no malware scanning yet.
 
+## Business workspace (release 5.65.0)
+1. "Stage 3C Neon migrations" (expects `0066_business_coach_partial`, data only). Check: `SELECT status FROM agent_definitions WHERE code = 'F11';` → `partial`.
+2. Deploy Edge (5.65.0), then the frontend. `/workspace`, `/agent` and `/coach` now load from the Edge API. The other older tools show a notice with links to the pages that do the same job.
+3. The coach uses the AI quota of each user's plan and can be switched off on `/ai-agents` (F11).
+
 ## Rollback
 - Edge or frontend: Cloudflare → Worker → **Deployments** → previous version → **Rollback**. If you roll the Edge API back, re-attach the old consumer to the queue.
 - Database: see DATABASE_MIGRATION_STATUS.md (5.45 code runs on the 0049 schema).

@@ -1,22 +1,138 @@
 'use client';
-import {useEffect,useState} from 'react';
-import {API_BASE as API,authFetch,useSessionToken} from '@/lib/api-client';
-type Obj=Record<string,any>;
-export default function WorkspacePage(){
- const [token,setToken]=useSessionToken(); const [data,setData]=useState<Obj>({}); const [goal,setGoal]=useState<Obj>({monthly_income_target:0,weekly_hours_target:10,monthly_proposals_target:4,monthly_outreach_target:10,currency:'INR'}); const [busy,setBusy]=useState(false); const [message,setMessage]=useState('');
- async function req(path:string,method='GET',body?:Obj){const r=await authFetch(API+path,{method,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});const j=await r.json().catch(()=>({detail:'Invalid server response'}));if(!r.ok)throw new Error(j.detail||'Request failed');return j}
- async function load(){if(!token)return;setBusy(true);setMessage('');try{const [overview,goals,events]=await Promise.all([req('/api/v1/workspace/overview'),req('/api/v1/business-goals'),req('/api/v1/workspace/events')]);setData({...overview,events});setGoal(goals)}catch(e:any){setMessage(e.message)}finally{setBusy(false)}}
- useEffect(()=>{if(token)load()},[token]);
- async function save(){setBusy(true);setMessage('');try{const saved=await req('/api/v1/business-goals','PUT',goal);setGoal(saved);setMessage('Business goals saved.');await load()}catch(e:any){setMessage(e.message)}finally{setBusy(false)}}
- const metrics=data.metrics||{};const money=(x:any)=>Object.entries(x||{}).map(([c,v])=>`${c} ${Number(v).toLocaleString('en-IN')}`).join(' · ')||'No paid invoices recorded this month';
- if(!token)return <main className="shell"><p>Sign in first, then open the business workspace.</p><a href="/">Back to dashboard</a></main>;
- return <main className="shell"><header className="top"><div><div className="brand">Business Workspace</div><div className="muted">One operating view across discovery, sales, delivery and finance</div></div><nav className="row"><a className="btn" href="/agent-workflows">Multi-Agent Workflows</a><a className="btn" href="/agent">Action Planner</a><a className="btn" href="/coach">AI Coach</a><a className="btn" href="/">Dashboard</a></nav></header>
- <p className="muted">As of {data.as_of||'—'} · <button className="btn" disabled={busy} onClick={load}>{busy?'Refreshing…':'Refresh'}</button></p>{message&&<p role="status" className="success">{message}</p>}
- <section className="grid">{[['Opportunities',metrics.opportunities],['Open opportunities',metrics.open_opportunities],['Proposals',metrics.proposals],['Active projects',metrics.active_projects],['Proposal approvals',metrics.pending_proposal_approvals],['Overdue invoices',metrics.overdue_invoices],['Overdue tasks',metrics.overdue_tasks],['Email approvals',metrics.pending_email_approvals]].map(([label,value])=><article className="card" key={String(label)}><small className="muted">{label}</small><h2>{value??'—'}</h2></article>)}</section>
- <section className="card"><h2>Business goals</h2><p className="muted">Set targets used as planning context. These are goals, not predictions or guarantees.</p><div className="grid"><label>Monthly income target<input type="number" min="0" value={goal.monthly_income_target??0} onChange={e=>setGoal({...goal,monthly_income_target:Number(e.target.value)})}/></label><label>Currency<input maxLength={8} value={goal.currency||'INR'} onChange={e=>setGoal({...goal,currency:e.target.value.toUpperCase()})}/></label><label>Weekly work hours<input type="number" min="0" max="168" value={goal.weekly_hours_target??10} onChange={e=>setGoal({...goal,weekly_hours_target:Number(e.target.value)})}/></label><label>Monthly proposal target<input type="number" min="0" value={goal.monthly_proposals_target??4} onChange={e=>setGoal({...goal,monthly_proposals_target:Number(e.target.value)})}/></label><label>Monthly outreach target<input type="number" min="0" value={goal.monthly_outreach_target??10} onChange={e=>setGoal({...goal,monthly_outreach_target:Number(e.target.value)})}/></label></div><button className="btn primary" disabled={busy} onClick={save}>Save goals</button></section>
- <section className="card"><h2>Revenue recorded this month</h2><p>{money(metrics.paid_this_month_by_currency)}</p><p className="muted">Only invoices marked paid and created this month are included. No currency conversion is performed.</p><p>Proposals created this month: {metrics.month_proposals??0} / target {goal.monthly_proposals_target??4}</p></section>
- <section className="card"><h2>Alerts requiring attention</h2>{(data.alerts||[]).length===0?<p className="muted">No alerts detected from the records currently saved.</p>:(data.alerts||[]).map((a:Obj)=><article className="item" key={a.id}><b>{a.title}</b><p>{a.action}</p><span className="muted">Priority: {a.severity}</span></article>)}</section>
- <section className="card"><h2>AI business coach · evidence-based actions</h2><p className="muted">These are deterministic, explainable recommendations generated from saved records; they are not free-form AI claims.</p>{(data.recommendations||[]).map((r:Obj,i:number)=><article className="item" key={i}><b>{r.title}</b><p>{r.reason}</p><p>{r.action}</p><small className="muted">Priority: {r.priority} · Evidence: {(r.evidence||[]).map((e:Obj)=>`${e.type}=${e.value}`).join(', ')}</small></article>)}</section>
- <section className="card"><h2>Workspace audit history</h2>{(data.events||[]).length===0?<p className="muted">No workspace-specific events recorded yet.</p>:(data.events||[]).map((e:Obj)=><p className="item" key={e.id}>{e.event_type} · {e.detail} · {new Date(e.created_at).toLocaleString()}</p>)}</section>
- <p className="muted">{data.data_policy}</p><footer className="muted">External actions remain human-controlled. This workspace does not submit proposals, send emails, deliver files or transfer money automatically.</footer></main>
+import { useCallback, useEffect, useState } from 'react';
+import { api, useSessionToken } from '@/lib/api-client';
+import { formatMinor } from '@/lib/listing-format';
+
+/**
+ * Business workspace: one view across marketplace work (contracts, deliveries,
+ * earnings) and older records (opportunities, drafts, invoices, tasks), with
+ * goals and deterministic recommendations. Everything comes from the
+ * signed-in person's own records; a dash means that kind of record is not
+ * available.
+ */
+
+type Goals = { monthly_income_target: number; weekly_hours_target: number; monthly_proposals_target: number; monthly_outreach_target: number; currency: string };
+type Metrics = Record<string, number | null | Record<string, number>>;
+type Alert = { id: string; severity: string; title: string; action: string; href: string };
+type Rec = { priority: string; title: string; reason: string; action: string; evidence: { type: string; value: number }[] };
+type Overview = { as_of: string; metrics: Metrics; goals: Goals; alerts: Alert[]; recommendations: Rec[]; data_policy: string };
+type Event = { id: string; event_type: string; detail: string; created_at: string };
+
+const CARDS: Array<[string, string]> = [
+  ['active_contracts_as_freelancer', 'Active contracts (freelancer)'], ['deliveries_awaiting_client', 'Deliveries waiting for clients'],
+  ['active_contracts_as_client', 'Active contracts (client)'], ['deliveries_to_review', 'Deliveries for you to review'],
+  ['month_proposals', 'Proposals this month'], ['pending_proposal_approvals', 'Proposal drafts to approve'],
+  ['open_opportunities', 'Open opportunities'], ['overdue_invoices', 'Overdue invoices'], ['overdue_tasks', 'Overdue tasks'],
+];
+
+export default function WorkspacePage() {
+  const [token] = useSessionToken();
+  const [data, setData] = useState<Overview | null>(null);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [goal, setGoal] = useState<Goals>({ monthly_income_target: 0, weekly_hours_target: 10, monthly_proposals_target: 4, monthly_outreach_target: 10, currency: 'INR' });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  const load = useCallback(async () => {
+    setBusy(true);
+    setError('');
+    try {
+      const [overview, goals, ev] = await Promise.all([
+        api<Overview>('/api/v1/workspace/overview'),
+        api<Goals>('/api/v1/business-goals'),
+        api<Event[]>('/api/v1/workspace/events'),
+      ]);
+      setData(overview && overview.metrics ? overview : null);
+      if (goals && typeof goals.monthly_income_target === 'number') setGoal(goals);
+      setEvents(Array.isArray(ev) ? ev : []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load the workspace.');
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  useEffect(() => { if (token) void load(); }, [token, load]);
+
+  async function save() {
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const { monthly_income_target, weekly_hours_target, monthly_proposals_target, monthly_outreach_target, currency } = goal;
+      await api('/api/v1/business-goals', 'PUT', { monthly_income_target, weekly_hours_target, monthly_proposals_target, monthly_outreach_target, currency });
+      setNotice('Business goals saved.');
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save goals.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!token) return <main className="shell"><p>Sign in first, then open the business workspace.</p><a className="btn" href="/">Back to dashboard</a></main>;
+  const m = data?.metrics ?? {};
+  const num = (k: string) => (typeof m[k] === 'number' ? (m[k] as number) : m[k] === null ? '—' : '…');
+  const released = (m.released_this_month_minor ?? {}) as Record<string, number>;
+  const paid = (m.paid_this_month_by_currency ?? {}) as Record<string, number>;
+  const setNum = (key: keyof Goals) => (e: { target: { value: string } }) => setGoal({ ...goal, [key]: Number(e.target.value) });
+
+  return (
+    <main className="shell">
+      <header className="top">
+        <div><div className="brand">Business workspace</div><div className="muted">One view across finding work, contracts, delivery and earnings</div></div>
+        <nav className="row"><a className="btn" href="/agent">Action plan</a><a className="btn" href="/coach">AI coach</a><a className="btn" href="/">Dashboard</a></nav>
+      </header>
+      <p className="muted">As of {data?.as_of ?? '—'} · <button className="btn" disabled={busy} onClick={() => void load()}>{busy ? 'Refreshing…' : 'Refresh'}</button></p>
+      <div aria-live="polite">{notice && <p className="success">{notice}</p>}{error && <p className="error" role="alert">{error}</p>}</div>
+
+      <section className="grid" aria-label="Metrics">
+        {CARDS.map(([key, label]) => <article className="card" key={key}><small className="muted">{label}</small><h2>{num(key)}</h2></article>)}
+      </section>
+
+      <section className="card">
+        <h2>Earnings this month</h2>
+        {Object.keys(released).length === 0 && Object.keys(paid).length === 0 && <p className="muted">No released payments or paid invoices recorded this month.</p>}
+        {Object.entries(released).map(([mode, minor]) => <p key={mode}>Released to you on the marketplace: {formatMinor(minor, 'INR')}{mode === 'sandbox' ? ' (test mode — not real money)' : ''}</p>)}
+        {Object.entries(paid).map(([currency, amount]) => <p key={currency}>Invoices marked paid: {currency} {amount.toLocaleString('en-IN')}</p>)}
+        <p className="muted">Proposals this month: {num('month_proposals')} / target {goal.monthly_proposals_target}</p>
+      </section>
+
+      <section className="card">
+        <h2>Needs attention</h2>
+        {(data?.alerts ?? []).length === 0 ? <p className="muted">Nothing urgent in your records.</p> : (data?.alerts ?? []).map((a) => (
+          <article className="item" key={a.id}><b>{a.title}</b><p>{a.action}</p><span className="muted">{a.severity === 'high' ? 'High priority' : 'Medium priority'}</span> {a.href && <a className="link" href={a.href}>Open</a>}</article>
+        ))}
+      </section>
+
+      <section className="card">
+        <h2>Recommendations</h2>
+        <p className="muted">Rules applied to your saved records — not AI guesses.</p>
+        {(data?.recommendations ?? []).map((r, i) => (
+          <article className="item" key={i}><b>{r.title}</b><p>{r.reason}</p><p>{r.action}</p><small className="muted">Priority: {r.priority} · Evidence: {r.evidence.map((e) => `${e.type.replace(/_/g, ' ')} = ${e.value}`).join(', ')}</small></article>
+        ))}
+      </section>
+
+      <section className="card" aria-labelledby="goals-heading">
+        <h2 id="goals-heading">Business goals</h2>
+        <p className="muted">Targets used for planning. They are goals, not predictions.</p>
+        <div className="grid">
+          <div className="field"><label htmlFor="g-income">Monthly income target</label><input id="g-income" type="number" min="0" value={goal.monthly_income_target} onChange={setNum('monthly_income_target')} /></div>
+          <div className="field"><label htmlFor="g-currency">Currency</label><input id="g-currency" maxLength={8} value={goal.currency} onChange={(e) => setGoal({ ...goal, currency: e.target.value.toUpperCase() })} /></div>
+          <div className="field"><label htmlFor="g-hours">Weekly work hours</label><input id="g-hours" type="number" min="0" max="168" value={goal.weekly_hours_target} onChange={setNum('weekly_hours_target')} /></div>
+          <div className="field"><label htmlFor="g-proposals">Monthly proposal target</label><input id="g-proposals" type="number" min="0" value={goal.monthly_proposals_target} onChange={setNum('monthly_proposals_target')} /></div>
+          <div className="field"><label htmlFor="g-outreach">Monthly outreach target</label><input id="g-outreach" type="number" min="0" value={goal.monthly_outreach_target} onChange={setNum('monthly_outreach_target')} /></div>
+        </div>
+        <button className="btn primary" disabled={busy} onClick={() => void save()}>Save goals</button>
+      </section>
+
+      <section className="card">
+        <h2>Workspace history</h2>
+        {events.length === 0 ? <p className="muted">No workspace events yet.</p> : events.map((e) => <p className="item" key={e.id}>{e.detail || e.event_type} · {new Date(e.created_at).toLocaleString()}</p>)}
+      </section>
+      <p className="muted">{data?.data_policy}</p>
+      <footer className="muted">Nothing here sends messages, submits proposals, delivers files or moves money.</footer>
+    </main>
+  );
 }

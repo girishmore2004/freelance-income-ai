@@ -1,8 +1,9 @@
 'use client';
+import { LegacyGate } from '../legacy-gate';
 import {useEffect,useState} from 'react';
 import {API_BASE as API,authFetch,useSessionToken} from '@/lib/api-client';
 type Row=Record<string,any>;
-export default function AnalyticsPage(){
+function AnalyticsPage(){
  const [token,setToken]=useSessionToken(); const [funnel,setFunnel]=useState<Row>({});
  const [sources,setSources]=useState<Row[]>([]); const [capacity,setCapacity]=useState<Row>({});
  const [projects,setProjects]=useState<Row[]>([]); const [projectRecords,setProjectRecords]=useState<Row[]>([]); const [opportunities,setOpportunities]=useState<Row[]>([]); const [selectedProject,setSelectedProject]=useState(''); const [selectedOpportunity,setSelectedOpportunity]=useState(''); const [earnings,setEarnings]=useState<Row>({});
@@ -207,4 +208,12 @@ export default function AnalyticsPage(){
  {Object.entries(earnings.by_currency||{}).map(([currency,data]:[string,any])=><section key={currency} style={{border:'1px solid #ddd',borderRadius:10,padding:14,marginBottom:10}}><h3>{currency}</h3>{Object.entries(data).map(([k,v])=><p key={k}>{k.replaceAll('_',' ')}: <b>{typeof v==='number'?money(v,currency):v===null?'Not enough data':String(v)}</b></p>)}</section>)}
  <small>{earnings.note}</small><p><small>{earnings.weighted_pipeline_policy}</small></p>
  </main>
+}
+
+export default function Page() {
+  return (
+    <LegacyGate title={"Analytics"} summary={"Funnel, capacity, profitability and source performance reports."} alternatives={[{ href: "/workspace", label: "Business workspace", note: "contracts, deliveries, earnings and goals" }, { href: "/earnings", label: "Earnings", note: "released payments and payouts" }, { href: "/agent", label: "Action plan", note: "what needs attention" }]}>
+      <AnalyticsPage />
+    </LegacyGate>
+  );
 }

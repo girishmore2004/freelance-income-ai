@@ -1,10 +1,11 @@
 'use client';
+import { LegacyGate } from '../legacy-gate';
 import {useEffect,useMemo,useState} from 'react';
 import {API_BASE as API,authFetch,useSessionToken} from '@/lib/api-client';
 
 type Row=Record<string,any>;
 
-export default function PaymentsPage(){
+function PaymentsPage(){
  const [token,setToken]=useSessionToken();
  const [data,setData]=useState<Row>({by_currency:{},invoices:[]});
  const [invoiceId,setInvoiceId]=useState('');
@@ -76,4 +77,12 @@ export default function PaymentsPage(){
   </section>)}
   {!data.invoices?.length&&<p>No invoices yet. Create an invoice in the Delivery & Finance workspace first.</p>}
  </main>;
+}
+
+export default function Page() {
+  return (
+    <LegacyGate title={"Invoice payments"} summary={"Recording and reconciling payments for invoices you issue outside the marketplace."} alternatives={[{ href: "/earnings", label: "Earnings", note: "marketplace releases and payouts" }, { href: "/contracts", label: "Contracts", note: "milestone funding and test invoices" }]}>
+      <PaymentsPage />
+    </LegacyGate>
+  );
 }

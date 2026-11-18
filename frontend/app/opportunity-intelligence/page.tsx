@@ -1,8 +1,9 @@
 'use client';
+import { LegacyGate } from '../legacy-gate';
 import {useEffect,useMemo,useState} from 'react';
 import {API_BASE as API,authFetch,useSessionToken} from '@/lib/api-client';
 type Item=Record<string,any>;
-export default function OpportunityIntelligencePage(){
+function OpportunityIntelligencePage(){
  const [token,setToken]=useSessionToken(),[items,setItems]=useState<Item[]>([]),[busy,setBusy]=useState(false);
  const [minScore,setMinScore]=useState('0'),[age,setAge]=useState('30'),[decision,setDecision]=useState(''),[source,setSource]=useState('');
  const [selected,setSelected]=useState<Item|null>(null),[review,setReview]=useState({decision:'saved',notes:'',next_action_date:''});
@@ -63,4 +64,12 @@ export default function OpportunityIntelligencePage(){
    {proposal&&<div><p>Draft created: {proposal.id}. Open Proposals to review, edit and request approval.</p>{proposal.grounding&&<><b>Grounding: {proposal.grounding.coverage_level} · {proposal.grounding.evidence_count} portfolio chunks</b><ul>{(proposal.grounding.evidence||[]).map((e:Item)=><li key={e.chunk_id}>Document {e.document_id}, chunk {e.chunk_index} · similarity {e.similarity}</li>)}</ul><small>{(proposal.grounding.limitations||[]).join(' ')}</small></>}{proposal.claim_review&&<section style={{marginTop:12,padding:12,border:'1px solid var(--border)',borderRadius:8}}><b>Factual claim review: {proposal.claim_review.status.replaceAll('_',' ')}</b><p>{proposal.claim_review.finding_count} claim pattern(s) flagged for manual verification.</p>{(proposal.claim_review.findings||[]).map((f:Item,i:number)=><p key={`${f.category}-${i}`}><b>{f.category}:</b> {f.claim}<br/><small>{f.reason}</small></p>)}<small>Automated overlap is not proof. Verify each statement against the original source before requesting approval or sending.</small></section>}{proposal.quality_review&&<section style={{marginTop:12,padding:12,border:"1px solid var(--border)",borderRadius:8}}><b>Proposal quality review: {proposal.quality_review.status.replaceAll("_"," ")} · {proposal.quality_review.score}/100</b><p>Basic deterministic checks only; this score is not an approval to send.</p><ul>{Object.entries(proposal.quality_review.checks||{}).map(([k,v])=><li key={k}>{String(v?"✓":"Needs attention")} · {k.replaceAll("_"," ")}</li>)}</ul>{(proposal.quality_review.flags||[]).map((f:Item,i:number)=><p key={`${f.code}-${i}`}><b>{f.severity}: {f.code.replaceAll("_"," ")}</b> — {f.message}</p>)}<small>{(proposal.quality_review.limitations||[]).join(" ")}</small></section>}<a href="/proposals">Open proposals →</a></div>}
   </section>}
  </main>;
+}
+
+export default function Page() {
+  return (
+    <LegacyGate title={"Opportunity intelligence"} summary={"Research and proposal intelligence for external opportunities."} alternatives={[{ href: "/projects", label: "Find work", note: "projects with match explanations" }, { href: "/", label: "Dashboard", note: "opportunities and AI proposal drafts" }]}>
+      <OpportunityIntelligencePage />
+    </LegacyGate>
+  );
 }

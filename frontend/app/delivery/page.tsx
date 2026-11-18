@@ -1,8 +1,9 @@
 'use client';
+import { LegacyGate } from '../legacy-gate';
 import {useEffect,useState} from 'react';
 import {API_BASE as API,authFetch,useSessionToken} from '@/lib/api-client';
 type Row=Record<string,any>;
-export default function DeliveryPage(){
+function DeliveryPage(){
  const [token,setToken]=useSessionToken(); const [projects,setProjects]=useState<Row[]>([]);
  const [projectId,setProjectId]=useState(''); const [deliverables,setDeliverables]=useState<Row[]>([]);
  const [schedules,setSchedules]=useState<Row[]>([]); const [issuePanelId,setIssuePanelId]=useState(''); const [issueRevisions,setIssueRevisions]=useState<Row[]>([]); const [issueRows,setIssueRows]=useState<Row[]>([]); const [issueRevisionId,setIssueRevisionId]=useState(''); const [issueFeedbackId,setIssueFeedbackId]=useState(''); const [issueTitle,setIssueTitle]=useState(''); const [issueDescription,setIssueDescription]=useState(''); const [issueSeverity,setIssueSeverity]=useState('medium'); const [issueRootCause,setIssueRootCause]=useState('unclassified'); const [issueAssignee,setIssueAssignee]=useState(''); const [issueCorrective,setIssueCorrective]=useState(''); const [issueDue,setIssueDue]=useState(''); const [acceptanceHistory,setAcceptanceHistory]=useState<Record<string,Row[]>>({}); const [forecast,setForecast]=useState<Row>({}); const [handoverRows,setHandoverRows]=useState<Row[]>([]); const [handoverPreview,setHandoverPreview]=useState<Row|null>(null); const [closeout,setCloseout]=useState<Row|null>(null); const [signoffs,setSignoffs]=useState<Row[]>([]); const [retentionPreview,setRetentionPreview]=useState<Row|null>(null); const [redactionPreview,setRedactionPreview]=useState<Row|null>(null); const [archiveRows,setArchiveRows]=useState<Row[]>([]); const [outcome,setOutcome]=useState<Row|null>(null); const [retentionPolicy,setRetentionPolicy]=useState<Row|null>(null); const [retentionReviews,setRetentionReviews]=useState<Row[]>([]); const [retentionDays,setRetentionDays]=useState('365'); const [retentionReason,setRetentionReason]=useState(''); const [retentionDecisionNote,setRetentionDecisionNote]=useState(''); const [evidenceReport,setEvidenceReport]=useState<Row|null>(null); const [verificationReport,setVerificationReport]=useState<Row|null>(null); const [supersessions,setSupersessions]=useState<Row[]>([]); const [replacementManifestId,setReplacementManifestId]=useState(''); const [supersessionReason,setSupersessionReason]=useState(''); const [rehearsals,setRehearsals]=useState<Row[]>([]); const [rehearsalChecks,setRehearsalChecks]=useState<Record<string,boolean>>({archive_downloaded:false,checksum_verified:false,database_backup_created:false,restore_test_completed:false,api_health_check_passed:false,frontend_smoke_test_passed:false}); const [rehearsalEvidence,setRehearsalEvidence]=useState<Record<string,string>>({});
@@ -144,4 +145,12 @@ export default function DeliveryPage(){
  </section>)}
  <small>{forecast.disclaimer}</small>
  </main>
+}
+
+export default function Page() {
+  return (
+    <LegacyGate title={"Delivery governance"} summary={"Deliverables, handover packs, closeout and retention for your own projects."} alternatives={[{ href: "/contracts", label: "Contracts", note: "deliver milestones, attach files, get approvals" }, { href: "/agent", label: "Action plan", note: "what to deliver or review next" }]}>
+      <DeliveryPage />
+    </LegacyGate>
+  );
 }

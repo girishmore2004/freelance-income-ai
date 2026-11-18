@@ -1,5 +1,15 @@
 # Test Status
 
+## Legacy pages: workspace, action plan, coach on Edge — 2026-11-18 IST (release 5.65.0)
+- Edge API: **292 passed, 0 failed** (new `business.test.ts` 10: goal validation as in Python; defaults, upsert per user and event log; plan ordering, every action needs a human; marketplace + legacy items with missing legacy tables tolerated; plan is read-only and limited; overview reports unavailable counts as null; citation validation; empty question 422 and no-evidence honest answer; model used only through the governor, untrusted question fenced, cited answer kept, usage recorded under `business_coach`; registry switch off → no model call, honest fallback. `agents.test.ts` map updated with `business_coach → F11`).
+- **Defect found by the tests and fixed:** a follow-up reminder with an empty `due_at` would have crashed the overview (`Invalid time value`); dates are now checked.
+- PostgreSQL 16 (minimal legacy tables): goals default → saved twice (merge) → read back; overview for a freelancer: 3 active contracts, 3 deliveries waiting for the client, ₹29,250 released this month **in test mode**, missing legacy tables shown as null; action plan: open dispute and a proposal draft; client plan: 4 deliveries to review (with project titles) and a new proposal; coach without a model listed the records instead of guessing; history and workspace events recorded.
+- Frontend: typecheck 0 errors (`/workspace`, `/agent`, `/coach` rewritten on the shared API client; `LegacyGate` on 8 pages; `e2e/business.spec.ts` 3 journeys); unit tests 11/11.
+- Python: `tests/test_business_coach_v566.py` compiled; runs in CI.
+
+## Contract files — GitHub CI
+`main` @ aaf136c (includes the team-spec label fix): pytest 564 passed; Playwright 49 passed (bearer), 50 passed (cookie) — the team journey now passes. Edge @ 42a33a6: Edge API CI **failed** at Typecheck — `new TextDecoder("utf-8", { fatal: true })`: the current `@cloudflare/workers-types` (installed fresh in CI; no lockfile, K-11) requires `ignoreBOM` too, while the local copy accepted it. Fixed in f6377eb (Edge API CI and Full CI green). Full CI on the same commit had passed.
+
 ## Team invitations — GitHub CI
 `main` @ 3cb4e3d: pytest 562 passed; Playwright **1 failed**, 47 passed (bearer): `e2e/team.spec.ts` used `getByLabel('Role')`, which matched two fields on `/account` (strict-mode violation). Both fields were labelled "Role" — also an accessibility problem — so the invitation field is now "Role for the invited person" and the test uses that label. Edge @ 5238d8f: Edge API CI and Full CI success (275/275). Re-verified with the next push (below).
 
