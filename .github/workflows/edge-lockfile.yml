@@ -1,0 +1,38 @@
+name: Generate Edge API lockfile
+
+# K-11: the Edge API had no package-lock.json, so every install picked up new
+# dependency releases. This one-off (re-runnable) workflow resolves the current
+# package.json ranges once and commits package-lock.json to the Edge branch.
+# CI then installs exactly those versions.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  lockfile:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cloudflare-edge-api-phase1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Resolve dependencies into package-lock.json (no install scripts)
+        working-directory: backend/edge-api
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Commit the lockfile if it changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/edge-api/package-lock.json
+          if git diff --cached --quiet; then
+            echo "Lockfile already up to date." >> "$GITHUB_STEP_SUMMARY"
+          else
+            git commit -m "Edge API: add package-lock.json (K-11)"
+            git push origin HEAD:cloudflare-edge-api-phase1
+            echo "Committed package-lock.json to cloudflare-edge-api-phase1." >> "$GITHUB_STEP_SUMMARY"
+          fi
