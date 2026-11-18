@@ -91,12 +91,12 @@ test('clients cap proposals, stop taking them, block a freelancer and unblock fr
   await page.goto('/client/projects');
   await page.getByRole('button', { name: 'Proposals', exact: true }).click();
   const limit = page.getByLabel('Proposal limit');
-  await expect(limit.getByText('Taking proposals')).toBeVisible();
+  await expect(limit.getByText('Taking proposals', { exact: true })).toBeVisible();
   await limit.getByLabel(/Stop after this many proposals/).fill('25');
   await limit.getByRole('button', { name: 'Save limit' }).click();
   await expect(limit.getByText(/of up to 25/)).toBeVisible();
   await limit.getByRole('button', { name: 'Stop taking proposals' }).click();
-  await expect(limit.getByText('Not taking new proposals')).toBeVisible();
+  await expect(limit.getByText('Not taking new proposals', { exact: true })).toBeVisible();
   await expect(limit.getByRole('button', { name: 'Take proposals again' })).toBeVisible();
   expect(captured.filter((c) => c.method === 'POST' && c.path === '/api/v1/listings/L1/intake').map((c) => c.body)).toEqual([
     { max_proposals: 25, accepting: true }, { max_proposals: 25, accepting: false },
