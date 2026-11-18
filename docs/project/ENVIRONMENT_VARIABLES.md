@@ -41,3 +41,5 @@ No new variables. `OAUTH_ENCRYPTION_KEY` already exists there.
 | `FILES` | Edge API | R2 bucket binding (`wrangler.jsonc`, commented out) | Not set yet | Bucket `freelance-income-ai-files` for contract files. Create the bucket first, then the binding is switched on in `wrangler.jsonc` (a binding to a missing bucket fails the deploy). While unset, uploads answer 503 `FILES_NOT_CONFIGURED`. |
 | `NEXT_PUBLIC_LEGACY_PYTHON_PAGES` | Frontend | Build variable | Unset (off) | `true` shows the original Python-era pages (delivery governance, analytics, clients, …) instead of the notice. Leave unset while those routes are not served (K-01, D-11). |
 
+
+| `MFA_ENCRYPTION_KEY` | Edge Worker | Secret | Optional (5.81.0). Encrypts new MFA secrets; `JWT_SECRET` stays as fallback reader. |

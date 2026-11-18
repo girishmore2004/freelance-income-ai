@@ -145,7 +145,7 @@ Set build variable `NEXT_PUBLIC_AUTH_MODE=cookie`, redeploy, sign in, and confir
 5. Note K-32: there is no malware scanning yet.
 
 ## Business workspace (release 5.65.0)
-1. "Stage 3C Neon migrations" (expects `0072_contract_tasks_handover`). Checks: `SELECT status FROM agent_definitions WHERE code = 'F11';` → `partial`; `SELECT count(*) FROM listing_proposal_versions;` equals the number of proposals.
+1. "Stage 3C Neon migrations" (expects `0073_saved_searches`). Checks: `SELECT status FROM agent_definitions WHERE code = 'F11';` → `partial`; `SELECT count(*) FROM listing_proposal_versions;` equals the number of proposals.
 2. Open `/admin` → **System health**: it must say the database migrations are current. It also lists what still needs setup (R2 bucket, email provider, rate limits) without showing any secret value.
 2. Deploy Edge (5.65.0), then the frontend. `/workspace`, `/agent` and `/coach` now load from the Edge API. The other older tools show a notice with links to the pages that do the same job.
 3. The coach uses the AI quota of each user's plan and can be switched off on `/ai-agents` (F11).
@@ -154,3 +154,6 @@ Set build variable `NEXT_PUBLIC_AUTH_MODE=cookie`, redeploy, sign in, and confir
 - Edge or frontend: Cloudflare → Worker → **Deployments** → previous version → **Rollback**. If you roll the Edge API back, re-attach the old consumer to the queue.
 - Database: see DATABASE_MIGRATION_STATUS.md (5.45 code runs on the 0049 schema).
 - Kill switches without deploy: set `FEATURE_FLAGS_OFF=ai.generation` (or `*`) on the Edge Worker.
+
+## Dedicated MFA key (release 5.81.0, K-04)
+Cloudflare → Workers & Pages → `freelance-income-ai-api-edge` → Settings → Variables and Secrets → Add → `MFA_ENCRYPTION_KEY`, type **Secret**, value from `openssl rand -base64 32` (store it in your password manager) → Deploy. Nothing changes for users: each MFA user's secret moves to the new key at their next MFA sign-in. Do not rotate `JWT_SECRET` until all MFA users have signed in once (or accept that the rest must re-enrol MFA).
