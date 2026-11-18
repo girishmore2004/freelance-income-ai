@@ -107,7 +107,7 @@ describe("analytics routes", () => {
       [["admin"], "/api/v1/admin/audit-log", 200],
       [["admin"], "/api/v1/admin/health", 200]
     ];
-    for (const [roles, path, status] of cases) expect((await get(world(roles).deps, path))!.status, `${roles} ${path}`).toBe(status);
+    for (const [roles, path, status] of cases) expect([roles.join(","), path, (await get(world(roles).deps, path))!.status]).toEqual([roles.join(","), path, status]);
   });
 
   it("shows moderators a masked email and admins the full one", async () => {
