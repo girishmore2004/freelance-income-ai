@@ -142,6 +142,8 @@ export type InboxThread = {
   last_message: string;
   last_at: string;
   from_other_side: boolean;
+  /** Which of the user's roles the thread belongs to, so the app can show one side at a time. */
+  side: "freelancer" | "client";
   href: string;
 };
 
@@ -193,9 +195,9 @@ async function inbox(sql: Queryable, userId: string, q: string): Promise<InboxTh
   `.catch(() => []);
   return mergeThreads(
     [
-      contracts.map((c) => ({ kind: "contract" as const, id: c.contract_id, title: c.title, last_message: c.body.slice(0, 200), last_at: iso(c.created_at), from_other_side: c.sender_party !== c.my_party, href: `/contracts#${c.contract_id}` })),
-      proposals.map((p) => ({ kind: "proposal" as const, id: p.proposal_id, title: p.title, last_message: p.body.slice(0, 200), last_at: iso(p.created_at), from_other_side: p.sender_party !== p.my_party, href: `/inbox?proposal=${p.proposal_id}` })),
-      external.map((e) => ({ kind: "external" as const, id: e.opportunity_id, title: e.title, last_message: (e.subject ? `${e.subject}: ` : "") + String(e.body ?? "").slice(0, 180), last_at: iso(e.received_at), from_other_side: e.direction === "in", href: `/opportunities?id=${e.opportunity_id}` }))
+      contracts.map((c) => ({ kind: "contract" as const, id: c.contract_id, title: c.title, last_message: c.body.slice(0, 200), last_at: iso(c.created_at), from_other_side: c.sender_party !== c.my_party, side: c.my_party === "client" ? ("client" as const) : ("freelancer" as const), href: `/contracts#${c.contract_id}` })),
+      proposals.map((p) => ({ kind: "proposal" as const, id: p.proposal_id, title: p.title, last_message: p.body.slice(0, 200), last_at: iso(p.created_at), from_other_side: p.sender_party !== p.my_party, side: p.my_party === "client" ? ("client" as const) : ("freelancer" as const), href: `/inbox?proposal=${p.proposal_id}` })),
+      external.map((e) => ({ kind: "external" as const, id: e.opportunity_id, title: e.title, last_message: (e.subject ? `${e.subject}: ` : "") + String(e.body ?? "").slice(0, 180), last_at: iso(e.received_at), from_other_side: e.direction === "in", side: "freelancer" as const, href: `/opportunities?id=${e.opportunity_id}` }))
     ],
     q
   );

@@ -97,12 +97,15 @@ export interface IntentRow {
   funded_at: Date | null;
   released_at: Date | null;
   refunded_at: Date | null;
+  /** Hourly week paid by this intent (0076); null/absent for milestone payments. */
+  timesheet_id?: string | null;
 }
 
 export function intentOut(i: IntentRow) {
   return {
     id: i.id,
     milestone_index: i.milestone_index,
+    timesheet_id: i.timesheet_id ?? null,
     amount_minor: Number(i.amount_minor),
     client_fee_minor: Number(i.client_fee_minor),
     freelancer_fee_minor: Number(i.freelancer_fee_minor),
@@ -180,6 +183,101 @@ export async function createFunding(
     RETURNING *
   `;
   return { ok: true, intent: rows[0], checkout, duplicate: false };
+}
+
+/* ------------------------------------------------------------------ */
+/* Hourly weeks (U19)                                                  */
+/* ------------------------------------------------------------------ */
+
+export type TimesheetForPayment = { id: string; contract_id: string; status: string; amount_minor: string | number | null; week_start: string | Date };
+
+/**
+ * Checkout for an approved hourly week. The amount was frozen when the week
+ * was submitted (minutes × rate); fees come from the approved schedule. Once
+ * the client pays, the money is released to the freelancer at once, because
+ * the client already approved the work.
+ */
+export async function createTimesheetFunding(
+  env: Env,
+  sql: Sql,
+  input: { contract: ContractRow; sheet: TimesheetForPayment; userId: string; idempotencyKey: string }
+): Promise<FundingResult | { ok: false; code: "NOT_APPROVED" | "ALREADY_PAID"; message: string }> {
+  const state = await paymentsState(env, sql);
+  if (!state.enabled) return { ok: false, code: "PAYMENTS_DISABLED", message: state.reason };
+  const { contract, sheet } = input;
+  if (contract.status !== "active" && contract.status !== "completed") return { ok: false, code: "CONTRACT_NOT_ACTIVE", message: "This contract is closed." };
+  const existingByKey = (await sql<IntentRow[]>`SELECT * FROM payment_intents WHERE idempotency_key = ${input.idempotencyKey} LIMIT 1`)[0];
+  if (existingByKey && existingByKey.timesheet_id === sheet.id) {
+    return { ok: true, intent: existingByKey, checkout: { provider: existingByKey.provider, provider_ref: existingByKey.provider_ref, sandbox_complete_path: `/api/v1/payments/sandbox/${existingByKey.id}/complete` }, duplicate: true };
+  }
+  if (sheet.status === "paid") return { ok: false, code: "ALREADY_PAID", message: "This week is already paid." };
+  if (sheet.status !== "approved") return { ok: false, code: "NOT_APPROVED", message: "Approve the week before paying it." };
+  const amount = Number(sheet.amount_minor ?? 0);
+  if (amount < 100) return { ok: false, code: "NOT_APPROVED", message: "There is nothing to pay for this week." };
+  const open = await sql<{ id: string; status: string }[]>`
+    SELECT id, status FROM payment_intents WHERE timesheet_id = ${sheet.id} AND status IN ('created', 'funded', 'released') LIMIT 1
+  `;
+  if (open[0] && open[0].status !== "created") return { ok: false, code: "ALREADY_PAID", message: "This week is already paid." };
+  const terms = await agreedTerms(sql, contract);
+  const currency = terms?.currency ?? "INR";
+  const schedule = (await sql<{ id: string; currency: string; client_fee_bps: number; freelancer_fee_bps: number; min_fee_minor: string | number }[]>`
+    SELECT id, currency, client_fee_bps, freelancer_fee_bps, min_fee_minor FROM fee_schedules
+    WHERE status = 'approved' AND currency = ${currency} AND effective_from <= now() ORDER BY effective_from DESC LIMIT 1
+  `)[0];
+  if (!schedule) return { ok: false, code: "FEES_NOT_CONFIGURED", message: "Platform fees have not been approved yet (finance page)." };
+  const quote = quoteFees(amount, { ...schedule, min_fee_minor: Number(schedule.min_fee_minor) });
+  if (open[0]) await sql`UPDATE payment_intents SET status = 'cancelled', updated_at = now() WHERE id = ${open[0].id} AND status = 'created'`;
+  const id = crypto.randomUUID();
+  const checkout = await state.provider.createFunding(id, quote.client_pays_minor, currency);
+  const rows = await sql<IntentRow[]>`
+    INSERT INTO payment_intents
+      (id, contract_id, milestone_index, timesheet_id, contract_version, amount_minor, client_fee_minor, freelancer_fee_minor, total_minor, currency,
+       fee_schedule_id, provider, provider_ref, mode, status, idempotency_key, created_by, created_at, updated_at)
+    VALUES (${id}, ${contract.id}, 0, ${sheet.id}, ${contract.agreed_version ?? contract.current_version}, ${quote.amount_minor},
+            ${quote.client_fee_minor}, ${quote.freelancer_fee_minor}, ${quote.client_pays_minor}, ${currency}, ${schedule.id},
+            ${checkout.provider}, ${checkout.provider_ref}, ${state.mode}, 'created', ${input.idempotencyKey}, ${input.userId}, now(), now())
+    RETURNING *
+  `;
+  return { ok: true, intent: rows[0], checkout, duplicate: false };
+}
+
+const weekLabel = (d: string | Date) => `Hours, week of ${new Date(d).toISOString().slice(0, 10)}`;
+
+/** Releases a funded hourly week to the freelancer and marks the week paid. Idempotent. */
+export async function releaseTimesheet(sql: Sql, intentId: string): Promise<"released" | "already" | "not_funded"> {
+  const intent = (await sql<IntentRow[]>`SELECT * FROM payment_intents WHERE id = ${intentId} LIMIT 1`)[0];
+  if (!intent || !intent.timesheet_id) return "not_funded";
+  if (intent.status === "released") return "already";
+  if (intent.status !== "funded") return "not_funded";
+  const contract = (await sql<{ freelancer_user_id: string }[]>`SELECT freelancer_user_id FROM contracts WHERE id = ${intent.contract_id}`)[0];
+  const sheet = (await sql<{ week_start: Date }[]>`SELECT week_start FROM contract_timesheets WHERE id = ${intent.timesheet_id}`)[0];
+  const amount = Number(intent.amount_minor);
+  const freelancerFee = Number(intent.freelancer_fee_minor);
+  const clientFee = Number(intent.client_fee_minor);
+  await postEntry(sql, {
+    idempotency_key: `release:${intent.id}`,
+    entry_type: "timesheet.released",
+    description: `${sheet ? weekLabel(sheet.week_start) : "Hours"} approved and paid: funds released`,
+    mode: intent.mode,
+    currency: intent.currency,
+    contract_id: intent.contract_id,
+    lines: [
+      { account: accounts.fundsHeld(intent.contract_id), direction: "debit" as const, amount_minor: amount },
+      ...(amount - freelancerFee > 0 ? [{ account: accounts.freelancerPayable(contract.freelancer_user_id), direction: "credit" as const, amount_minor: amount - freelancerFee }] : []),
+      ...(clientFee > 0 ? [{ account: accounts.feesHeld(intent.contract_id), direction: "debit" as const, amount_minor: clientFee }] : []),
+      ...(freelancerFee + clientFee > 0 ? [{ account: accounts.feeRevenue(), direction: "credit" as const, amount_minor: freelancerFee + clientFee }] : [])
+    ]
+  });
+  const updated = await sql<{ id: string }[]>`
+    UPDATE payment_intents SET status = 'released', released_at = now(), updated_at = now() WHERE id = ${intent.id} AND status = 'funded' RETURNING id
+  `;
+  await sql`UPDATE contract_timesheets SET status = 'paid', paid_at = COALESCE(paid_at, now()), updated_at = now() WHERE id = ${intent.timesheet_id} AND status = 'approved'`;
+  if (updated[0]) {
+    await recordContractEvent(sql, intent.contract_id, null, "system", "timesheet.paid", {
+      week_start: sheet ? new Date(sheet.week_start).toISOString().slice(0, 10) : null, amount_minor: amount - freelancerFee, mode: intent.mode
+    });
+  }
+  return "released";
 }
 
 /* ------------------------------------------------------------------ */
@@ -264,16 +362,23 @@ export async function applyProviderEvent(sql: Sql, event: ProviderEvent): Promis
     if (updated[0]) {
       const contract = (await tx<{ organization_id: string }[]>`SELECT organization_id FROM contracts WHERE id = ${intent.contract_id}`)[0];
       const version = (await tx<ContractVersionRow[]>`SELECT * FROM contract_versions WHERE contract_id = ${intent.contract_id} AND version = ${intent.contract_version}`)[0];
-      const title = version ? contractVersionOut(version).milestones[intent.milestone_index]?.title ?? "Milestone" : "Milestone";
+      const sheet = intent.timesheet_id
+        ? (await tx<{ week_start: Date }[]>`SELECT week_start FROM contract_timesheets WHERE id = ${intent.timesheet_id}`)[0]
+        : undefined;
+      const title = sheet
+        ? weekLabel(sheet.week_start)
+        : version ? contractVersionOut(version).milestones[intent.milestone_index]?.title ?? "Milestone" : "Milestone";
       await tx`
         INSERT INTO billing_invoices (id, number, mode, contract_id, payment_intent_id, organization_id, milestone_title, amount_minor, client_fee_minor, total_minor, currency, status, created_at)
         VALUES (${crypto.randomUUID()}, ${invoiceNumber(intent.mode)}, ${intent.mode}, ${intent.contract_id}, ${intent.id}, ${contract.organization_id},
                 ${title.slice(0, 160)}, ${amount}, ${clientFee}, ${Number(intent.total_minor)}, ${intent.currency}, 'paid', now())
         ON CONFLICT (payment_intent_id) DO NOTHING
       `;
-      await recordContractEvent(tx, intent.contract_id, null, "system", "milestone.funded", { milestone: intent.milestone_index, title, mode: intent.mode });
+      if (!intent.timesheet_id) await recordContractEvent(tx, intent.contract_id, null, "system", "milestone.funded", { milestone: intent.milestone_index, title, mode: intent.mode });
     }
   });
+  // An hourly week was approved before it was paid: release it straight away.
+  if (intent.timesheet_id) await releaseTimesheet(sql, intent.id);
   await markProcessed();
   return { outcome: "processed", intent };
 }
@@ -389,6 +494,11 @@ export async function releasePendingApprovals(sql: Sql): Promise<number> {
   `;
   let released = 0;
   for (const r of rows) if ((await releaseMilestone(sql, r.contract_id, Number(r.milestone_index))) === "released") released += 1;
+  // Hourly weeks paid but not released (a crash after funding). Before 0076 there are none.
+  const weeks = await sql<{ id: string }[]>`
+    SELECT id FROM payment_intents WHERE status = 'funded' AND (to_jsonb(payment_intents)->>'timesheet_id') IS NOT NULL LIMIT 100
+  `;
+  for (const w of weeks) if ((await releaseTimesheet(sql, w.id)) === "released") released += 1;
   return released;
 }
 

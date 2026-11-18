@@ -87,6 +87,16 @@ export interface ContractMilestone {
   due_date: string | null;
 }
 
+/** Hourly billing (U19, migration 0076). Absent = fixed price by milestones. */
+export interface HourlyBilling {
+  type: "hourly";
+  hourly_rate_minor: number;
+  weekly_limit_hours: number;
+}
+
+export const MIN_HOURLY_RATE_MINOR = 10_000; // ₹100 an hour
+export const MAX_WEEKLY_HOURS = 80;
+
 export interface ContractTerms {
   title: string;
   scope: string;
@@ -97,6 +107,21 @@ export interface ContractTerms {
   revision_rounds: number;
   acceptance_criteria: string[];
   ownership_terms: string;
+  /** Only present for hourly terms, so fixed-price hashes are unchanged. */
+  billing?: HourlyBilling;
+}
+
+/** Hourly billing from input; null = fixed price, string = error message. Pure. */
+export function parseBilling(input: unknown): HourlyBilling | null | string {
+  if (input === undefined || input === null || input === "" || (typeof input === "object" && (input as { type?: unknown }).type === "fixed")) return null;
+  if (typeof input !== "object") return "Billing must be fixed or hourly.";
+  const b = input as Record<string, unknown>;
+  if (b.type !== "hourly") return "Billing must be fixed or hourly.";
+  const rate = Number(b.hourly_rate_minor);
+  const limit = Number(b.weekly_limit_hours);
+  if (!Number.isInteger(rate) || rate < MIN_HOURLY_RATE_MINOR || rate > 10_000_000) return "Hourly rate must be at least ₹100.";
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_WEEKLY_HOURS) return `Weekly limit must be 1 to ${MAX_WEEKLY_HOURS} hours.`;
+  return { type: "hourly", hourly_rate_minor: rate, weekly_limit_hours: limit };
 }
 
 export function validateTerms(input: Record<string, unknown>, currency: string, today = new Date()): Result<ContractTerms> {
@@ -115,9 +140,15 @@ export function validateTerms(input: Record<string, unknown>, currency: string, 
   if (!Number.isInteger(revisions) || revisions < 0 || revisions > 10) errors.revision_rounds = "Revision rounds must be 0 to 10.";
   if (input.currency !== undefined && input.currency !== currency) errors.currency = `Use the project currency (${currency}).`;
 
+  const billing = parseBilling(input.billing);
+  if (typeof billing === "string") errors.billing = billing;
+  const hourly = billing !== null && typeof billing === "object";
+
   const milestones: ContractMilestone[] = [];
   const todayStr = today.toISOString().slice(0, 10);
-  if (!Array.isArray(input.milestones) || input.milestones.length < 1 || input.milestones.length > 20) {
+  if (hourly) {
+    // Hourly work is paid per approved week, not by milestones.
+  } else if (!Array.isArray(input.milestones) || input.milestones.length < 1 || input.milestones.length > 20) {
     errors.milestones = "Add 1 to 20 milestones.";
   } else {
     input.milestones.forEach((raw, i) => {
@@ -130,7 +161,10 @@ export function validateTerms(input: Record<string, unknown>, currency: string, 
       milestones.push({ title: mTitle, amount_minor: Number(m.amount_minor), due_date: due });
     });
   }
-  const total = milestones.reduce((sum, m) => sum + (Number.isInteger(m.amount_minor) ? m.amount_minor : 0), 0);
+  // For hourly terms the total is the most one week can cost (rate × weekly limit).
+  const total = hourly
+    ? (billing as HourlyBilling).hourly_rate_minor * (billing as HourlyBilling).weekly_limit_hours
+    : milestones.reduce((sum, m) => sum + (Number.isInteger(m.amount_minor) ? m.amount_minor : 0), 0);
   if (!errors.milestones && total > MAX_AMOUNT_MINOR) errors.milestones = "The total is too large.";
 
   if (Object.keys(errors).length === 0) {
@@ -149,7 +183,8 @@ export function validateTerms(input: Record<string, unknown>, currency: string, 
       currency,
       revision_rounds: revisions,
       acceptance_criteria: acceptance ?? [],
-      ownership_terms: ownership
+      ownership_terms: ownership,
+      ...(hourly ? { billing: billing as HourlyBilling } : {})
     }
   };
 }
@@ -238,6 +273,19 @@ export interface ContractVersionRow {
   created_at: Date;
   client_accepted_at: Date | null;
   freelancer_accepted_at: Date | null;
+  /** 0076; absent before it runs, empty for fixed-price terms. */
+  billing_json?: string | null;
+}
+
+/** Billing of a stored version: hourly terms, or null for fixed price. Pure. */
+export function billingOf(v: { billing_json?: string | null }): HourlyBilling | null {
+  if (!v.billing_json) return null;
+  try {
+    const b = parseBilling(JSON.parse(v.billing_json));
+    return b && typeof b === "object" ? b : null;
+  } catch {
+    return null;
+  }
 }
 
 function parse<T>(value: string): T[] {
@@ -263,6 +311,7 @@ export function contractVersionOut(v: ContractVersionRow) {
     revision_rounds: v.revision_rounds,
     acceptance_criteria: parse<string>(v.acceptance_json),
     ownership_terms: v.ownership_terms,
+    billing: billingOf(v) ?? { type: "fixed" as const },
     content_hash: v.content_hash,
     proposed_by: v.proposed_by,
     created_at: new Date(v.created_at).toISOString(),

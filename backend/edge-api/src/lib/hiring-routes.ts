@@ -1,3 +1,4 @@
+import { tableExists } from "./external-pipeline";
 import type { Env } from "../types";
 import { notifyUsers, organizationManagers } from "./notify";
 import type { AuthenticatedSession } from "./session-service";
@@ -17,6 +18,7 @@ import {
   contractVersionOut,
   hasPendingChange,
   lockedMilestoneErrors,
+  billingOf,
   proposalOut,
   termsHash,
   validateProposal,
@@ -166,6 +168,22 @@ async function contractVersion(sql: Queryable, contract: ContractRow): Promise<C
 }
 
 export async function insertContractVersion(tx: Queryable, contractId: string, version: number, terms: ContractTerms, hash: string, party: Party, userId: string): Promise<void> {
+  if (terms.billing) {
+    // Hourly terms (0076): the caller checked the migration has run.
+    await tx`
+      INSERT INTO contract_versions
+        (id, contract_id, version, title, scope, deliverables_json, milestones_json, total_minor, currency, revision_rounds,
+         acceptance_json, ownership_terms, content_hash, proposed_by, created_by, created_at,
+         client_accepted_at, client_accepted_by, freelancer_accepted_at, billing_json)
+      VALUES
+        (${crypto.randomUUID()}, ${contractId}, ${version}, ${terms.title}, ${terms.scope}, ${JSON.stringify(terms.deliverables)},
+         ${JSON.stringify(terms.milestones)}, ${terms.total_minor}, ${terms.currency}, ${terms.revision_rounds},
+         ${JSON.stringify(terms.acceptance_criteria)}, ${terms.ownership_terms}, ${hash}, ${party}, ${userId}, now(),
+         ${party === "client" ? new Date().toISOString() : null}, ${party === "client" ? userId : null},
+         ${party === "freelancer" ? new Date().toISOString() : null}, ${JSON.stringify(terms.billing)})
+    `;
+    return;
+  }
   await tx`
     INSERT INTO contract_versions
       (id, contract_id, version, title, scope, deliverables_json, milestones_json, total_minor, currency, revision_rounds,
@@ -487,6 +505,7 @@ export async function handleHiringRoute(
       }
       const terms = validateTerms((payload.terms ?? {}) as Record<string, unknown>, found.listing_currency, deps.now());
       if (!terms.ok) return failure("INVALID_TERMS", "Check the highlighted fields.", 422, requestId, [terms.errors]);
+      if (terms.value.billing && !(await tableExists(sql, "contract_timesheets"))) return failure("MIGRATION_PENDING", "Hourly contracts need database migration 0076.", 503, requestId);
       const hash = await termsHash(terms.value);
       const contractId = crypto.randomUUID();
       const result = await sql.begin(async (tx) => {
@@ -676,6 +695,7 @@ export async function handleHiringRoute(
       `)[0]?.currency ?? "INR";
       const terms = validateTerms((payload.terms ?? {}) as Record<string, unknown>, listingCurrency, deps.now());
       if (!terms.ok) return failure("INVALID_TERMS", "Check the highlighted fields.", 422, requestId, [terms.errors]);
+      if (terms.value.billing && !(await tableExists(sql, "contract_timesheets"))) return failure("MIGRATION_PENDING", "Hourly contracts need database migration 0076.", 503, requestId);
       const hash = await termsHash(terms.value);
       const result = await sql.begin(async (tx) => {
         const locked = (await tx<ContractRow[]>`SELECT * FROM contracts WHERE id = ${contractId} FOR UPDATE`)[0];
@@ -691,6 +711,8 @@ export async function handleHiringRoute(
             SELECT DISTINCT milestone_index FROM milestone_submissions WHERE contract_id = ${contractId}
           `).map((r) => Number(r.milestone_index));
           const lockErrors = agreedRow ? lockedMilestoneErrors(contractVersionOut(agreedRow).milestones, terms.value.milestones, delivered) : {};
+          // An active contract keeps its billing type: hourly weeks or milestones already in progress depend on it.
+          if (agreedRow && Boolean(billingOf(agreedRow)) !== Boolean(terms.value.billing)) lockErrors.billing = "An active contract keeps its billing type (fixed price or hourly). End it and start a new one to switch.";
           if (Object.keys(lockErrors).length) return { code: "LOCKED" as const, errors: lockErrors };
         }
         // Version numbers only grow: a rejected change keeps its number in the history.
@@ -705,7 +727,7 @@ export async function handleHiringRoute(
         return { code: "OK" as const };
       });
       if (result.code === "CLOSED") return failure("CONTRACT_CLOSED", "Terms can only change while the offer is open or the contract is active.", 409, requestId);
-      if (result.code === "LOCKED") return failure("INVALID_TERMS", "Delivered milestones cannot be changed.", 422, requestId, [result.errors]);
+      if (result.code === "LOCKED") return failure("INVALID_TERMS", "Some terms cannot change on an active contract.", 422, requestId, [result.errors]);
       if (result.code === "STALE") return failure("VERSION_CONFLICT", `The terms changed (now version ${result.current}). Reload and try again.`, 409, requestId);
       if (result.code === "UNCHANGED") return failure("UNCHANGED", "These are the current terms. Accept them instead.", 409, requestId);
       return await respondWithContract(sql, contractId, userId, "New terms proposed. The other party must accept them.", 201, requestId);

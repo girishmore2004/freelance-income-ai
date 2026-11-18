@@ -59,7 +59,7 @@ describe("interview permissions", () => {
 });
 
 describe("inbox merge", () => {
-  const t = (kind: InboxThread["kind"], id: string, at: string, title = "Site"): InboxThread => ({ kind, id, title, last_message: "hi", last_at: at, from_other_side: true, href: "/" });
+  const t = (kind: InboxThread["kind"], id: string, at: string, title = "Site"): InboxThread => ({ kind, id, title, last_message: "hi", last_at: at, from_other_side: true, side: "freelancer", href: "/" });
   it("sorts newest first across kinds and filters by text", () => {
     const merged = mergeThreads([[t("contract", "c", "2026-11-17T00:00:00.000Z")], [t("proposal", "p", "2026-11-18T00:00:00.000Z", "Bakery")], [t("external", "e", "2026-11-16T00:00:00.000Z")]], "");
     expect(merged.map((m) => m.id)).toEqual(["p", "c", "e"]);
