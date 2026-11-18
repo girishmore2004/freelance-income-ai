@@ -56,7 +56,7 @@ export function SavedSearches({ query, category, onOpen }: { query: string; cate
   async function save(e: FormEvent) {
     e.preventDefault();
     const min = budget.trim() ? rupeesToMinor(budget) : null;
-    if (budget.trim() && min === null) { setError('Enter the minimum budget in rupees, e.g. 25000.'); return; }
+    if (budget.trim() && (min === null || Number.isNaN(min))) { setError('Enter the minimum budget in rupees, e.g. 25000.'); return; }
     const ok = await run(() => api('/api/v1/me/saved-searches', 'POST', { name: name.trim() || query.trim() || 'My search', query, category_slug: category, min_budget_minor: min, alerts: true }), 'Search saved. You will be notified about new matching projects.');
     if (ok) { setAdding(false); setName(''); setBudget(''); }
   }

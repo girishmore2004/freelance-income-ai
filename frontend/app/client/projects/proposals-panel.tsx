@@ -6,6 +6,7 @@ import { TermsForm, type Terms } from '../../contracts/terms-form';
 import type { FreelancerCard } from './match-panel';
 import { ProposalHistory, SectionsView } from '../../projects/proposal-form';
 import { DiscussionPanel } from '../../inbox/discussion-panel';
+import { FeeEstimate } from '../../contracts/fee-estimate';
 import { scopeSummary, type StudioSections } from '@/lib/proposal-studio';
 
 /**
@@ -174,6 +175,7 @@ export function ProposalsPanel({ listingId, brief, canManage }: { listingId: str
             {p.estimated_days ? ` · about ${p.estimated_days} days` : ''}
             {p.freelancer.headline ? ` · ${p.freelancer.headline}` : ''}
           </p>
+          {['submitted', 'shortlisted'].includes(p.status) && <FeeEstimate amountMinor={p.price_minor} currency={p.currency} party="client" />}
           <p style={{ whiteSpace: 'pre-wrap' }}>{p.cover_letter}</p>
           {p.sections && <SectionsView sections={p.sections} currency={p.currency} />}
           {p.revision_requested_at && <p className="muted">You asked for a revision: “{p.revision_note}”. Waiting for a new version.</p>}

@@ -1,9 +1,10 @@
 'use client';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ApiError, api } from '@/lib/api-client';
-import { PROPOSAL_LABELS, formatMinor } from '@/lib/listing-format';
+import { PROPOSAL_LABELS, formatMinor, rupeesToMinor } from '@/lib/listing-format';
 import { safeHref } from '@/lib/safe-url';
 import { DiscussionPanel } from '../inbox/discussion-panel';
+import { FeeEstimate } from '../contracts/fee-estimate';
 import { EMPTY_FORM, buildPayload, formFrom, scopeSummary, type StudioForm, type StudioSections } from '@/lib/proposal-studio';
 
 /**
@@ -174,6 +175,7 @@ export function ProposalForm({ listingId, budgetModel, existing, onDone, onCance
         <div className="field">
           <label htmlFor={`price-${id}`}>Your price (₹){budgetModel === 'hourly' ? ' per hour' : ''}</label>
           <input id={`price-${id}`} inputMode="decimal" value={form.price} onChange={(e) => update('price', e.target.value)} aria-invalid={Boolean(errors.price_minor)} />
+          <FeeEstimate amountMinor={rupeesToMinor(form.price) ?? 0} currency={currency} party="freelancer" />
           {err('price_minor')}
         </div>
         <div className="field">

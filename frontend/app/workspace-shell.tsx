@@ -28,7 +28,7 @@ const FREELANCER: NavGroup[] = [
 const CLIENT: NavGroup[] = [
   { label: 'Home', items: [{ href: '/workspace', label: 'Overview' }, { href: '/agent', label: 'Next actions' }, { href: '/inbox', label: 'Inbox' }, { href: '/calendar', label: 'Calendar' }, { href: '/analytics', label: 'Analytics' }] },
   { label: 'Hiring', items: [{ href: '/client/projects', label: 'Projects and proposals' }, { href: '/freelancers', label: 'Find freelancers' }] },
-  { label: 'Work', items: [{ href: '/contracts', label: 'Contracts and deliveries' }] },
+  { label: 'Work', items: [{ href: '/contracts', label: 'Contracts and deliveries' }, { href: '/earnings?view=client', label: 'Spend and statements' }] },
   { label: 'AI', items: [{ href: '/ai-agents', label: 'AI agent centre' }] },
 ];
 const ACCOUNT: NavGroup = { label: 'Account', items: [{ href: '/notifications', label: 'Notifications' }, { href: '/account', label: 'Account and team' }, { href: '/security', label: 'Security' }, { href: '/contact', label: 'Help and support' }] };

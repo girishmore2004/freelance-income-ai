@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { NotificationLink } from '../notification-link';
 import { ApiError, api, useSessionToken } from '@/lib/api-client';
 import { formatMinor, rupeesToMinor } from '@/lib/listing-format';
+import { StatementPanel } from './statement';
 
 /** Freelancer earnings: released balance, funds held for approved work in progress, payouts. */
 
@@ -32,6 +33,16 @@ export default function EarningsPage() {
 
   useEffect(() => { if (token) void load(); }, [token, load]);
 
+  // Client accounts the person manages get their own statements here too.
+  const [accounts, setAccounts] = useState<Array<{ id: string; name: string }>>([]);
+  useEffect(() => {
+    if (!token) return;
+    api<{ organizations?: Array<{ id: string; name: string; membership_role: string }> }>('/api/v1/me/identity')
+      .then((r) => setAccounts(Array.isArray(r?.organizations) ? r.organizations.filter((o) => ['owner', 'admin'].includes(o.membership_role)).map((o) => ({ id: o.id, name: o.name })) : []))
+      .catch(() => setAccounts([]));
+  }, [token]);
+  const wantClient = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('view') === 'client';
+
   async function withdraw(event: FormEvent) {
     event.preventDefault();
     const minor = rupeesToMinor(amount);
@@ -56,7 +67,7 @@ export default function EarningsPage() {
 
   return (
     <main className="shell">
-      <div className="row between"><h2>Earnings</h2><span className="row"><NotificationLink /><a className="link" href="/contracts">Contracts</a></span></div>
+      <div className="row between"><h2>Earnings and statements</h2><span className="row"><NotificationLink /><a className="link" href="/contracts">Contracts</a></span></div>
       {closed && <div className="card"><p className="muted">Earnings open with the client marketplace.</p></div>}
       <div aria-live="polite">{notice && <p className="success">{notice}</p>}{error && <p className="error" role="alert">{error}</p>}</div>
       {data && (
@@ -88,6 +99,7 @@ export default function EarningsPage() {
           </section>
         </>
       )}
+      {token && !closed && <StatementPanel key={accounts.length && wantClient ? accounts[0].id : 'freelancer'} accounts={accounts} initialSide={wantClient && accounts[0] ? accounts[0].id : 'freelancer'} />}
     </main>
   );
 }
