@@ -1,5 +1,9 @@
 # Test Status
 
+## Security sweep — 2026-11-18 IST (release 5.70.0)
+- Scans: no raw/unsafe SQL, no `eval`/`new Function`, no `innerHTML`, no committed secrets, every `target="_blank"` has `rel`; every Edge route the frontend calls answers 401 without a session (except the intended public reads).
+- **Found and fixed:** stored XSS through `javascript:` job links (K-33). Edge API **300 passed, 0 failed** (+1 link-safety test); frontend unit **14/14** (+`safe-url.test.mts`).
+
 ## U3 — GitHub CI (verified)
 `main` @ a1a74e1: Playwright 56 passed (bearer), 57 passed (cookie); Edge @ 70b2b70: Edge API CI success (298/298).
 

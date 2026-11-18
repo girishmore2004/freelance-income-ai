@@ -1,6 +1,6 @@
 # Project Status — Freelance Income AI
 
-As of 2026-11-18: Edge API **5.69.0** (branch `cloudflare-edge-api-phase1`), frontend **5.69.0** (`main`), migration head **`0066_business_coach_partial`**. Every batch passed GitHub CI (Python, Alembic on PostgreSQL, frontend build, Playwright in bearer and cookie modes, Edge typecheck/vitest/dry-run) before the next one started. Cloudflare deploys each push automatically.
+As of 2026-11-18: Edge API **5.70.0** (branch `cloudflare-edge-api-phase1`), frontend **5.70.0** (`main`), migration head **`0066_business_coach_partial`**. Every batch passed GitHub CI (Python, Alembic on PostgreSQL, frontend build, Playwright in bearer and cookie modes, Edge typecheck/vitest/dry-run) before the next one started. Cloudflare deploys each push automatically.
 
 ## Where the project really stands
 - **Marketplace loop: built and CI-verified, switched OFF.** Post a brief (AI Brief Builder) → screening and moderation → matching with explanations → invitations → proposals → comparison → offer → two-party contract (versions, change orders) → funding (test mode) → delivery workspace (submissions, revisions, acceptance checklist, messages, activity log) → approval releases funds → completion → two-way reviews; cancellation by agreement with refunds; disputes decided by staff. All behind `marketplace.client_side` (OFF).

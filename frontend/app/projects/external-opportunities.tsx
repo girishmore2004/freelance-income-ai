@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api-client';
+import { safeHref } from '@/lib/safe-url';
 
 /**
  * External opportunities inside the one "Find work" page (spec §4). Jobs found
@@ -132,7 +133,7 @@ export function ExternalOpportunities({ query }: { query: string }) {
             <p>{o.description.slice(0, 350)}{o.description.length > 350 ? '…' : ''}</p>
             {(n.eligibility_warnings ?? []).length > 0 && <p className="error">Check first: {n.eligibility_warnings!.join('; ')}</p>}
             <div className="row">
-              {o.source_url && <a className="btn" href={o.source_url} target="_blank" rel="noopener noreferrer nofollow">Open original post ↗</a>}
+              {safeHref(o.source_url) !== '#' && <a className="btn" href={safeHref(o.source_url)} target="_blank" rel="noopener noreferrer nofollow">Open original post ↗</a>}
               {o.status === 'new' && (
                 <button className="btn primary" type="button" disabled={busy} onClick={() => void run(async () => {
                   await api('/api/v1/proposals/generate', 'POST', { opportunity_id: o.id, currency: o.currency });
