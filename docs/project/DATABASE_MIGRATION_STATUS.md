@@ -1,6 +1,6 @@
 # Database Migration Status
 
-Chain head: **`0070_discussions_interviews`** (70 revisions, single head — verified by `tests/test_system_diagnostics_v542.py`). Neon staging was last migrated to 0046 (per workflow pin).
+Chain head: **`0072_contract_tasks_handover`** (72 revisions, single head — verified by `tests/test_system_diagnostics_v542.py`). Neon staging was last migrated to 0046 (per workflow pin).
 
 | Revision | Change | Type | Downgrade |
 |---|---|---|---|
@@ -31,7 +31,7 @@ Chain head: **`0070_discussions_interviews`** (70 revisions, single head — ver
 ## Safe deployment order
 1. **Back up** Neon (create a branch named `pre-0047-2026-11` from `main` in Neon → Branches). Branch creation is instant and is the rollback point.
 2. Optional dry run: run the migration workflow against the backup branch first.
-3. Run GitHub Action **"Stage 3C Neon migrations"** in `freelance-income-ai` (type the confirmation text). It expects `0070_discussions_interviews`.
+3. Run GitHub Action **"Stage 3C Neon migrations"** in `freelance-income-ai` (type the confirmation text). It expects `0072_contract_tasks_handover`.
 4. Deploy the Edge API (5.73.0 needs 0047–0068; saving projects and support tickets fail until 0068 runs, the calendar works without it; before 0067 the short proposal form still works and Studio sections return `MIGRATION_PENDING` before `marketplace.client_side` is switched on; AI keeps working on Worker limits if 0057 is not applied yet).
 5. Deploy the frontend.
 
@@ -43,7 +43,7 @@ If 0047 stops with "existing rows contain duplicates", nothing was committed: in
 
 ## Verification queries (Neon SQL Editor)
 ```sql
-SELECT version_num FROM alembic_version;                       -- 0070_discussions_interviews
+SELECT version_num FROM alembic_version;                       -- 0072_contract_tasks_handover
 SELECT count(*) FROM listing_proposal_versions;                 -- equals count(*) FROM listing_proposals right after the run
 SELECT slug, enabled FROM project_categories ORDER BY sort_order; -- only website_development = true
 SELECT role, count(*) FROM user_roles GROUP BY role;            -- freelancer = number of users
@@ -54,3 +54,9 @@ SELECT indexname FROM pg_indexes WHERE tablename IN ('applications','application
 
 ## 0070_discussions_interviews (5.75.0)
 Additive: `proposal_messages` (proposal_id → listing_proposals CASCADE, sender_party client|freelancer, body; index proposal_id+created_at) and `proposal_interviews` (proposed_party, starts_at, duration 15–180, mode video|phone|chat, meeting_link, agenda, status proposed|accepted|declined|cancelled|completed, responded_by/at, outcome_note; index proposal_id+starts_at). Downgrade drops both. Verify: `SELECT to_regclass('proposal_messages'), to_regclass('proposal_interviews');` → both non-null. Until it runs, discussion routes answer `MIGRATION_PENDING` (503) and the inbox shows contract and external threads only.
+
+## 0071_files_verification_sources (5.76.0)
+Additive: `listing_files` (listing CASCADE, unique R2 key, size > 0, status ready|deleted), `verification_requests` (subject freelancer|client, status pending|approved|rejected|revoked, one pending per subject via partial unique index), `profiles.verified_at`, `organizations.verified_at`, `discovery_sources` (7 sources seeded enabled), `discovery_source_runs` (index source+created_at). Downgrade drops the tables and the two columns. Before it runs: verification and source switches answer `MIGRATION_PENDING`, listing files list empty, discovery runs every source as before. Verify: `SELECT code, enabled FROM discovery_sources;` → 7 rows, all true.
+
+## 0072_contract_tasks_handover (5.77.0)
+Additive: `contract_tasks` (party/status/source checks, milestone_index ≥ 0, index contract+position) and `contract_handover_items` (kind/status checks). Downgrade drops both. Verify: `SELECT to_regclass('contract_tasks'), to_regclass('contract_handover_items');` → both non-null.

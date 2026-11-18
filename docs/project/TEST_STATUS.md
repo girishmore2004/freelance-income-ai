@@ -1,5 +1,9 @@
 # Test Status
 
+## U10 — GitHub CI (verified, 2026-11-18)
+Green on the first push. `main` @ a923188: pytest **575 passed**; Playwright **69 passed** (bearer), **70 passed** (cookie). Edge @ f004417: Edge API CI and Full CI success, vitest **372 passed**.
+- PostgreSQL end-to-end (in-memory R2): member upload 403, disguised PNG 422, owner upload, member and freelancer listing, freelancer download as attachment, draft project hidden (404), freelancer delete 403, owner delete removed the object, closed project 409; verification: bad evidence 422, request, duplicate 409, member client request 403, owner request, non-staff queue 404, queue with platform facts, reject without note 422, approve, approve twice 409, `client_verified` on the project, `verified` on the public directory card, revoke without note 422, revoke cleared `verified_at`; moderation log and notifications written; sources: moderator switch 403, off without reason 422, off, unknown 404, discovery's disabled set, health computed from runs.
+
 ## U9 — GitHub CI (verified, 2026-11-18)
 `main` @ 6f8b8eb: pytest **573 passed**; Playwright **66 passed** (bearer), **67 passed** (cookie). Edge @ 3b2ccdd/4614baa: Edge API CI success, vitest **363 passed** (34 files); Full CI success.
 - Two CI problems on the way, neither a product defect: (1) GitHub moved `ubuntu-latest` to 26.04, where Playwright has no Chromium build, so the e2e job could not start on either branch — pinned to `ubuntu-24.04`; (2) the new inbox spec's `getByRole('alert')` also matched the empty Next.js route announcer — scoped to the discussion region.

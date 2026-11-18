@@ -19,7 +19,7 @@
 | K-16 | Medium | If the only owner of an organisation deletes their account, the organisation is left without an owner (membership cascades). Ownership transfer now exists (5.63.0). | Account deletion (legal, D-1) must require a transfer first. |
 | K-17 | Info | Resolved in 5.63.0: team invitations by one-time link, roles, removal, ownership transfer. Invitations are not emailed until D-15; the inviter copies the link. | — |
 | K-18 | Info | Resolved in 5.58.0: `/admin` moderation queue. | — |
-| K-19 | Low | Contract files shipped in 5.64.0 (needs the R2 bucket). Attachments on project listings are still not built. | Reuse `file-routes.ts` for listings when needed. |
+| K-19 | Info | Resolved 5.76.0: reference files on project briefs (same R2 bucket). | — |
 | K-21 | Low | Matching ranks at most 500 opted-in freelancers per request (most recently opted-in first). Fine for launch; needs SQL pre-filtering by skill/category beyond that. | Add a skills index or pgvector retrieval when visible freelancers exceed ~400. |
 | K-23 | Medium | Contract rows block deleting the user or organisation (RESTRICT) by design. There is no account-deletion flow on Edge yet; when one is built it must anonymise contract parties instead of deleting. | Phase 7 account deletion. |
 | K-24 | Low | After a freelancer has proposed on an invitation, the invitation still shows "Send a proposal"; a second attempt is refused with "Edit it instead". | Hide once `/me/proposals` is cross-checked (Phase 3 batch 2 UI pass). |
@@ -36,6 +36,9 @@
 | K-36 | Info | External jobs marked won create a record in the older `projects`/`project_tasks` tables (Python schema) for delivery tracking; that delivery happens on the original platform and is not a native contract. | Port or retire with D-11. |
 | K-38 | Info | Resolved 5.75.0: queries using `= ANY(${array})` failed on PostgreSQL because the Edge driver runs with `fetch_types: false` (Hyperdrive) and sent arrays as plain text. Affected the client next-actions and overview, calendar for client members, marking selected notifications read, opportunity timeline with proposals, failed-job filter, match invitations and contract file attachments. All 21 sites now pass a text-array literal; each route was re-run on PostgreSQL. | — |
 | K-39 | Info | Proposal messages are text only (no attachments) and interview times are shown in the viewer's time zone without calendar invites (.ics) or email (D-15). | Add .ics download; email with D-15. |
+| K-40 | Info | "Reviewed" badges mean staff looked at public evidence and the account's history; there is no identity or business-registry check. The wording on every badge and in notifications says so. | Identity verification with a provider after D-1/D-2. |
+| K-41 | Low | Project reference files share the contract-file safety model (K-32): no malware scanning; visible to every signed-in freelancer who can see a public project. | Add scanning before wide launch. |
+| K-42 | Info | Billing models are fixed-price milestones only; hourly, retainer, session and per-unit contracts (spec §11) are not built. | Needs fee and invoicing decisions (D-5) for time-based billing. |
 | K-37 | Low | Job retries need the Cloudflare queue binding; without it a retry is refused with `QUEUE_UNAVAILABLE` and logged. | Keep the queue binding configured (runbook step 5). |
 | K-35 | Low | Analytics are computed per request (aggregate SQL over the caller's scope). Fine at launch size; large organisations will need cached daily aggregates. | Add a reporting table refreshed by the cron. |
 | K-22 | Info | Invitations are in-app only (no email yet); freelancers see them on `/projects`. | Notifications in Phase 3 with Resend (D-15). |

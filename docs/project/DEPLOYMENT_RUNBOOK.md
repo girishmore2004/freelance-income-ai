@@ -145,7 +145,7 @@ Set build variable `NEXT_PUBLIC_AUTH_MODE=cookie`, redeploy, sign in, and confir
 5. Note K-32: there is no malware scanning yet.
 
 ## Business workspace (release 5.65.0)
-1. "Stage 3C Neon migrations" (expects `0070_discussions_interviews`). Checks: `SELECT status FROM agent_definitions WHERE code = 'F11';` → `partial`; `SELECT count(*) FROM listing_proposal_versions;` equals the number of proposals.
+1. "Stage 3C Neon migrations" (expects `0072_contract_tasks_handover`). Checks: `SELECT status FROM agent_definitions WHERE code = 'F11';` → `partial`; `SELECT count(*) FROM listing_proposal_versions;` equals the number of proposals.
 2. Open `/admin` → **System health**: it must say the database migrations are current. It also lists what still needs setup (R2 bucket, email provider, rate limits) without showing any secret value.
 2. Deploy Edge (5.65.0), then the frontend. `/workspace`, `/agent` and `/coach` now load from the Edge API. The other older tools show a notice with links to the pages that do the same job.
 3. The coach uses the AI quota of each user's plan and can be switched off on `/ai-agents` (F11).
