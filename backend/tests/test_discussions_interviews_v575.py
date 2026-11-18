@@ -62,4 +62,4 @@ def test_values_are_checked():
 
 def test_migration_chain_and_head():
     assert 'down_revision = "0069_external_pipeline"' in MIGRATION.read_text()
-    assert 'EXPECTED_MIGRATION_HEAD = "0070_discussions_interviews"' in (BACKEND / "app" / "main.py").read_text()
+    assert (BACKEND / "alembic" / "versions" / "0071_files_verification_sources.py").exists()

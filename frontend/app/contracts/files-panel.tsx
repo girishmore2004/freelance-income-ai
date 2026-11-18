@@ -19,7 +19,12 @@ export function formatBytes(n: number): string {
 
 /** Downloads with the session (cookie or bearer) and saves under the original name. */
 export async function downloadFile(id: string, filename: string): Promise<void> {
-  const response = await authFetch(`${API_BASE}/api/v1/files/${encodeURIComponent(id)}`);
+  return downloadFrom(`/api/v1/files/${encodeURIComponent(id)}`, filename);
+}
+
+/** Same as downloadFile for any API path that returns a file (e.g. project reference files). */
+export async function downloadFrom(path: string, filename: string): Promise<void> {
+  const response = await authFetch(`${API_BASE}${path}`);
   if (!response.ok) {
     let message = 'Could not download the file.';
     try {

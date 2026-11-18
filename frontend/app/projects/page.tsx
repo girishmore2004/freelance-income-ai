@@ -6,6 +6,7 @@ import { formatBudget } from '@/lib/listing-format';
 import { Invitations, MarketplaceVisibility } from './invitations';
 import { MyProposals, ProposalForm } from './proposal-form';
 import { ReportButton } from './report-button';
+import { ListingFiles } from '../client/projects/listing-files';
 import { PublicNav } from '../public-nav';
 import { ExternalOpportunities } from './external-opportunities';
 
@@ -20,7 +21,7 @@ type Saved = PublicListing & { closes_at: string | null; status: string; open: b
  */
 
 type PublicListing = {
-  id: string; published_at: string | null; client_name: string; title: string; category_slug: string; outcome: string;
+  id: string; published_at: string | null; client_name: string; client_verified?: boolean; title: string; category_slug: string; outcome: string;
   description: string; deliverables: string[]; skills: string[]; experience_level: string; budget_model: string;
   budget_min_minor: number | null; budget_max_minor: number | null; currency: string; deadline: string | null;
   milestones: string[]; acceptance_criteria: string[]; revision_rounds: number; confidential: boolean;
@@ -158,7 +159,7 @@ export default function ProjectsPage() {
               {saved?.map((p) => (
                 <article className="card item" key={p.id}>
                   <div className="row between"><b>{p.title}</b><span className={`badge${p.open ? ' native' : ''}`}>{p.open ? 'Taking proposals' : 'No longer open'}</span></div>
-                  <p className="muted">{p.client_name} · {formatBudget(p.budget_min_minor, p.budget_max_minor, p.currency, p.budget_model)} · {p.deadline ? `Deadline ${p.deadline}` : 'No deadline set'}{p.closes_at ? ` · closes ${p.closes_at.slice(0, 10)}` : ''}</p>
+                  <p className="muted">{p.client_name}{p.client_verified && <span className="badge" title="Staff reviewed this client account's public evidence. Not an identity check."> Reviewed client</span>} · {formatBudget(p.budget_min_minor, p.budget_max_minor, p.currency, p.budget_model)} · {p.deadline ? `Deadline ${p.deadline}` : 'No deadline set'}{p.closes_at ? ` · closes ${p.closes_at.slice(0, 10)}` : ''}</p>
                   <p>{p.outcome}</p>
                   <div className="row">
                     {p.open && <button className="btn primary" type="button" onClick={() => { setView('native'); setOpen(p.id); setProposing(p.id); }}>Send a proposal</button>}
@@ -185,7 +186,7 @@ export default function ProjectsPage() {
                   {token && saved !== null && <button className="btn" type="button" aria-pressed={savedIds.has(p.id)} onClick={() => void toggleSave(p.id)}>{savedIds.has(p.id) ? 'Saved' : 'Save'}</button>}
                 </span>
               </div>
-              <p className="muted">{p.client_name} · {formatBudget(p.budget_min_minor, p.budget_max_minor, p.currency, p.budget_model)} · {p.deadline ? `Deadline ${p.deadline}` : 'No deadline set'}</p>
+              <p className="muted">{p.client_name}{p.client_verified && <span className="badge" title="Staff reviewed this client account's public evidence. Not an identity check."> Reviewed client</span>} · {formatBudget(p.budget_min_minor, p.budget_max_minor, p.currency, p.budget_model)} · {p.deadline ? `Deadline ${p.deadline}` : 'No deadline set'}</p>
               <p>{p.outcome}</p>
               <button className="link" aria-expanded={open === p.id} onClick={() => setOpen(open === p.id ? null : p.id)}>
                 {open === p.id ? 'Hide details' : 'Show details'}
@@ -198,6 +199,7 @@ export default function ProjectsPage() {
                   {p.milestones.length > 0 && <><b>Milestones</b><ol>{p.milestones.map((m) => <li key={m}>{m}</li>)}</ol></>}
                   {p.acceptance_criteria.length > 0 && <><b>Acceptance criteria</b><ul>{p.acceptance_criteria.map((a) => <li key={a}>{a}</li>)}</ul></>}
                   <p className="muted">Experience: {p.experience_level} · Revision rounds: {p.revision_rounds}</p>
+                  {token && <ListingFiles listingId={p.id} mode="freelancer" />}
                   {token && <div><ReportButton targetType="listing" targetId={p.id} /></div>}
                   {!token ? (
                     <a className="btn primary" href="/#signin">Sign in to send a proposal</a>

@@ -5,6 +5,7 @@ import { ApiError, api, useSessionToken } from '@/lib/api-client';
 import { STATUS_LABELS, formatBudget, linesToList, minorToRupees, rupeesToMinor } from '@/lib/listing-format';
 import { MatchPanel, SavedFreelancers } from './match-panel';
 import { ProposalsPanel } from './proposals-panel';
+import { ListingFiles } from './listing-files';
 import { POSTING_STEPS, briefGaps, firstStepWithError } from '@/lib/posting-wizard';
 
 /**
@@ -100,6 +101,7 @@ export default function ClientProjectsPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState('');
   const [assist, setAssist] = useState<Assist | null>(null);
+  const [filesFor, setFilesFor] = useState<string | null>(null);
   const [matchesFor, setMatchesFor] = useState<string | null>(null);
   const [proposalsFor, setProposalsFor] = useState<string | null>(null);
   const [step, setStep] = useState(0);
@@ -440,12 +442,16 @@ export default function ClientProjectsPage() {
                       {matchesFor === l.id ? 'Hide suggestions' : 'Find freelancers'}
                     </button>
                   )}
+                  <button className="btn" aria-expanded={filesFor === l.id} onClick={() => setFilesFor(filesFor === l.id ? null : l.id)}>
+                    {filesFor === l.id ? 'Hide files' : 'Files'}
+                  </button>
                   {['published', 'hiring', 'paused', 'closed', 'expired'].includes(l.status) && (
                     <button className="btn" aria-expanded={proposalsFor === l.id} onClick={() => setProposalsFor(proposalsFor === l.id ? null : l.id)}>
                       {proposalsFor === l.id ? 'Hide proposals' : 'Proposals'}
                     </button>
                   )}
                 </div>
+                {filesFor === l.id && <ListingFiles listingId={l.id} mode="client" closed={['closed', 'cancelled', 'expired'].includes(l.status)} />}
                 {proposalsFor === l.id && <ProposalsPanel listingId={l.id} brief={l.brief} canManage={canManage && ['published', 'hiring', 'paused'].includes(l.status)} />}
                 {matchesFor === l.id && (
                   <MatchPanel listingId={l.id} organizationId={orgId} canInvite={canManage}

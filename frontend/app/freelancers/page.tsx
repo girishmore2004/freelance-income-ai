@@ -12,7 +12,7 @@ import { PublicNav } from '../public-nav';
 
 type Card = {
   user_id: string; display_name: string; headline: string; skills: string[]; services: string[]; hourly_rate: number | null; currency: string;
-  weekly_hours: number | null; timezone: string; newcomer: boolean; rating: { average: number; count: number } | null; completed_contracts: number;
+  weekly_hours: number | null; timezone: string; newcomer: boolean; verified?: boolean; rating: { average: number; count: number } | null; completed_contracts: number;
 };
 type Profile = Card & { reviews: Array<{ rating: number; comment: string; created_at: string }> };
 type Directory = { open: boolean; items: Card[]; more: boolean };
@@ -96,6 +96,7 @@ export default function FreelancersPage() {
           <div className="row between" style={{ marginTop: 8 }}>
             <h3 id="profile-name">{profile.display_name}</h3>
             {profile.newcomer && <span className="badge native">New to the marketplace</span>}
+            {profile.verified && <span className="badge" title="Staff reviewed this freelancer's public work evidence. Not an identity check.">Reviewed by staff</span>}
           </div>
           {profile.headline && <p>{profile.headline}</p>}
           <p className="muted">{rate(profile)} · {profile.weekly_hours ? `${profile.weekly_hours} hours/week` : 'availability not stated'} · {profile.timezone || 'time zone not stated'}</p>
@@ -122,7 +123,7 @@ export default function FreelancersPage() {
           <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))' }}>
             {dir?.items.map((c) => (
               <article className="card" key={c.user_id}>
-                <div className="row between"><b>{c.display_name}</b>{c.rating && <span className="muted small">★ {c.rating.average} ({c.rating.count})</span>}</div>
+                <div className="row between"><b>{c.display_name}{c.verified && <span className="badge" title="Staff reviewed this freelancer's public work evidence. Not an identity check."> Reviewed</span>}</b>{c.rating && <span className="muted small">★ {c.rating.average} ({c.rating.count})</span>}</div>
                 <p className="muted small">{c.headline || 'No headline yet'}</p>
                 <div className="chips">{c.skills.slice(0, 5).map((s) => <span className="chip" key={s}>{s}</span>)}</div>
                 <p className="muted small">{rate(c)} · {c.completed_contracts} completed here{c.newcomer ? ' · new' : ''}</p>

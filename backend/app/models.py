@@ -81,6 +81,8 @@ class Profile(Base):
     # Opt-in to being suggested to clients (migration 0052). Off by default.
     marketplace_visible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     marketplace_visible_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Staff reviewed the public evidence (migration 0071); not an identity check.
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     user = relationship("User", back_populates="profile")
 class Opportunity(Base):
     __tablename__ = "opportunities"
@@ -1195,6 +1197,7 @@ class Organization(Base):
     preferred_language: Mapped[str] = mapped_column(String(20), nullable=False, default="en", server_default="en")
     billing_name: Mapped[str] = mapped_column(String(200), nullable=False, default="", server_default="")
     billing_email: Mapped[str] = mapped_column(String(320), nullable=False, default="", server_default="")
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     billing_address: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     tax_id: Mapped[str] = mapped_column(String(40), nullable=False, default="", server_default="")
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active", server_default="active")
@@ -1466,6 +1469,72 @@ class ProposalInterview(Base):
     responded_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     outcome_note: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
+
+class ListingFile(Base):
+    """Reference file on a project brief, stored in R2 (migration 0071)."""
+    __tablename__ = "listing_files"
+    __table_args__ = (
+        CheckConstraint("status IN ('ready', 'deleted')", name="ck_listing_files_status"),
+        CheckConstraint("size_bytes > 0", name="ck_listing_files_size"),
+        Index("ix_listing_files_listing", "listing_id", "status"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    listing_id: Mapped[str] = mapped_column(ForeignKey("project_listings.id", ondelete="CASCADE"), nullable=False)
+    uploaded_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    r2_key: Mapped[str] = mapped_column(String(200), nullable=False, unique=True)
+    filename: Mapped[str] = mapped_column(String(130), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="ready", server_default="ready")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class VerificationRequest(Base):
+    """Staff review of a freelancer's or client account's public evidence (migration 0071)."""
+    __tablename__ = "verification_requests"
+    __table_args__ = (
+        CheckConstraint("subject_type IN ('freelancer', 'client')", name="ck_verification_subject"),
+        CheckConstraint("status IN ('pending', 'approved', 'rejected', 'revoked')", name="ck_verification_status"),
+        Index("ix_verification_status", "status", "created_at"),
+        Index("ix_verification_subject", "subject_type", "subject_id", "created_at"),
+        Index("uq_verification_pending", "subject_type", "subject_id", unique=True,
+              postgresql_where=sql_text("status = 'pending'"), sqlite_where=sql_text("status = 'pending'")),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    subject_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    subject_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    requested_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    evidence_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}", server_default="{}")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", server_default="pending")
+    decided_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    decision_note: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
+
+class DiscoverySource(Base):
+    """External job source switch (migration 0071)."""
+    __tablename__ = "discovery_sources"
+    code: Mapped[str] = mapped_column(String(40), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    note: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    updated_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
+
+class DiscoverySourceRun(Base):
+    """How one source did in one discovery run (migration 0071)."""
+    __tablename__ = "discovery_source_runs"
+    __table_args__ = (CheckConstraint("fetched >= 0", name="ck_source_runs_fetched"), Index("ix_source_runs_source", "source", "created_at"))
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    source: Mapped[str] = mapped_column(String(40), nullable=False)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    fetched: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    error: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
 
 

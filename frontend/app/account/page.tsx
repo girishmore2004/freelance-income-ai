@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ApiError, api, useSessionToken } from '@/lib/api-client';
 import { PlanCard } from './plan-card';
 import { SuspensionCard } from './suspension-card';
+import { VerificationCard } from './verification-card';
 import { MyInvitations, TeamPanel } from './team-panel';
 
 /**
@@ -180,6 +181,7 @@ export default function AccountPage() {
           <SuspensionCard />
           <MyInvitations onJoined={() => void load()} />
           <PlanCard />
+          <VerificationCard />
           <section className="card" aria-labelledby="roles-heading">
             <h3 id="roles-heading">Your roles</h3>
             <p className="muted">One login can both find work and hire. Your freelancer and client records stay separate.</p>
