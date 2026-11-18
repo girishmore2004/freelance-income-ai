@@ -33,3 +33,25 @@ export function defaultTab(status: string, hourly = false): ContractTab {
   if (status === 'completed') return 'reviews';
   return 'agreement';
 }
+
+/**
+ * The one thing to do next on a contract, shown above its tabs so nobody has
+ * to hunt through them. Pure, unit-tested.
+ */
+export function nextStep(status: string, party: 'client' | 'freelancer', hourly: boolean, actions: string[], canManage = true): { text: string; tab: ContractTab } | null {
+  if (status === 'offered') {
+    if (actions.includes('accept')) return { text: party === 'freelancer' ? 'Review the offer and accept it, or propose changes.' : 'The freelancer proposed changes: review and accept them, or reply.', tab: 'agreement' };
+    return { text: 'Waiting for the other side to accept the terms.', tab: 'agreement' };
+  }
+  if (status === 'active') {
+    if (actions.includes('accept')) return { text: 'A change to the contract is waiting for your answer.', tab: 'agreement' };
+    if (hourly) return party === 'freelancer'
+      ? { text: 'Log your hours and submit the week when it is done.', tab: 'hours' }
+      : { text: canManage ? 'Approve submitted weeks and pay them.' : 'Hours are approved by the account owner or admins.', tab: 'hours' };
+    return party === 'freelancer'
+      ? { text: 'Deliver the next milestone when it is ready.', tab: 'delivery' }
+      : { text: canManage ? 'Fund the next milestone, then review deliveries.' : 'Deliveries are reviewed by the account owner or admins.', tab: canManage ? 'payments' : 'delivery' };
+  }
+  if (status === 'completed') return { text: 'Work is finished: leave a review.', tab: 'reviews' };
+  return null;
+}

@@ -158,7 +158,7 @@ export default function ClientProjectsPage() {
   function startEdit(listing: Listing) {
     setEditing({ id: listing.id, baseVersion: listing.current_version });
     setForm(formFromBrief(listing.brief, listing.visibility, listing.closes_at));
-    setStep(2);
+    setStep(1);
     setAssist(null);
     setFieldErrors({});
     setNotice('');
@@ -297,7 +297,7 @@ export default function ClientProjectsPage() {
                 ))}
               </ol>
               <h4>Step {step + 1} of {POSTING_STEPS.length}: {POSTING_STEPS[step].label}</h4>
-              {POSTING_STEPS[step].key === 'describe' && (
+              {POSTING_STEPS[step].parts.includes('describe') && (
                 <>
               {!editing.id && (
                 <div className="card">
@@ -320,7 +320,7 @@ export default function ClientProjectsPage() {
               <div className="field"><label htmlFor="description">Details (shown to freelancers; add any reference links here)</label><textarea id="description" rows={4} value={form.description} onChange={set('description')} maxLength={8000} {...invalid('description', 'description')} />{fieldError('description', 'description')}</div>
                 </>
               )}
-              {POSTING_STEPS[step].key === 'category' && (
+              {POSTING_STEPS[step].parts.includes('category') && (
                 <>
               <div className="field">
                 <label htmlFor="category">Work category</label>
@@ -332,14 +332,14 @@ export default function ClientProjectsPage() {
 
                 </>
               )}
-              {POSTING_STEPS[step].key === 'outcome' && (
+              {POSTING_STEPS[step].parts.includes('outcome') && (
                 <>
               <div className="field"><label htmlFor="title">Project title (required)</label><input id="title" value={form.title} onChange={set('title')} maxLength={160} {...invalid('title', 'title')} />{fieldError('title', 'title')}</div>
               <div className="field"><label htmlFor="outcome">Business outcome</label><textarea id="outcome" rows={3} value={form.outcome} onChange={set('outcome')} maxLength={2000} {...invalid('outcome', 'outcome')} />{fieldError('outcome', 'outcome')}</div>
               <div className="field"><label htmlFor="deliverables">Deliverables (one per line)</label><textarea id="deliverables" rows={3} value={form.deliverables} onChange={set('deliverables')} {...invalid('deliverables', 'deliverables')} />{fieldError('deliverables', 'deliverables')}</div>
                 </>
               )}
-              {POSTING_STEPS[step].key === 'budget' && (
+              {POSTING_STEPS[step].parts.includes('budget') && (
                 <>
               <div className="field"><label htmlFor="budget-model">Budget type</label>
                 <select id="budget-model" value={form.budget_model} onChange={set('budget_model')}><option value="fixed">Fixed price</option><option value="hourly">Hourly</option></select></div>
@@ -349,7 +349,7 @@ export default function ClientProjectsPage() {
               </div>
                 </>
               )}
-              {POSTING_STEPS[step].key === 'timeline' && (
+              {POSTING_STEPS[step].parts.includes('timeline') && (
                 <>
               <div className="row">
                 <div className="field"><label htmlFor="deadline">Deadline</label><input id="deadline" type="date" value={form.deadline} onChange={set('deadline')} {...invalid('deadline', 'deadline')} />{fieldError('deadline', 'deadline')}</div>
@@ -359,7 +359,7 @@ export default function ClientProjectsPage() {
               <div className="field"><label htmlFor="milestones">Milestones (one per line)</label><textarea id="milestones" rows={3} value={form.milestones} onChange={set('milestones')} {...invalid('milestones', 'milestones')} />{fieldError('milestones', 'milestones')}</div>
                 </>
               )}
-              {POSTING_STEPS[step].key === 'skills' && (
+              {POSTING_STEPS[step].parts.includes('skills') && (
                 <>
               <div className="field"><label htmlFor="skills">Skills (comma separated)</label><input id="skills" value={form.skills} onChange={set('skills')} {...invalid('skills', 'skills')} />{fieldError('skills', 'skills')}</div>
               <div className="field"><label htmlFor="experience">Experience level</label>
@@ -367,13 +367,13 @@ export default function ClientProjectsPage() {
 
                 </>
               )}
-              {POSTING_STEPS[step].key === 'references' && (
+              {POSTING_STEPS[step].parts.includes('references') && (
                 <>
-              <p className="muted">Reference links (examples you like, current site, style guides) can go in the Details field of step 1. Files are shared privately in the contract workspace once you hire, so confidential material is never shown on the public listing.</p>
-              <button className="link" type="button" onClick={() => setStep(0)}>Add reference links to the details</button>
+              <p className="muted">Reference links (examples you like, current site, style guides) can go in the description in step 1. Files are shared privately in the contract workspace once you hire, so confidential material is never shown on the public listing.</p>
+              <button className="link" type="button" onClick={() => setStep(0)}>Add reference links to the description</button>
                 </>
               )}
-              {POSTING_STEPS[step].key === 'acceptance' && (
+              {POSTING_STEPS[step].parts.includes('acceptance') && (
                 <>
               <div className="field"><label htmlFor="acceptance">Acceptance criteria (one per line)</label><textarea id="acceptance" rows={3} value={form.acceptance} onChange={set('acceptance')} {...invalid('acceptance_criteria', 'acceptance')} />{fieldError('acceptance_criteria', 'acceptance')}</div>
               <div className="field"><label htmlFor="revisions">Included revision rounds</label><input id="revisions" type="number" min={0} max={10} value={form.revision_rounds} onChange={set('revision_rounds')} {...invalid('revision_rounds', 'revisions')} />{fieldError('revision_rounds', 'revisions')}</div>
@@ -381,7 +381,7 @@ export default function ClientProjectsPage() {
               <div className="field"><label htmlFor="ownership">Ownership and licensing notes (private to your team)</label><textarea id="ownership" rows={2} value={form.ownership_notes} onChange={set('ownership_notes')} maxLength={2000} /></div>
                 </>
               )}
-              {POSTING_STEPS[step].key === 'visibility' && (
+              {POSTING_STEPS[step].parts.includes('visibility') && (
                 <>
               <div className="row">
                 <div className="field"><label htmlFor="visibility">Visibility</label>
@@ -392,7 +392,7 @@ export default function ClientProjectsPage() {
 
                 </>
               )}
-              {POSTING_STEPS[step].key === 'review' && (
+              {POSTING_STEPS[step].parts.includes('review') && (
                 <>
               <div aria-label="Brief summary">
                 {briefGaps(form).length > 0

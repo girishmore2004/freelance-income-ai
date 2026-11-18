@@ -104,7 +104,7 @@ export function HoursPanel({ contractId, onEnded }: { contractId: string; onEnde
           </div>
           <div className="field"><label htmlFor="h-what">What you did</label><input id="h-what" maxLength={500} value={what} onChange={(e) => setWhat(e.target.value)} />{fieldErrors.description && <span className="error small">{fieldErrors.description}</span>}</div>
           <button className="btn primary" type="submit" disabled={busy}>Add time</button>
-          <p className="muted small">This week or last week only. Submit the week when it is done; the client approves and pays it.</p>
+          <p className="muted small">This week or last week only. Submit the week when it is done; the client approves and pays it. Weeks not reviewed within 5 days are approved automatically.</p>
         </form>
       )}
 
@@ -118,6 +118,7 @@ export function HoursPanel({ contractId, onEnded }: { contractId: string; onEnde
             </div>
             <p className="muted">{formatMinutes(w.minutes)} × {formatMinor(w.rate_minor, 'INR')}/h = <b>{formatMinor(w.amount_minor, 'INR')}</b>{w.payment && w.payment.status === 'released' && <> · client paid {formatMinor(w.payment.total_minor, 'INR')} incl. fee · freelancer received {formatMinor(w.payment.amount_minor - w.payment.freelancer_fee_minor, 'INR')}</>}</p>
             {w.client_note && w.status === 'open' && <p className="notice">Returned by the client: {w.client_note}</p>}
+            {w.client_note && w.status !== 'open' && <p className="muted small">{w.client_note}</p>}
             <table>
               <caption className="sr-only">Time entries for the week of {w.week_start}</caption>
               <thead><tr><th scope="col">Date</th><th scope="col">Time</th><th scope="col">Work</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>

@@ -291,3 +291,4 @@ html[data-theme=dark][data-side=admin]{--accent:#cbd5e1;--accent2:#e2e8f0;--acce
 @media(max-width:960px){.ws-role button{padding:6px 10px;font-size:12.5px}}
 @media(max-width:520px){.ws-cmd{display:none}}
 .grid>.card,.grid>article,.grid>li{margin-top:0}
+.next-step{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:12px 14px;margin:10px 0;border:1px solid var(--accent-line);background:var(--accent-soft);border-radius:var(--radius-sm)}

@@ -4,22 +4,26 @@
  * where the client can fix it. Pure data, unit-tested.
  */
 
-export const POSTING_STEPS = [
-  { key: 'describe', label: 'Describe the need' },
-  { key: 'category', label: 'Category' },
-  { key: 'outcome', label: 'Outcome and deliverables' },
-  { key: 'budget', label: 'Budget and model' },
-  { key: 'timeline', label: 'Deadline and milestones' },
-  { key: 'skills', label: 'Skills and experience' },
-  { key: 'references', label: 'References and files' },
-  { key: 'acceptance', label: 'Revisions and acceptance' },
-  { key: 'visibility', label: 'Visibility' },
-  { key: 'review', label: 'Review and publish' },
-] as const;
+/**
+ * Four steps (simplified 2026-11-18 from ten): each step shows several parts of
+ * the brief. `parts` are the sections the page renders inside the step.
+ */
+export const POSTING_PARTS = ['describe', 'category', 'outcome', 'skills', 'acceptance', 'references', 'budget', 'timeline', 'visibility', 'review'] as const;
+export type PostingPart = (typeof POSTING_PARTS)[number];
 
-export type PostingStep = (typeof POSTING_STEPS)[number]['key'];
+export const POSTING_STEPS: ReadonlyArray<{ key: string; label: string; parts: readonly PostingPart[] }> = [
+  { key: 'describe', label: 'Describe the project', parts: ['describe', 'category'] },
+  { key: 'scope', label: 'Scope and skills', parts: ['outcome', 'skills', 'acceptance', 'references'] },
+  { key: 'budget', label: 'Budget and dates', parts: ['budget', 'timeline'] },
+  { key: 'review', label: 'Review and publish', parts: ['visibility', 'review'] },
+];
 
-const FIELD_STEP: Record<string, PostingStep> = {
+/** The step index that shows a part. */
+export function stepOfPart(part: PostingPart): number {
+  return POSTING_STEPS.findIndex((s) => s.parts.includes(part));
+}
+
+const FIELD_STEP: Record<string, PostingPart> = {
   description: 'describe',
   category_slug: 'category',
   title: 'outcome',
@@ -48,9 +52,9 @@ const FIELD_STEP: Record<string, PostingStep> = {
 export function firstStepWithError(errors: Record<string, string>): number | null {
   let best: number | null = null;
   for (const field of Object.keys(errors)) {
-    const step = FIELD_STEP[field.split('.')[0]];
-    if (!step) continue;
-    const index = POSTING_STEPS.findIndex((s) => s.key === step);
+    const part = FIELD_STEP[field.split('.')[0]];
+    if (!part) continue;
+    const index = stepOfPart(part);
     if (best === null || index < best) best = index;
   }
   return best;

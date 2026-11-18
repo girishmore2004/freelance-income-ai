@@ -13,7 +13,7 @@ import { DisputePanel } from './dispute-panel';
 import { HandoverPanel, TasksPanel, TimelinePanel } from './tasks-panel';
 import { HoursPanel } from './hours-panel';
 import { HireAgain } from './hire-again';
-import { defaultTab, tabsFor, type ContractTab } from '@/lib/contract-tabs';
+import { defaultTab, nextStep, tabsFor, type ContractTab } from '@/lib/contract-tabs';
 
 /**
  * Contracts for both parties (Phase 3). An offer becomes active only when the
@@ -122,7 +122,8 @@ export default function ContractsPage() {
 
   const t = detail?.terms;
   // One side at a time (Freelancer / Client switch). A contract opened by link stays visible.
-  const shownItems = items.filter((c) => c.party === mode || c.id === detail?.id);
+  // An open contract gets the page to itself ("← All contracts" returns to the list).
+  const shownItems = detail ? items.filter((c) => c.id === detail.id) : items.filter((c) => c.party === mode);
   const hiddenCount = items.length - shownItems.length;
   return (
     <main className="shell">
@@ -138,7 +139,8 @@ export default function ContractsPage() {
       {loading && <p className="muted">Loading…</p>}
       {!closed && !loading && items.length === 0 && <p className="empty">No contracts yet. Offers you send or receive appear here.</p>}
 
-      {hiddenCount > 0 && <p className="muted small">{hiddenCount} contract{hiddenCount === 1 ? '' : 's'} where you are the {mode === 'client' ? 'freelancer' : 'client'}: switch to {mode === 'client' ? 'Freelancer' : 'Client'} in the sidebar to see {hiddenCount === 1 ? 'it' : 'them'}.</p>}
+      {detail && <button className="link" type="button" onClick={() => setDetail(null)}>← All contracts</button>}
+      {!detail && hiddenCount > 0 && <p className="muted small">{hiddenCount} contract{hiddenCount === 1 ? '' : 's'} where you are the {mode === 'client' ? 'freelancer' : 'client'}: switch to {mode === 'client' ? 'Freelancer' : 'Client'} at the top to see {hiddenCount === 1 ? 'it' : 'them'}.</p>}
       {shownItems.map((c) => (
         <div className="card item" key={c.id}>
           <div className="row between">
@@ -160,6 +162,17 @@ export default function ContractsPage() {
                 </p>
               )}
               <p className="muted">{detail.funding.message}</p>
+              {(() => {
+                const ns = nextStep(detail.status, detail.party, isHourly(detail), detail.allowed_actions, detail.can_manage !== false);
+                if (!ns) return null;
+                const label = tabsFor(detail.status, isHourly(detail)).find((x) => x.key === ns.tab)?.label;
+                return (
+                  <div className="next-step" role="note" aria-label="Next step">
+                    <span><b>Next step:</b> {ns.text}</span>
+                    {label && tab !== ns.tab && <button className="btn primary" type="button" onClick={() => setTab(ns.tab)}>Go to {label}</button>}
+                  </div>
+                );
+              })()}
               <div className="tabs" role="tablist" aria-label="Contract sections">
                 {tabsFor(detail.status, isHourly(detail)).map((tb) => (
                   <button key={tb.key} type="button" role="tab" id={`tab-${detail.id}-${tb.key}`} aria-selected={tab === tb.key} aria-controls={`panel-${detail.id}-${tb.key}`} onClick={() => setTab(tb.key)}>{tb.label}</button>

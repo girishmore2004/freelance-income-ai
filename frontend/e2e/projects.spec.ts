@@ -63,16 +63,15 @@ test('client drafts a brief with AI, sets the budget in rupees and publishes', a
 
   await expect(page.getByText('Which payment provider do you use?')).toBeVisible();
   const next = page.getByRole('button', { name: 'Next', exact: true });
-  await next.click(); // 2. Category
-  await next.click(); // 3. Outcome and deliverables
+  // Four steps since 2026-11-18.
+  await next.click(); // 2. Scope and skills
   await expect(page.getByLabel('Project title (required)')).toHaveValue('Candle shop website');
-  await next.click(); // 4. Budget
+  await next.click(); // 3. Budget and dates
   await page.getByLabel('Minimum budget (₹)').fill('25000');
   await page.getByLabel('Maximum budget (₹)').fill('50000');
-  await next.click(); // 5. Deadline and milestones
   await page.getByLabel('Deadline').fill('2030-01-31');
-  await page.getByRole('button', { name: '10. Review and publish' }).click();
-  await expect(page.getByText('Step 10 of 10: Review and publish')).toBeVisible();
+  await page.getByRole('button', { name: '4. Review and publish' }).click();
+  await expect(page.getByText('Step 4 of 4: Review and publish')).toBeVisible();
   await expect(page.getByLabel('Brief summary').getByText('2030-01-31')).toBeVisible();
   await page.getByRole('button', { name: 'Save and submit' }).click();
 
