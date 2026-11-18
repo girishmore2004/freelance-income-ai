@@ -68,12 +68,12 @@ export function StatementPanel({ accounts, initialSide }: { accounts: Account[];
             {months.map((m) => <option key={m} value={m}>{new Date(`${m}-01T00:00:00Z`).toLocaleDateString(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' })}</option>)}
           </select>
         </div>
-        {accounts.length > 0 && (
+        {/* One side at a time: the freelancer statement on the freelancer side, client accounts on the client side. */}
+        {initialSide !== 'freelancer' && accounts.length > 1 && (
           <div className="field">
-            <label htmlFor="st-side">Statement for</label>
+            <label htmlFor="st-side">Client account</label>
             <select id="st-side" value={side} onChange={(e) => setSide(e.target.value)}>
-              <option value="freelancer">My freelance earnings</option>
-              {accounts.map((a) => <option key={a.id} value={a.id}>Client account: {a.name}</option>)}
+              {accounts.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
           </div>
         )}

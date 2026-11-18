@@ -23,6 +23,7 @@ type Proposal = {
 };
 type Finding = { code: string; severity: 'warn' | 'info'; field: string; message: string };
 type Check = { content_hash: string; findings: Finding[]; evidence_suggestions: Array<{ url: string; matched: string[] }> };
+type Quota = { limit: number; used: number; remaining: number; hire_rate: number | null; explanation: string };
 type Version = { version: number; price_minor: number; estimated_days: number | null; created_at: string; changes: string[] };
 
 function messageOf(e: unknown): string {
@@ -69,7 +70,13 @@ export function ProposalForm({ listingId, budgetModel, existing, onDone, onCance
   const [check, setCheck] = useState<Check | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [studioOff, setStudioOff] = useState(false);
+  const [quota, setQuota] = useState<Quota | null>(null);
   const id = existing?.id ?? listingId;
+  // Weekly proposal limit (Master Plan B12): shown before writing a new proposal.
+  useEffect(() => {
+    if (existing) return;
+    api<Quota>('/api/v1/me/proposal-quota').then((q) => setQuota(q && typeof q.limit === 'number' ? q : null)).catch(() => setQuota(null));
+  }, [existing]);
   const currency = existing?.currency ?? 'INR';
 
   useEffect(() => {
@@ -166,6 +173,12 @@ export function ProposalForm({ listingId, budgetModel, existing, onDone, onCance
         <button className="btn" type="button" disabled={busy} onClick={() => void draft()}>Draft introduction with AI</button>
       </div>
       <p className="muted small">AI drafts use only facts on your profile. You edit, check and approve the exact text; nothing is sent automatically.</p>
+      {quota && (
+        <p className={quota.remaining === 0 ? 'error small' : 'muted small'} role="status">
+          Proposals this week: {quota.used} of {quota.limit}{quota.remaining === 0 ? ' — limit reached; you can send again when older proposals pass 7 days.' : ''} <span title={quota.explanation}>ⓘ</span>
+          <span className="sr-only"> {quota.explanation}</span>
+        </p>
+      )}
       <div aria-live="polite">{notice && <p className="success">{notice}</p>}</div>
       <div className="field">
         <label htmlFor={`cover-${id}`}>How you would do the work: your introduction (50–5,000 characters)</label>

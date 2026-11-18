@@ -1,5 +1,7 @@
 'use client';
 import { InterviewPrep } from './interview-prep';
+import { IntakeControl } from './intake-control';
+import { BlockButton } from '../../block-button';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api-client';
 import { PROPOSAL_LABELS, formatMinor } from '@/lib/listing-format';
@@ -140,6 +142,7 @@ export function ProposalsPanel({ listingId, brief, canManage }: { listingId: str
   return (
     <section className="card" aria-label="Proposals">
       <b>Proposals</b>
+      <IntakeControl listingId={listingId} />
       <div aria-live="polite">
         {notice && <p className="success">{notice} {notice.startsWith('Offer') && <a className="link" href="/contracts">Open contracts</a>}</p>}
         {error && <p className="error" role="alert">{error}</p>}
@@ -204,6 +207,7 @@ export function ProposalsPanel({ listingId, brief, canManage }: { listingId: str
               <button className="btn primary" disabled={busy} onClick={() => void startOffer(p)}>Make an offer</button>
               <button className="btn" disabled={busy} onClick={() => { setRevisionFor(revisionFor === p.id ? null : p.id); setRevisionNote(''); }}>Request revised proposal</button>
               <button className="btn" disabled={busy} onClick={() => void decide(p, 'decline')}>Decline</button>
+              <BlockButton target={{ proposal_id: p.id }} label="Block this freelancer" effect="Their open proposals to your account are declined, they cannot send new ones, and they no longer appear in your matches." onBlocked={() => void load()} />
             </div>
           )}
           {revisionFor === p.id && (

@@ -86,13 +86,10 @@ export default function ServicesPage() {
     <main className="shell">
       {!token && <div className="row between" style={{ marginBottom: 12 }}><a href="/" className="row" style={{ gap: 8 }}><span className="logo" aria-hidden="true">F</span><b>Freelance Income AI</b></a><PublicNav /></div>}
       <div className="row between">
-        <div><h2>Services</h2><p className="muted">Ready-made work at a fixed price. Pick a package, tell the freelancer what you need, and they start once they accept.</p></div>
-        {token && (
-          <span role="group" aria-label="Services view" className="row">
-            <button className="btn" type="button" aria-pressed={view === 'browse'} onClick={() => { setView('browse'); show(null); }}>Browse services</button>
-            <button className="btn" type="button" aria-pressed={view === 'mine'} onClick={() => { setView('mine'); setOpenId(null); window.history.replaceState(null, '', '/services?view=mine'); }}>My services</button>
-          </span>
-        )}
+        {/* One side per page: clients buy (/services), freelancers sell (/services?view=mine, the freelancer sidebar's "My services"). */}
+        {view === 'mine' && token
+          ? <div><h2>My services</h2><p className="muted">Sell ready-made work at a fixed price. Clients pick a package and send their requirements; you accept and it becomes a contract.</p></div>
+          : <div><h2>Buy a service</h2><p className="muted">Ready-made work at a fixed price. Pick a package, tell the freelancer what you need, and they start once they accept.</p></div>}
       </div>
       {closed && <div className="card"><p className="muted">Services open with the client marketplace.</p></div>}
 

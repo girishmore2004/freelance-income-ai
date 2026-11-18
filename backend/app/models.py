@@ -1252,6 +1252,7 @@ class ProjectListing(Base):
         CheckConstraint("status IN ('draft', 'in_review', 'published', 'hiring', 'paused', 'closed', 'cancelled', 'expired')", name="ck_project_listings_status"),
         CheckConstraint("visibility IN ('public', 'invite_only', 'private')", name="ck_project_listings_visibility"),
         CheckConstraint("moderation_status IN ('not_screened', 'passed', 'flagged', 'approved', 'rejected')", name="ck_project_listings_moderation"),
+        CheckConstraint("max_proposals IS NULL OR max_proposals BETWEEN 1 AND 500", name="ck_project_listings_max_proposals"),
         Index("ix_project_listings_org_created", "organization_id", "created_at"),
         Index("ix_project_listings_status_published", "status", "published_at"),
     )
@@ -1266,6 +1267,9 @@ class ProjectListing(Base):
     current_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     closes_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Client load control (0078): optional cap, and when the project stopped taking proposals.
+    max_proposals: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    proposals_closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, onupdate=now, server_default=func.now(), nullable=False)
 
@@ -2294,3 +2298,21 @@ class ContractFile(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+
+class MarketplaceBlock(Base):
+    """A block between a freelancer and a client account, made by one side (0078)."""
+
+    __tablename__ = "marketplace_blocks"
+    __table_args__ = (
+        CheckConstraint("blocked_by IN ('freelancer', 'client')", name="ck_marketplace_blocks_side"),
+        UniqueConstraint("freelancer_user_id", "organization_id", "blocked_by", name="uq_marketplace_blocks_pair"),
+        Index("ix_marketplace_blocks_org", "organization_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    freelancer_user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    blocked_by: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_by_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)

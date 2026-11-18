@@ -6,6 +6,7 @@ import { formatBudget } from '@/lib/listing-format';
 import { Invitations, MarketplaceVisibility } from './invitations';
 import { MyProposals, ProposalForm } from './proposal-form';
 import { ReportButton } from './report-button';
+import { BlockButton } from '../block-button';
 import { ListingFiles } from '../client/projects/listing-files';
 import { PublicNav } from '../public-nav';
 import { ExternalOpportunities } from './external-opportunities';
@@ -27,6 +28,8 @@ type PublicListing = {
   description: string; deliverables: string[]; skills: string[]; experience_level: string; budget_model: string;
   budget_min_minor: number | null; budget_max_minor: number | null; currency: string; deadline: string | null;
   milestones: string[]; acceptance_criteria: string[]; revision_rounds: number; confidential: boolean;
+  /** U23: false when the client closed the project to new proposals or its cap is reached. */
+  accepting_proposals?: boolean; proposals?: string;
 };
 type Page = { items: PublicListing[]; next_before: string | null };
 type Category = { slug: string; name: string };
@@ -204,7 +207,8 @@ export default function ProjectsPage() {
                   {token && saved !== null && <button className="btn" type="button" aria-pressed={savedIds.has(p.id)} onClick={() => void toggleSave(p.id)}>{savedIds.has(p.id) ? 'Saved' : 'Save'}</button>}
                 </span>
               </div>
-              <p className="muted">{p.client_name}{p.client_verified && <span className="badge" title="Staff reviewed this client account's public evidence. Not an identity check."> Reviewed client</span>} · {formatBudget(p.budget_min_minor, p.budget_max_minor, p.currency, p.budget_model)} · {p.deadline ? `Deadline ${p.deadline}` : 'No deadline set'}</p>
+              <p className="muted">{p.client_name}{p.client_verified && <span className="badge" title="Staff reviewed this client account's public evidence. Not an identity check."> Reviewed client</span>} · {formatBudget(p.budget_min_minor, p.budget_max_minor, p.currency, p.budget_model)} · {p.deadline ? `Deadline ${p.deadline}` : 'No deadline set'}{p.proposals ? ` · Proposals: ${p.proposals}` : ''}</p>
+              {p.accepting_proposals === false && <p className="badge">Not taking new proposals</p>}
               <p>{p.outcome}</p>
               <button className="link" aria-expanded={open === p.id} onClick={() => setOpen(open === p.id ? null : p.id)}>
                 {open === p.id ? 'Hide details' : 'Show details'}
@@ -218,7 +222,7 @@ export default function ProjectsPage() {
                   {p.acceptance_criteria.length > 0 && <><b>Acceptance criteria</b><ul>{p.acceptance_criteria.map((a) => <li key={a}>{a}</li>)}</ul></>}
                   <p className="muted">Experience: {p.experience_level} · Revision rounds: {p.revision_rounds}</p>
                   {token && <ListingFiles listingId={p.id} mode="freelancer" />}
-                  {token && <div><ReportButton targetType="listing" targetId={p.id} /></div>}
+                  {token && <div className="row"><ReportButton targetType="listing" targetId={p.id} /><BlockButton target={{ listing_id: p.id }} label="Block this client" effect="You will no longer see this client's projects, they cannot invite or message you, and your open proposals to them are withdrawn." onBlocked={() => setRefreshKey((k) => k + 1)} /></div>}
                   {!token ? (
                     <a className="btn primary" href="/#signin">Sign in to send a proposal</a>
                   ) : proposing === p.id ? (
@@ -228,6 +232,8 @@ export default function ProjectsPage() {
                       onCancel={() => setProposing(null)}
                       onDone={(message) => { setProposing(null); setNotice(message); setRefreshKey((k) => k + 1); }}
                     />
+                  ) : p.accepting_proposals === false ? (
+                    <p className="muted">The client has stopped taking new proposals for this project.</p>
                   ) : (
                     <button className="btn primary" onClick={() => setProposing(p.id)}>Send a proposal</button>
                   )}

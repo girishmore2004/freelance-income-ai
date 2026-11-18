@@ -1,9 +1,10 @@
 # Database Migration Status
 
-Chain head: **`0077_agent_registry_refresh`** (77 revisions, single head — verified by `tests/test_system_diagnostics_v542.py`). Neon production: **0075** (2026-11-18 22:21 IST, workflow "Neon PRODUCTION Database Migrations"); test branch `stage3c-integration-test`: 0073. 0076 and 0077 to run next on production.
+Chain head: **`0078_fair_proposals_blocks`** (78 revisions, single head — verified by `tests/test_system_diagnostics_v542.py`). Neon production: **0075** (2026-11-18 22:21 IST, workflow "Neon PRODUCTION Database Migrations"); test branch `stage3c-integration-test`: 0073. 0076, 0077 and 0078 to run next on production.
 
 | Revision | Change | Type | Downgrade |
 |---|---|---|---|
+| 0078_fair_proposals_blocks | `project_listings.max_proposals` (1–500 or NULL, check) and `proposals_closed_at`; `marketplace_blocks` (freelancer ↔ client account, one row per side, side check, unique freelancer+organisation+side; user and organisation CASCADE, creator SET NULL; index by organisation). The weekly proposal limit is computed (no table) | Additive. The Edge treats every project as open and nobody as blocked before it runs; block and cap routes answer `MIGRATION_PENDING` | Drops the table and the two columns |
 | 0047_edge_apply_tables | Captures `integrations`, `applications`, `application_messages` used by the Edge API; adds missing columns to hand-made tables; unique `(user_id, provider)`, unique `(user_id, external_id)`, partial unique "one live send per proposal"; `integrations.id` DB default | Additive; stops with a clear message if duplicates exist | Removes indexes only; keeps tables and data |
 | 0048_queue_job_reliability | `background_jobs`: `idempotency_key` (unique), `attempts`, `payload_json`, `source`, `dead_lettered_at`; index `(status, created_at)` | Additive | Drops added columns/indexes |
 | 0051_native_project_listings | `project_categories` (8 seeded from the Master Plan; only `website_development` enabled), `project_listings` (status/visibility/moderation check constraints, indexes for org lists and the marketplace), `project_listing_versions` (immutable, unique per listing+version, money in minor units, budget range check) | Additive + seed | Drops the three tables |
@@ -31,7 +32,7 @@ Chain head: **`0077_agent_registry_refresh`** (77 revisions, single head — ver
 ## Safe deployment order
 1. **Back up** Neon (create a branch named `pre-0047-2026-11` from `main` in Neon → Branches). Branch creation is instant and is the rollback point.
 2. Optional dry run: run the migration workflow against the backup branch first.
-3. Run GitHub Action **"Stage 3C Neon migrations"** in `freelance-income-ai` (type the confirmation text). It expects `0077_agent_registry_refresh`.
+3. Run GitHub Action **"Stage 3C Neon migrations"** in `freelance-income-ai` (type the confirmation text). It expects `0078_fair_proposals_blocks`.
 4. Deploy the Edge API (5.73.0 needs 0047–0068; saving projects and support tickets fail until 0068 runs, the calendar works without it; before 0067 the short proposal form still works and Studio sections return `MIGRATION_PENDING` before `marketplace.client_side` is switched on; AI keeps working on Worker limits if 0057 is not applied yet).
 5. Deploy the frontend.
 
@@ -43,7 +44,7 @@ If 0047 stops with "existing rows contain duplicates", nothing was committed: in
 
 ## Verification queries (Neon SQL Editor)
 ```sql
-SELECT version_num FROM alembic_version;                       -- 0077_agent_registry_refresh
+SELECT version_num FROM alembic_version;                       -- 0078_fair_proposals_blocks
 SELECT count(*) FROM listing_proposal_versions;                 -- equals count(*) FROM listing_proposals right after the run
 SELECT slug, enabled FROM project_categories ORDER BY sort_order; -- only website_development = true
 SELECT role, count(*) FROM user_roles GROUP BY role;            -- freelancer = number of users

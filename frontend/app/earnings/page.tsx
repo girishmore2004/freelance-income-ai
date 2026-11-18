@@ -67,10 +67,11 @@ export default function EarningsPage() {
 
   return (
     <main className="shell">
-      <div className="row between"><h2>Earnings and statements</h2><span className="row"><NotificationLink /><a className="link" href="/contracts">Contracts</a></span></div>
+      <div className="row between"><h2>{wantClient ? 'Spend and statements' : 'Earnings and payouts'}</h2><span className="row"><NotificationLink /><a className="link" href="/contracts">Contracts</a></span></div>
       {closed && <div className="card"><p className="muted">Earnings open with the client marketplace.</p></div>}
       <div aria-live="polite">{notice && <p className="success">{notice}</p>}{error && <p className="error" role="alert">{error}</p>}</div>
-      {data && (
+      {wantClient && accounts.length === 0 && <div className="card"><p className="muted">You have no client account where you manage billing yet. Create one on <a className="link" href="/account">Account and team</a>, or ask the owner of your team's account.</p></div>}
+      {data && !wantClient && (
         <>
           {data.mode === 'sandbox' && data.payments_enabled && <p className="badge">TEST MODE — no real money moves</p>}
           {data.note && <p className="muted">{data.note}</p>}
@@ -99,7 +100,7 @@ export default function EarningsPage() {
           </section>
         </>
       )}
-      {token && !closed && <StatementPanel key={accounts.length && wantClient ? accounts[0].id : 'freelancer'} accounts={accounts} initialSide={wantClient && accounts[0] ? accounts[0].id : 'freelancer'} />}
+      {token && !closed && (!wantClient || accounts.length > 0) && <StatementPanel key={wantClient && accounts[0] ? accounts[0].id : 'freelancer'} accounts={accounts} initialSide={wantClient && accounts[0] ? accounts[0].id : 'freelancer'} />}
     </main>
   );
 }

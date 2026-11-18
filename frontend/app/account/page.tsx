@@ -5,6 +5,7 @@ import { PlanCard } from './plan-card';
 import { SuspensionCard } from './suspension-card';
 import { VerificationCard } from './verification-card';
 import { MyInvitations, TeamPanel } from './team-panel';
+import { BlocksPanel } from './blocks-panel';
 
 /**
  * Account & roles (Phase 1). One login, two public roles:
@@ -310,6 +311,8 @@ export default function AccountPage() {
           )}
         </>
       )}
+
+      {identity && <BlocksPanel />}
 
       {!loading && !identity && !error && <p className="muted">No account data.</p>}
       {!identity && error && (

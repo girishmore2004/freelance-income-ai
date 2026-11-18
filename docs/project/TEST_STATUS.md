@@ -1,5 +1,11 @@
 # Test Status
 
+## U23 — audit, fair proposals and blocking (local, 2026-11-18)
+- Audit: 355 API calls found in the frontend were replayed through the real Edge router on PostgreSQL. Every call from the live pages is served; the unserved ones are only the 8 older Python tool pages behind the "not available" notice (K-01) and scanner artefacts (re-checked with real values). One dead link (`/proposals` on an older tool page) fixed. No placeholder buttons. Side mixing found and fixed on Services (both buy and sell toggles on one page) and Spend (the client page showed the freelancer balance and payouts).
+- Edge: vitest **425 passed** (new `fair.test.ts` 10: weekly limit, near-copy similarity, intake validation, proposal ranges, block routes). Typecheck clean; bundle builds.
+- PostgreSQL (real handlers, 0078 DDL): 10 proposals sent, the 11th refused (429 with the explanation); a near-copy flagged at 80% before sending; client cap of 1 → second proposal closed the project, public card "not taking proposals", 409 for the next freelancer; cap below received 422; reopen and close by hand; block with a phone number in the reason 422; client block declined both open proposals, duplicate 409, the blocked freelancer saw none of the client's 12 projects (another freelancer saw 12), proposal 404, invitation 403 `NOT_AVAILABLE`, block list for the client only; the freelancer could not lift it (404); unblock restored the 12 projects; a freelancer's block withdrew their 10 proposals and the client could not lift it; a block with an open contract 409. **Defect found and fixed:** a removed team member was still treated as a member (could never propose to that client).
+- Frontend: typecheck clean (app + e2e), unit **45 passed**. New `e2e/fair.spec.ts` (2 journeys). CI result to follow.
+
 ## U22 — side separation fix (GitHub CI verified, 2026-11-18)
 - Edge: vitest **415 passed** (identity: a staff-only or admin + client account keeps or regains the freelancer side; a switched-off freelancer row stays off). Typecheck clean; bundle builds.
 - PostgreSQL (real functions): owner-like account (admin + client rows) → roles admin, client → Freelancer switch → admin, client, freelancer; moderator-only account → roles freelancer, moderator, and `/me` wrote the freelancer row once (second call wrote nothing).
