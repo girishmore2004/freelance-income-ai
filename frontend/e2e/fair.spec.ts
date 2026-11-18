@@ -108,7 +108,7 @@ test('clients cap proposals, stop taking them, block a freelancer and unblock fr
 
   await page.goto('/account');
   const blocked = page.getByRole('region', { name: 'Blocked' });
-  await expect(blocked.getByText('Ravi K')).toBeVisible();
+  await expect(blocked.getByText('Ravi K', { exact: true })).toBeVisible();
   await blocked.getByRole('button', { name: 'Unblock Ravi K' }).click();
   await expect(blocked.getByText('Unblocked Ravi K.')).toBeVisible();
   await expect(blocked.getByText(/You have not blocked anyone/)).toBeVisible();
