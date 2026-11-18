@@ -402,6 +402,37 @@ export async function handleBusinessRoute(request: Request, env: Env, requestId:
   }
 }
 
+export interface Deadline { contract_id: string; title: string; milestone: number; milestone_title: string; due_date: string; overdue: boolean; side: "freelancer" | "client" }
+
+/**
+ * Milestones due within `days` (or overdue) that are not approved yet. Pure;
+ * exported for tests. `approved` holds "contractId:index" of approved milestones.
+ */
+export function upcomingDeadlines(
+  contracts: Array<{ id: string; title: string; milestones_json: string; side: "freelancer" | "client" }>,
+  approved: Set<string>,
+  today: string,
+  days = 14
+): Deadline[] {
+  const horizon = new Date(Date.parse(`${today}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+  const out: Deadline[] = [];
+  for (const c of contracts) {
+    let milestones: Array<{ title?: unknown; due_date?: unknown }> = [];
+    try {
+      const parsed = JSON.parse(c.milestones_json || "[]");
+      milestones = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      milestones = [];
+    }
+    milestones.forEach((m, i) => {
+      const due = typeof m.due_date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(m.due_date) ? m.due_date : null;
+      if (!due || due > horizon || approved.has(`${c.id}:${i}`)) return;
+      out.push({ contract_id: c.id, title: c.title, milestone: i, milestone_title: String(m.title ?? `Milestone ${i + 1}`), due_date: due, overdue: due < today, side: c.side });
+    });
+  }
+  return out.sort((a, b) => a.due_date.localeCompare(b.due_date)).slice(0, 20);
+}
+
 function goalOut(goal: GoalsInput & { updated_at?: Date | null }) {
   return {
     monthly_income_target: Number(goal.monthly_income_target),
@@ -451,6 +482,29 @@ async function overview(sql: Queryable, userId: string, today: string) {
     WHERE c.freelancer_user_id = ${userId} AND i.status = 'released' AND i.released_at >= ${monthStart} GROUP BY i.mode
   `);
   const actions = await buildActionPlan(sql, userId, today);
+  // What to apply for: best open external matches and the newest native projects that fit the profile's skills.
+  const topExternal = await tolerant(() => sql<{ id: string; title: string; source: string; match_score: number; source_url: string }[]>`
+    SELECT id, title, source, match_score, source_url FROM opportunities WHERE user_id = ${userId} AND status = 'new' ORDER BY match_score DESC, created_at DESC LIMIT 3
+  `);
+  const invitedNative = await tolerant(() => sql<{ id: string; title: string }[]>`
+    SELECT l.id, v.title FROM listing_invitations i JOIN project_listings l ON l.id = i.listing_id
+    JOIN project_listing_versions v ON v.listing_id = l.id AND v.version = l.current_version
+    WHERE i.freelancer_user_id = ${userId} AND i.status = 'pending' AND l.status IN ('published', 'hiring') ORDER BY i.created_at DESC LIMIT 3
+  `);
+  const contractRows = await tolerant(() => sql<{ id: string; title: string; milestones_json: string; side: "freelancer" | "client" }[]>`
+    SELECT c.id, v.title, v.milestones_json, CASE WHEN c.freelancer_user_id = ${userId} THEN 'freelancer' ELSE 'client' END AS side
+    FROM contracts c JOIN contract_versions v ON v.contract_id = c.id AND v.version = COALESCE(c.agreed_version, c.current_version)
+    WHERE c.status = 'active' AND (c.freelancer_user_id = ${userId} OR c.organization_id = ANY(${orgs.length ? orgs : [""]}))
+    LIMIT 50
+  `);
+  const approvedRows = contractRows?.length ? await tolerant(() => sql<{ contract_id: string; milestone_index: number }[]>`
+    SELECT DISTINCT contract_id, milestone_index FROM milestone_submissions WHERE contract_id = ANY(${contractRows.map((c) => c.id)}) AND status = 'approved'
+  `) : [];
+  const deadlines = upcomingDeadlines(contractRows ?? [], new Set((approvedRows ?? []).map((r) => `${r.contract_id}:${Number(r.milestone_index)}`)), today);
+  const pending = await tolerant(() => sql<{ mode: string; net: string | number; n: number }[]>`
+    SELECT i.mode, COALESCE(sum(i.amount_minor - i.freelancer_fee_minor), 0) AS net, count(*)::int AS n FROM payment_intents i JOIN contracts c ON c.id = i.contract_id
+    WHERE c.freelancer_user_id = ${userId} AND i.status = 'funded' GROUP BY i.mode
+  `);
   const top = actions.filter((a) => a.priority <= 2);
   const alerts = top.slice(0, 8).map((a, i) => ({ id: `${a.evidence.type}-${i}`, severity: a.priority === 1 ? "high" : "medium", title: a.title, action: a.suggested_action, href: a.href ?? "/agent" }));
   const recommendations: Array<{ priority: string; title: string; reason: string; evidence: Array<{ type: string; value: number }>; action: string }> = [];
@@ -471,6 +525,12 @@ async function overview(sql: Queryable, userId: string, today: string) {
       released_this_month_minor: Object.fromEntries((released ?? []).map((r) => [r.mode, Number(r.net)]))
     },
     goals,
+    apply_next: {
+      external: (topExternal ?? []).map((o) => ({ id: o.id, title: o.title, source: o.source, match_score: Number(o.match_score), source_url: o.source_url })),
+      invitations: (invitedNative ?? []).map((l) => ({ listing_id: l.id, title: l.title }))
+    },
+    deadlines,
+    pending_release: (pending ?? []).map((p) => ({ mode: p.mode, amount_minor: Number(p.net), milestones: Number(p.n) })),
     alerts,
     recommendations,
     data_policy: "Metrics use only records saved in this account (and client accounts you manage). Missing records count as zero; a dash means that kind of record is not available. Test-mode earnings are not real income. Currency totals are not converted."

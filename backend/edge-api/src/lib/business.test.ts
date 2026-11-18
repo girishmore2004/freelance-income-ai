@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Env } from "../types";
-import { buildActionPlan, duePriority, handleBusinessRoute, sortActions, validateCitations, validateGoals } from "./business-routes";
+import { buildActionPlan, duePriority, handleBusinessRoute, sortActions, upcomingDeadlines, validateCitations, validateGoals } from "./business-routes";
 import type { Action, BusinessRouteDeps } from "./business-routes";
 import { createFakeSql, jsonRequest, readJson } from "./test-support";
 import type { AuthenticatedSession } from "./session-service";
@@ -133,5 +133,15 @@ describe("coach", () => {
     expect(called).toBe(false);
     expect(res.data.generation_mode).toBe("rules_fallback");
     expect(res.data.answer).toContain("switched off");
+  });
+});
+
+describe("deadlines", () => {
+  it("lists unapproved milestones due within two weeks or overdue, soonest first", () => {
+    const contracts = [{ id: "K1", title: "Site", side: "freelancer" as const, milestones_json: JSON.stringify([{ title: "Design", due_date: "2026-11-10" }, { title: "Build", due_date: "2026-11-25" }, { title: "Launch", due_date: "2027-01-30" }, { title: "No date" }]) }];
+    const out = upcomingDeadlines(contracts, new Set(), "2026-11-18");
+    expect(out.map((d) => [d.milestone_title, d.overdue])).toEqual([["Design", true], ["Build", false]]);
+    expect(upcomingDeadlines(contracts, new Set(["K1:0"]), "2026-11-18").map((d) => d.milestone_title)).toEqual(["Build"]);
+    expect(upcomingDeadlines([{ ...contracts[0], milestones_json: "not json" }], new Set(), "2026-11-18")).toEqual([]);
   });
 });
