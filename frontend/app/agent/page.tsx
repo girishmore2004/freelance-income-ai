@@ -46,7 +46,7 @@ export default function AgentPlanPage() {
     <main className="shell">
       <header className="top">
         <div><div className="brand">Action plan</div><div className="muted">What to do next across offers, deliveries, reviews and older records</div></div>
-        <nav className="row"><a className="btn" href="/workspace">Workspace</a><a className="btn" href="/contracts">Contracts</a><a className="btn" href="/coach">AI coach</a></nav>
+        <nav className="row"><a className="btn" href="/workspace">Workspace</a><a className="btn" href="/contracts">Contracts</a>{mode === 'freelancer' && <a className="btn" href="/coach">AI coach</a>}</nav>
       </header>
       <section className="card">
         <div className="row between">

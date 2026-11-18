@@ -166,7 +166,7 @@ export default function AccountPage() {
     <main className="shell">
       <div className="row between">
         <h2>Account &amp; roles</h2>
-        <a className="link" href="/">← Back to workspace</a>
+        <a className="link" href="/workspace">← Back to workspace</a>
       </div>
 
       <div aria-live="polite">

@@ -76,7 +76,7 @@ export default function FinancePage() {
   }
 
   if (!token) return <main className="shell"><div className="card"><h2>Finance</h2><p className="muted">Sign in first.</p><a className="btn" href="/">Go to sign in</a></div></main>;
-  if (forbidden) return <main className="shell"><div className="card"><h2>Finance</h2><p className="muted">This page is for finance staff.</p><a className="btn" href="/">Back to workspace</a></div></main>;
+  if (forbidden) return <main className="shell"><div className="card"><h2>Finance</h2><p className="muted">This page is for finance staff.</p><a className="btn" href="/workspace">Back to workspace</a></div></main>;
 
   return (
     <main className="shell">

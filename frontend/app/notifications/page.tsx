@@ -51,7 +51,7 @@ export default function NotificationsPage() {
     <main className="shell">
       <div className="row between">
         <h2>Notifications</h2>
-        <span className="row">{unread > 0 && <button className="btn" onClick={() => void markAll()}>Mark all as read</button>}<a className="link" href="/">← Back to workspace</a></span>
+        <span className="row">{unread > 0 && <button className="btn" onClick={() => void markAll()}>Mark all as read</button>}<a className="link" href="/workspace">← Back to workspace</a></span>
       </div>
       {error && <p className="error" role="alert">{error}</p>}
       {loaded && items.length === 0 && !error && <p className="empty">No notifications yet.</p>}

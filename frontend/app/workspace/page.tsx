@@ -91,7 +91,7 @@ export default function WorkspacePage() {
     <main className="shell">
       <header className="top">
         <div><div className="brand">{mode === 'client' ? 'Client dashboard' : 'Freelancer dashboard'}</div><div className="muted">{mode === 'client' ? 'Your projects, contracts to review and spend' : 'Work to apply for, contracts to deliver and earnings'}</div></div>
-        <nav className="row"><a className="btn" href="/agent">Action plan</a><a className="btn" href="/coach">AI coach</a><a className="btn" href="/">Dashboard</a></nav>
+        <nav className="row"><a className="btn" href="/agent">Action plan</a>{mode === 'client' ? <a className="btn" href="/client/projects">Post a project</a> : <><a className="btn" href="/coach">AI coach</a><a className="btn" href="/">My proposals</a></>}</nav>
       </header>
       <p className="muted">As of {data?.as_of ?? '—'} · <button className="btn" disabled={busy} onClick={() => void load()}>{busy ? 'Refreshing…' : 'Refresh'}</button></p>
       <div aria-live="polite">{notice && <p className="success">{notice}</p>}{error && <p className="error" role="alert">{error}</p>}</div>

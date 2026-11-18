@@ -50,6 +50,13 @@ const ADMIN: NavGroup[] = [
 ];
 const STAFF_ROLES = ['admin', 'finance', 'moderator'];
 type Workspace = Mode | 'admin';
+
+/** Which sides the account has switched on (no freelancer or client role at all = the built-in freelancer side). */
+function sidesOf(roles: string[]): Record<Mode, boolean> {
+  const client = roles.includes('client');
+  return { freelancer: roles.includes('freelancer') || !client, client };
+}
+const SIDE_NAME: Record<Mode, string> = { freelancer: 'Freelancer', client: 'Client (hiring)' };
 const WORKSPACE_LABEL: Record<Workspace, string> = { freelancer: 'Freelancer workspace', client: 'Hiring workspace', admin: 'Admin workspace' };
 
 /** Staff pages form the Admin workspace. */
@@ -81,6 +88,8 @@ function WorkspaceShell({ path, onSignedOut, children }: { path: string; onSigne
   const [profileOpen, setProfileOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [command, setCommand] = useState('');
+  const [roleBusy, setRoleBusy] = useState(false);
+  const [roleError, setRoleError] = useState('');
   const profileRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
@@ -92,13 +101,19 @@ function WorkspaceShell({ path, onSignedOut, children }: { path: string; onSigne
     if (user && typeof user.id === 'string') {
       const roles = Array.isArray(user.roles) ? user.roles : [];
       setMe({ id: user.id, email: String(user.email ?? ''), roles });
-      const canBeClient = roles.includes('client');
-      const canBeFreelancer = roles.includes('freelancer') || !canBeClient;
-      const allowed = (m: Mode | null): m is Mode => (m === 'client' ? canBeClient : m === 'freelancer' ? canBeFreelancer : false);
-      // A page that belongs to one side switches to it; otherwise the last choice; otherwise the account's side.
+      const has = sidesOf(roles);
+      // A page that belongs to one side always shows that side (never the other side's menu
+      // around it); a shared page keeps the last choice, or the side the account has.
       const pageMode = modeForPath(path, window.location.search);
       const saved = readMode();
-      const next: Mode = allowed(pageMode) ? pageMode : allowed(saved) ? saved : canBeFreelancer ? 'freelancer' : 'client';
+      const fallback: Mode = has.freelancer ? 'freelancer' : 'client';
+      if (path === '/' && pageMode === 'freelancer' && !has.freelancer && has.client) {
+        // A hiring-only account signing in on the home page goes to its own dashboard.
+        saveMode('client');
+        window.location.replace(HOME.client);
+        return;
+      }
+      const next: Mode = pageMode ?? (saved && has[saved] ? saved : fallback);
       setMode(next);
       if (next !== saved) saveMode(next);
     }
@@ -125,8 +140,7 @@ function WorkspaceShell({ path, onSignedOut, children }: { path: string; onSigne
   }, [profileOpen]);
 
   const roles = me?.roles ?? [];
-  const canClient = roles.includes('client');
-  const canFreelance = roles.includes('freelancer') || !canClient;
+  const has = sidesOf(roles);
   const staff = roles.some((r) => STAFF_ROLES.includes(r));
   const search0 = typeof window === 'undefined' ? '' : window.location.search;
   const workspace: Workspace = staff && isAdminPath(path, search0) ? 'admin' : mode;
@@ -141,12 +155,31 @@ function WorkspaceShell({ path, onSignedOut, children }: { path: string; onSigne
   const otherUnread = (s: Mode) => (bySide && s !== workspace ? bySide[s] : 0);
   const initials = (me?.email ?? '?').slice(0, 2).toUpperCase();
 
-  function switchMode(next: Workspace) {
+  /** Switches a side on for this account (one login, two sides, like Upwork). */
+  async function turnOn(side: Mode): Promise<boolean> {
+    setRoleBusy(true);
+    setRoleError('');
+    try {
+      const result = await api<{ roles: string[] }>('/api/v1/me/roles', 'POST', { role: side });
+      const nextRoles = Array.isArray(result?.roles) ? result.roles : [...roles, side];
+      setMe((m) => (m ? { ...m, roles: nextRoles } : m));
+      return true;
+    } catch (e) {
+      setRoleError(e instanceof Error ? e.message : `Could not turn on the ${SIDE_NAME[side]} side.`);
+      return false;
+    } finally {
+      setRoleBusy(false);
+    }
+  }
+
+  async function switchMode(next: Workspace) {
     if (next === 'admin') {
       if (workspace !== 'admin') window.location.href = '/admin';
       return;
     }
     if (next === mode && workspace !== 'admin') return;
+    // A side that is not on yet is switched on first (the account gets that role).
+    if (me && !has[next] && !(await turnOn(next))) return;
     setMode(next);
     saveMode(next);
     if (workspace === 'admin') {
@@ -161,7 +194,9 @@ function WorkspaceShell({ path, onSignedOut, children }: { path: string; onSigne
   function submitSearch(e: FormEvent) {
     e.preventDefault();
     const q = search.trim();
-    window.location.href = q ? `/projects?q=${encodeURIComponent(q)}` : '/projects';
+    // Each side searches its own marketplace: freelancers search projects, clients search freelancers.
+    const base = workspace === 'client' ? '/freelancers' : '/projects';
+    window.location.href = q ? `${base}?q=${encodeURIComponent(q)}` : base;
   }
 
   function submitCommand(e: FormEvent) {
@@ -198,9 +233,6 @@ function WorkspaceShell({ path, onSignedOut, children }: { path: string; onSigne
             </div>
           </nav>
         ))}
-        {canFreelance && !canClient && (
-          <p className="muted small" style={{ padding: '12px 12px 0' }}>Want to hire too? <a className="link" href="/account">Turn on the client role</a>.</p>
-        )}
       </aside>
 
       <div className="ws-body">
@@ -208,24 +240,18 @@ function WorkspaceShell({ path, onSignedOut, children }: { path: string; onSigne
           <button type="button" className="icon-btn menu" aria-label="Open navigation" aria-expanded={drawer} onClick={() => setDrawer(true)}>
             <svg className="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
           </button>
-          {(canClient && canFreelance) || staff ? (
-            <div className="ws-role" role="group" aria-label="Workspace">
-              {canFreelance && (
-                <button type="button" className="side-f" aria-pressed={workspace === 'freelancer'} onClick={() => switchMode('freelancer')}>
-                  Freelancer{otherUnread('freelancer') > 0 && <span className="side-dot" aria-label={`${otherUnread('freelancer')} unread`} />}
-                </button>
-              )}
-              {canClient && (
-                <button type="button" className="side-c" aria-pressed={workspace === 'client'} onClick={() => switchMode('client')}>
-                  Client{otherUnread('client') > 0 && <span className="side-dot" aria-label={`${otherUnread('client')} unread`} />}
-                </button>
-              )}
-              {staff && <button type="button" className="side-a" aria-pressed={workspace === 'admin'} onClick={() => switchMode('admin')}>Admin</button>}
-            </div>
-          ) : null}
+          <div className="ws-role" role="group" aria-label="Workspace">
+            <button type="button" className="side-f" disabled={roleBusy} aria-pressed={workspace === 'freelancer'} title={has.freelancer ? undefined : 'Turns on the freelancer side for your account'} onClick={() => void switchMode('freelancer')}>
+              Freelancer{otherUnread('freelancer') > 0 && <span className="side-dot" aria-label={`${otherUnread('freelancer')} unread`} />}
+            </button>
+            <button type="button" className="side-c" disabled={roleBusy} aria-pressed={workspace === 'client'} title={has.client ? undefined : 'Turns on hiring for your account'} onClick={() => void switchMode('client')}>
+              Client{otherUnread('client') > 0 && <span className="side-dot" aria-label={`${otherUnread('client')} unread`} />}
+            </button>
+            {staff && <button type="button" className="side-a" aria-pressed={workspace === 'admin'} onClick={() => void switchMode('admin')}>Admin</button>}
+          </div>
           <form className="ws-search" role="search" onSubmit={submitSearch}>
             <label htmlFor="ws-search" className="sr-only">Global search</label>
-            <input id="ws-search" type="search" value={search} onChange={(e) => setSearch(e.target.value)} maxLength={100} placeholder="Search projects and skills" />
+            <input id="ws-search" type="search" value={search} onChange={(e) => setSearch(e.target.value)} maxLength={100} placeholder={workspace === 'client' ? 'Search freelancers and skills' : 'Search projects and skills'} />
           </form>
           <form className="ws-cmd" onSubmit={submitCommand}>
             <label htmlFor="ws-cmd" className="sr-only">AI command</label>
@@ -257,7 +283,19 @@ function WorkspaceShell({ path, onSignedOut, children }: { path: string; onSigne
             )}
           </div>
         </header>
-        <div className="ws-main" id="ws-content">{children}</div>
+        <div className="ws-main" id="ws-content">
+          {roleError && <p className="error" role="alert">{roleError}</p>}
+          {me && workspace !== 'admin' && !has[workspace] && (
+            <div className="card notice" role="status">
+              <p>This is a {SIDE_NAME[workspace]} page, and the {SIDE_NAME[workspace]} side is not on for your account yet.</p>
+              <div className="row">
+                <button type="button" className="btn primary" disabled={roleBusy} onClick={() => void turnOn(workspace)}>Turn on the {SIDE_NAME[workspace]} side</button>
+                <a className="btn" href={HOME[workspace === 'client' ? 'freelancer' : 'client']} onClick={() => saveMode(workspace === 'client' ? 'freelancer' : 'client')}>Go to my {SIDE_NAME[workspace === 'client' ? 'freelancer' : 'client']} dashboard</a>
+              </div>
+            </div>
+          )}
+          {children}
+        </div>
       </div>
     </div>
   );

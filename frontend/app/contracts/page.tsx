@@ -129,7 +129,7 @@ export default function ContractsPage() {
     <main className="shell">
       <div className="row between">
         <h2>Contracts</h2>
-        <span className="row"><NotificationLink /><a className="link" href="/projects">Find projects</a><a className="link" href="/client/projects">Client projects</a></span>
+        <span className="row"><NotificationLink />{mode === 'client' ? <a className="link" href="/client/projects">My projects</a> : <a className="link" href="/projects">Find projects</a>}</span>
       </div>
       <div aria-live="polite">
         {notice && <p className="success">{notice}</p>}

@@ -12,6 +12,9 @@ export type Mode = 'freelancer' | 'client';
 export const MODE_EVENT = 'fia-mode';
 const KEY = 'fia_mode';
 
+/** Freelancer-only pages, including the older tools for a freelancer's own clients, invoices and job sources. */
+const FREELANCER_PAGES = ['/', '/projects', '/profile', '/opportunities', '/coach', '/clients', '/client-insights', '/opportunity-intelligence', '/marketplaces', '/delivery', '/agent-workflows', '/payments', '/analytics/planning'];
+
 /** The side a page belongs to, or null for pages both sides use. Pure. */
 export function modeForPath(pathname: string, search = ''): Mode | null {
   const path = pathname.replace(/\/+$/, '') || '/';
@@ -19,7 +22,7 @@ export function modeForPath(pathname: string, search = ''): Mode | null {
   if (path === '/client' || path.startsWith('/client/') || path === '/freelancers') return 'client';
   if (path === '/earnings') return params.get('view') === 'client' ? 'client' : 'freelancer';
   if (path === '/services') return params.get('view') === 'mine' ? 'freelancer' : 'client';
-  if (['/', '/projects', '/profile', '/opportunities', '/coach'].includes(path)) return 'freelancer';
+  if (FREELANCER_PAGES.includes(path)) return 'freelancer';
   return null;
 }
 

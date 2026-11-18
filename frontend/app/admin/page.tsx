@@ -83,7 +83,7 @@ export default function AdminPage() {
   const setNote = (id: string, value: string) => setNotes((n) => ({ ...n, [id]: value }));
 
   if (!token) return <main className="shell"><div className="card"><h2>Admin</h2><p className="muted">Sign in first.</p><a className="btn" href="/">Go to sign in</a></div></main>;
-  if (forbidden) return <main className="shell"><div className="card"><h2>Admin</h2><p className="muted">This page is for staff.</p><a className="btn" href="/">Back to workspace</a></div></main>;
+  if (forbidden) return <main className="shell"><div className="card"><h2>Admin</h2><p className="muted">This page is for staff.</p><a className="btn" href="/workspace">Back to workspace</a></div></main>;
 
   return (
     <main className="shell">

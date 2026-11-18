@@ -15,6 +15,10 @@ test('pages belong to one side or are shared', () => {
   assert.equal(modeForPath('/contracts'), null);
   assert.equal(modeForPath('/inbox'), null);
   assert.equal(modeForPath('/workspace'), null);
+  assert.equal(modeForPath('/calendar'), null);
+  // The older freelancer tools (a freelancer's own clients, invoices, job sources) never open on the client side.
+  for (const p of ['/clients', '/client-insights', '/opportunity-intelligence', '/marketplaces', '/delivery', '/agent-workflows', '/payments', '/analytics/planning', '/coach']) assert.equal(modeForPath(p), 'freelancer', p);
+  assert.equal(modeForPath('/analytics'), null);
 });
 
 test('links belong to the side of the page they open', () => {
