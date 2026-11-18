@@ -520,7 +520,9 @@ export async function handleMatchRoute(
         [{ codes: findings.map((f) => f.code) }]
       );
     }
-    const candidate = await visibleCandidate(sql, freelancerId);
+    // U14 "Hire again": a freelancer this client account completed a contract with can be
+    // invited even when they are not listed in discovery (still not if suspended or not a freelancer).
+    const candidate = (await visibleCandidate(sql, freelancerId)) ?? (await pastCollaborator(sql, freelancerId, org.id));
     if (!candidate) return failure("NOT_FOUND", "Freelancer not found", 404, requestId);
     const score = typeof payload.match_score === "number" && Number.isInteger(payload.match_score) && payload.match_score >= 0 && payload.match_score <= 100 ? payload.match_score : null;
 
@@ -561,6 +563,21 @@ export async function handleMatchRoute(
   } finally {
     await sql.end({ timeout: 5 });
   }
+}
+
+/** A freelancer who completed a contract with this organisation; null if suspended or no longer a freelancer. */
+export async function pastCollaborator(sql: Queryable, freelancerUserId: string, organizationId: string): Promise<CandidateRow | null> {
+  const rows = await sql<CandidateRow[]>`
+    SELECT p.user_id, p.full_name, p.headline, p.skills, p.services, p.minimum_budget, p.hourly_rate,
+           p.currency, p.weekly_hours, p.timezone, p.dealbreakers, u.created_at AS user_created_at, (to_jsonb(p)->>'verified_at') AS verified_at
+    FROM profiles p
+    JOIN users u ON u.id = p.user_id
+    JOIN user_roles r ON r.user_id = p.user_id AND r.role = 'freelancer' AND r.status = 'active'
+    WHERE p.user_id = ${freelancerUserId} AND (to_jsonb(u)->>'suspended_at') IS NULL
+      AND EXISTS (SELECT 1 FROM contracts c WHERE c.organization_id = ${organizationId} AND c.freelancer_user_id = p.user_id AND c.status = 'completed')
+    LIMIT 1
+  `;
+  return rows[0] ?? null;
 }
 
 /** Exposed for tests. */

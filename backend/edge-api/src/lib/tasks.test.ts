@@ -52,3 +52,17 @@ describe("task routes", () => {
     expect(await handleTaskRoute(jsonRequest("GET", "/api/v1/contracts/K1/tasks/plan"), env, "r", deps)).toBeNull();
   });
 });
+
+describe("weekly progress lines", () => {
+  it("summarises the week in plain sentences", async () => {
+    const { progressLines } = await import("./task-routes");
+    const lines = progressLines({ tasksDone: ["Design approval"], tasksOpen: 3, tasksOverdue: ["Staging"], tasksDueSoon: ["Deployment"], delivered: 1, approved: 1, revisions: 0, messages: 4,
+      nextMilestone: { title: "Build", due_date: "2026-12-01" }, milestonesApproved: 1, milestonesTotal: 2 });
+    expect(lines).toEqual([
+      "Milestones: 1 of 2 approved.", "Done this week: Design approval.", "Deliveries: 1 delivery submitted, 1 approved, 0 revision requests.",
+      "Overdue: Staging.", "Due in the next 7 days: Deployment.", "Next milestone: Build (due 2026-12-01).", "4 messages exchanged this week; 3 open tasks."
+    ]);
+    expect(progressLines({ tasksDone: [], tasksOpen: 0, tasksOverdue: [], tasksDueSoon: [], delivered: 0, approved: 0, revisions: 0, messages: 1, nextMilestone: null, milestonesApproved: 2, milestonesTotal: 2 }))
+      .toEqual(["Milestones: 2 of 2 approved.", "No tasks were marked done this week.", "1 message exchanged this week; 0 open tasks."]);
+  });
+});

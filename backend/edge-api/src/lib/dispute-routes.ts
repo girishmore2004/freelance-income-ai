@@ -490,7 +490,14 @@ export async function handleDisputeRoute(request: Request, env: Env, requestId: 
         await tx`UPDATE users SET suspended_at = now() WHERE id = ${target}`;
         // Leave discovery; the person cannot switch it back on while suspended.
         await tx`UPDATE profiles SET marketplace_visible = false WHERE user_id = ${target}`;
-        await logAction(tx, userId, "user", target, "user.suspended", reason);
+        // K-29: projects of client accounts this person owns stop taking proposals; the client resumes them after the suspension ends.
+        const paused = await tx<Array<{ id: string }>>`
+          UPDATE project_listings SET status = 'paused', updated_at = now()
+          WHERE status = 'published' AND organization_id IN (
+            SELECT organization_id FROM organization_memberships WHERE user_id = ${target} AND role = 'owner' AND status = 'active')
+          RETURNING id
+        `;
+        await logAction(tx, userId, "user", target, "user.suspended", paused.length ? `${reason} (paused ${paused.length} project${paused.length === 1 ? "" : "s"})` : reason);
         return rows[0];
       });
       if (!created) return failure("ALREADY_SUSPENDED", "This account is already suspended.", 409, requestId);

@@ -13,7 +13,7 @@ import { handleDiscussionRoute } from "./lib/discussion-routes";
 import { handleListingFileRoute } from "./lib/listing-file-routes";
 import { handleVerificationRoute } from "./lib/verification-routes";
 import { handleSourceRoute } from "./lib/source-routes";
-import { handleTaskRoute } from "./lib/task-routes";
+import { handleTaskRoute, runWeeklyProgressDigests } from "./lib/task-routes";
 import { handleGrowthRoute } from "./lib/growth-routes";
 import { handleStatementRoute } from "./lib/statement-routes";
 import { handleOpsRoute } from "./lib/ops-routes";
@@ -751,6 +751,18 @@ async function runScheduledPaymentReleases(env: Env): Promise<void> {
   }
 }
 
+/** U14: Monday progress summaries for active contracts (deduplicated per ISO week). */
+async function runScheduledProgressDigests(env: Env): Promise<void> {
+  if (!env.HYPERDRIVE?.connectionString) return;
+  const sql = database(env);
+  try {
+    const sent = await runWeeklyProgressDigests(sql, new Date());
+    if (sent) console.log(JSON.stringify({ service: "freelance-income-ai-api-edge", event: "progress_digest.sent", contracts: sent }));
+  } finally {
+    await sql.end({ timeout: 5 });
+  }
+}
+
 export default {
   // Cron Trigger: the AI looks for new work and drafts proposals
   // for the best matches. Nothing is ever sent without approval.
@@ -770,6 +782,7 @@ export default {
     ctx.waitUntil(runScheduledTokenMaintenance(env));
     ctx.waitUntil(runScheduledListingExpiry(env));
     ctx.waitUntil(runScheduledPaymentReleases(env));
+    ctx.waitUntil(runScheduledProgressDigests(env));
   },
 
   // Queue consumer for freelance-income-ai-jobs (replaces the separate

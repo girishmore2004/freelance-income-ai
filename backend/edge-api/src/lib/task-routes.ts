@@ -9,6 +9,7 @@ import { canManageOrganization, organizationForMember } from "./identity";
 import { contractVersionOut } from "./contracts";
 import type { ContractMilestone, ContractRow, ContractVersionRow, Party } from "./contracts";
 import { recordContractEvent } from "./contract-events";
+import { notifyUsers } from "./notify";
 import { tableExists } from "./external-pipeline";
 import { parseTemplate } from "./listing-routes";
 import { screenText } from "./listings";
@@ -151,15 +152,93 @@ async function milestonesOf(sql: Queryable, contract: ContractRow): Promise<Cont
   return v ? contractVersionOut(v).milestones : [];
 }
 
+export type ProgressFacts = {
+  tasksDone: string[]; tasksOpen: number; tasksOverdue: string[]; tasksDueSoon: string[];
+  delivered: number; approved: number; revisions: number; messages: number;
+  nextMilestone: { title: string; due_date: string | null } | null; milestonesApproved: number; milestonesTotal: number;
+};
+
+/** Plain-language weekly progress lines from the contract record. Pure, exported for tests. */
+export function progressLines(f: ProgressFacts): string[] {
+  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+  const lines: string[] = [];
+  lines.push(`Milestones: ${f.milestonesApproved} of ${f.milestonesTotal} approved.`);
+  if (f.tasksDone.length) lines.push(`Done this week: ${f.tasksDone.slice(0, 5).join("; ")}${f.tasksDone.length > 5 ? ` and ${f.tasksDone.length - 5} more` : ""}.`);
+  else lines.push("No tasks were marked done this week.");
+  if (f.delivered || f.approved || f.revisions) lines.push(`Deliveries: ${plural(f.delivered, "delivery")} submitted, ${f.approved} approved, ${plural(f.revisions, "revision request")}.`);
+  if (f.tasksOverdue.length) lines.push(`Overdue: ${f.tasksOverdue.slice(0, 5).join("; ")}.`);
+  if (f.tasksDueSoon.length) lines.push(`Due in the next 7 days: ${f.tasksDueSoon.slice(0, 5).join("; ")}.`);
+  if (f.nextMilestone) lines.push(`Next milestone: ${f.nextMilestone.title}${f.nextMilestone.due_date ? ` (due ${f.nextMilestone.due_date})` : ""}.`);
+  lines.push(`${plural(f.messages, "message")} exchanged this week; ${plural(f.tasksOpen, "open task")}.`);
+  return lines;
+}
+
+/** Facts for the last 7 days of one contract. Tolerates missing task tables. */
+export async function progressFacts(sql: Queryable, contract: ContractRow, now: Date): Promise<ProgressFacts> {
+  const since = new Date(now.getTime() - 7 * 86_400_000).toISOString();
+  const today = now.toISOString().slice(0, 10);
+  const soon = new Date(now.getTime() + 7 * 86_400_000).toISOString().slice(0, 10);
+  const milestones = await milestonesOf(sql, contract);
+  const subs = await sql<Array<{ milestone_index: number; status: string; submitted_at: Date; reviewed_at: Date | null }>>`
+    SELECT milestone_index, status, submitted_at, reviewed_at FROM milestone_submissions WHERE contract_id = ${contract.id}
+  `;
+  const approvedIdx = new Set(subs.filter((x) => x.status === "approved").map((x) => Number(x.milestone_index)));
+  const inWeek = (d: Date | null) => Boolean(d && new Date(d).toISOString() >= since);
+  const messages = (await sql<Array<{ n: number }>>`SELECT count(*)::int AS n FROM contract_messages WHERE contract_id = ${contract.id} AND created_at >= ${since}`)[0]?.n ?? 0;
+  let tasks: TaskRow[] = [];
+  if (await tableExists(sql, "contract_tasks")) tasks = await sql<TaskRow[]>`SELECT * FROM contract_tasks WHERE contract_id = ${contract.id} LIMIT ${MAX_TASKS}`;
+  const open = tasks.filter((t) => t.status !== "done");
+  const nextIdx = milestones.findIndex((_, i) => !approvedIdx.has(i));
+  return {
+    tasksDone: tasks.filter((t) => t.status === "done" && inWeek(t.completed_at)).map((t) => t.title),
+    tasksOpen: open.length,
+    tasksOverdue: open.filter((t) => day(t.due_date) && day(t.due_date)! < today).map((t) => t.title),
+    tasksDueSoon: open.filter((t) => day(t.due_date) && day(t.due_date)! >= today && day(t.due_date)! <= soon).map((t) => t.title),
+    delivered: subs.filter((x) => inWeek(x.submitted_at)).length,
+    approved: subs.filter((x) => x.status === "approved" && inWeek(x.reviewed_at)).length,
+    revisions: subs.filter((x) => x.status === "revision_requested" && inWeek(x.reviewed_at)).length,
+    messages,
+    nextMilestone: nextIdx >= 0 ? { title: milestones[nextIdx].title, due_date: milestones[nextIdx].due_date } : null,
+    milestonesApproved: approvedIdx.size,
+    milestonesTotal: milestones.length
+  };
+}
+
+/** Monday digest (UTC) for every active contract, once per ISO week per person. Never throws. */
+export async function runWeeklyProgressDigests(sql: Sql, now: Date): Promise<number> {
+  if (now.getUTCDay() !== 1) return 0;
+  const week = `${now.getUTCFullYear()}-${Math.ceil(((now.getTime() - Date.UTC(now.getUTCFullYear(), 0, 1)) / 86_400_000 + 1) / 7)}`;
+  let sent = 0;
+  try {
+    const contracts = await sql<ContractRow[]>`SELECT * FROM contracts WHERE status = 'active' ORDER BY updated_at DESC LIMIT 500`;
+    for (const c of contracts) {
+      const lines = progressLines(await progressFacts(sql, c, now));
+      const title = (await sql<Array<{ title: string }>>`SELECT title FROM contract_versions WHERE contract_id = ${c.id} AND version = ${c.agreed_version ?? c.current_version} LIMIT 1`)[0]?.title ?? "your contract";
+      const managers = await sql<Array<{ user_id: string }>>`SELECT user_id FROM organization_memberships WHERE organization_id = ${c.organization_id} AND role IN ('owner', 'admin') AND status = 'active'`;
+      await notifyUsers(sql, [c.freelancer_user_id, ...managers.map((m) => m.user_id)], {
+        kind: "contract.weekly_progress",
+        title: `Weekly progress: ${title}`,
+        message: lines.join(" "),
+        link: `/contracts#${c.id}`,
+        dedupe: `progress:${c.id}:${week}`
+      });
+      sent += 1;
+    }
+  } catch (error) {
+    console.warn(JSON.stringify({ service: "freelance-income-ai-api-edge", event: "progress_digest.failed", error: error instanceof Error ? error.message : "unknown" }));
+  }
+  return sent;
+}
+
 export async function handleTaskRoute(request: Request, env: Env, requestId: string, deps: TaskRouteDeps = defaultDeps): Promise<Response | null> {
   const url = new URL(request.url);
   const path = url.pathname;
   const method = request.method.toUpperCase();
-  const onContract = path.match(/^\/api\/v1\/contracts\/([\w-]{1,64})\/(tasks|tasks\/plan|handover)$/);
+  const onContract = path.match(/^\/api\/v1\/contracts\/([\w-]{1,64})\/(tasks|tasks\/plan|handover|progress)$/);
   const onTask = path.match(/^\/api\/v1\/contract-tasks\/([\w-]{1,64})(\/delete)?$/);
   const onItem = path.match(/^\/api\/v1\/handover-items\/([\w-]{1,64})\/(confirm|withdraw)$/);
   const known =
-    (onContract !== null && (method === "POST" || (method === "GET" && onContract[2] !== "tasks/plan"))) ||
+    (onContract !== null && (method === "POST" ? onContract[2] !== "progress" : onContract[2] !== "tasks/plan")) ||
     (onTask !== null && method === "POST") ||
     (onItem !== null && method === "POST");
   if (!known) return null;
@@ -190,6 +269,10 @@ export async function handleTaskRoute(request: Request, env: Env, requestId: str
     if (!contract || !side) return failure("NOT_FOUND", "Not found", 404, requestId);
 
     const kind = onContract?.[2];
+    if (kind === "progress") {
+      const facts = await progressFacts(sql, contract, new Date());
+      return success({ period_days: 7, lines: progressLines(facts), facts }, "Progress", 200, requestId);
+    }
     if (!ready) {
       if (method === "GET") return success(kind === "handover" ? { items: [], can_add: false, can_confirm: false, available: false } : { tasks: [], can_edit: false, stages: [], milestones: [], available: false }, "Not available yet", 200, requestId);
       return failure("MIGRATION_PENDING", "Tasks and handover need database migration 0072.", 503, requestId);
