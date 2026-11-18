@@ -1,0 +1,100 @@
+name: Neon - Check database and grant staff roles
+
+# Step 3 of the launch guide, done from GitHub instead of the Neon SQL editor.
+# Always: prints the migration revision, feature flags and table counts (read-only).
+# Optional: give admin, finance and moderator roles to ONE existing account by email.
+# Uses the same secret and the same approved-endpoint check as the migration workflow.
+# The email is masked in the logs.
+
+on:
+  workflow_dispatch:
+    inputs:
+      staff_email:
+        description: "Email to make admin + finance + moderator (leave empty to only check)"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: neon-admin-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      EXPECTED_DATABASE: neondb
+      EXPECTED_NEON_HOST: ${{ vars.STAGE3C_EXPECTED_NEON_HOST }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install the PostgreSQL driver
+        run: python -m pip install "psycopg[binary]==3.2.9"
+      - name: Mask the email
+        if: ${{ inputs.staff_email != '' }}
+        env:
+          STAFF_EMAIL: ${{ inputs.staff_email }}
+        run: echo "::add-mask::$STAFF_EMAIL"
+      - name: Check database (and grant roles if an email was given)
+        env:
+          STAGE3C_DATABASE_URL: ${{ secrets.STAGE3C_DATABASE_URL }}
+          STAFF_EMAIL: ${{ inputs.staff_email }}
+        run: |
+          python - <<'PY'
+          import os, sys
+          from urllib.parse import urlsplit
+          import psycopg
+
+          raw = os.environ.get("STAGE3C_DATABASE_URL", "").strip()
+          if not raw:
+              sys.exit("STAGE3C_DATABASE_URL secret is missing.")
+          parsed = urlsplit(raw)
+          host = (parsed.hostname or "").lower().rstrip(".")
+          expected = os.environ.get("EXPECTED_NEON_HOST", "").strip().lower().rstrip(".")
+          if not expected or host != expected or not host.endswith(".neon.tech"):
+              sys.exit("Database host does not match the approved Neon endpoint.")
+          if parsed.path.lstrip("/").split("/", 1)[0] != os.environ["EXPECTED_DATABASE"]:
+              sys.exit("Unexpected database name.")
+          print(f"Neon endpoint: {host.split('.')[0]}")
+
+          with psycopg.connect(raw.replace("postgres://", "postgresql://", 1), connect_timeout=20) as conn:
+              with conn.cursor() as cur:
+                  cur.execute("SELECT version_num FROM alembic_version")
+                  print("Migration revision:", [r[0] for r in cur.fetchall()])
+                  cur.execute("SELECT key, enabled FROM feature_flags ORDER BY key")
+                  print("Feature flags:")
+                  for key, enabled in cur.fetchall():
+                      print(f"  {key} = {'ON' if enabled else 'off'}")
+                  cur.execute("SELECT count(*) FROM users")
+                  print("Accounts:", cur.fetchone()[0])
+                  cur.execute("SELECT role, count(*) FROM user_roles WHERE status = 'active' GROUP BY role ORDER BY role")
+                  print("Active roles:", ", ".join(f"{r}={n}" for r, n in cur.fetchall()) or "none")
+
+                  email = os.environ.get("STAFF_EMAIL", "").strip().lower()
+                  if email:
+                      cur.execute("SELECT id FROM users WHERE lower(email) = %s", (email,))
+                      row = cur.fetchone()
+                      if not row:
+                          sys.exit("No account with that email. Sign up in the app first, then run this again.")
+                      added = 0
+                      for role in ("admin", "finance", "moderator"):
+                          cur.execute(
+                              """
+                              INSERT INTO user_roles (id, user_id, role, status, granted_by)
+                              VALUES (gen_random_uuid()::text, %s, %s, 'active', 'founder')
+                              ON CONFLICT DO NOTHING
+                              """,
+                              (row[0], role),
+                          )
+                          added += cur.rowcount
+                      cur.execute("SELECT role, status FROM user_roles WHERE user_id = %s ORDER BY role", (row[0],))
+                      conn.commit()
+                      print(f"Staff roles added: {added}. That account now has: " + ", ".join(f"{r} ({s})" for r, s in cur.fetchall()))
+                      if added == 0:
+                          print("Nothing new was added: the roles already existed (an inactive one is not re-activated here).")
+          PY
