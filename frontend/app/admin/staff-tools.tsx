@@ -246,8 +246,8 @@ export function SupportPanel() {
     <section className="card" aria-labelledby="support-heading">
       <h3 id="support-heading">Support tickets</h3>
       <div className="ws-role" role="group" aria-label="Ticket status" style={{ maxWidth: 260 }}>
-        <button type="button" aria-pressed={status === 'open'} onClick={() => setStatus('open')}>Open</button>
-        <button type="button" aria-pressed={status === 'resolved'} onClick={() => setStatus('resolved')}>Resolved</button>
+        <button type="button" aria-pressed={status === 'open'} onClick={() => setStatus('open')}>Open tickets</button>
+        <button type="button" aria-pressed={status === 'resolved'} onClick={() => setStatus('resolved')}>Resolved tickets</button>
       </div>
       <div aria-live="polite">{notice && <p className="success">{notice}</p>}{error && <p className="error" role="alert">{error}</p>}</div>
       {items && items.length === 0 && <p className="empty">{status === 'open' ? 'No open tickets.' : 'No resolved tickets yet.'}</p>}

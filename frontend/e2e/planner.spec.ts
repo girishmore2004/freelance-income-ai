@@ -124,7 +124,7 @@ test('staff answer a support ticket from the admin page', async ({ page }) => {
   await page.goto('/admin');
   const support = page.getByRole('region', { name: 'Support tickets' });
   await expect(support.getByText('Lost my phone')).toBeVisible();
-  const resolve = support.getByRole('button', { name: 'Resolve' });
+  const resolve = support.getByRole('button', { name: 'Resolve', exact: true });
   await expect(resolve).toBeDisabled();
   await support.getByLabel(/Answer \(sent to their notifications\)/).fill('Use a recovery code from Security.');
   await resolve.click();
