@@ -107,7 +107,26 @@ export function csrfViolation(request: Request, env: Env, requestId: string): Re
   return null;
 }
 
-/** Authenticates the caller, enforcing CSRF for cookie sessions. */
+/**
+ * Write actions a suspended account may still take: signing out, changing its
+ * password, marking notifications read and appealing the suspension. Every
+ * other unsafe request is refused; reads stay allowed so the person can see
+ * their contracts, payments and the reason for the suspension.
+ */
+const SUSPENDED_ALLOWED_WRITES = new Set([
+  "/api/v1/auth/logout",
+  "/api/v1/auth/logout-all",
+  "/api/v1/auth/password/change",
+  "/api/v1/notifications/read",
+  "/api/v1/me/suspension/appeal"
+]);
+
+export function suspensionBlocks(method: string, path: string): boolean {
+  if (!UNSAFE_METHODS.has(method.toUpperCase())) return false;
+  return !SUSPENDED_ALLOWED_WRITES.has(path);
+}
+
+/** Authenticates the caller, enforcing CSRF for cookie sessions and account suspension. */
 export async function authenticateRequest(
   request: Request,
   env: Env,
@@ -127,6 +146,14 @@ export async function authenticateRequest(
       "INVALID_OR_EXPIRED_SESSION",
       "Session is invalid, expired or revoked. Please sign in again.",
       401,
+      requestId
+    );
+  }
+  if (authenticated.user.suspended && suspensionBlocks(request.method, new URL(request.url).pathname)) {
+    return failure(
+      "ACCOUNT_SUSPENDED",
+      "Your account is suspended. You can still view your account and appeal from the Account page.",
+      403,
       requestId
     );
   }

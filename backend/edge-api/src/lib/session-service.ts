@@ -14,6 +14,8 @@ export interface AuthenticatedUser {
   email: string;
   email_verified: boolean;
   mfa_enabled: boolean;
+  /** Set by staff (migration 0063). A suspended user may sign in, read and appeal only. */
+  suspended?: boolean;
 }
 
 export interface CreatedSession {
@@ -384,6 +386,7 @@ export async function authenticateAccessToken(
       email: string;
       email_verified: boolean;
       mfa_enabled: boolean;
+      suspended: boolean | null;
     }[]>`
       SELECT
         s.user_id AS session_user_id,
@@ -392,7 +395,8 @@ export async function authenticateAccessToken(
         u.id,
         u.email,
         u.email_verified,
-        u.mfa_enabled
+        u.mfa_enabled,
+        (to_jsonb(u) ->> 'suspended_at') IS NOT NULL AS suspended
       FROM auth_sessions s
       INNER JOIN users u
         ON u.id = s.user_id
@@ -429,7 +433,8 @@ export async function authenticateAccessToken(
         id: row.id,
         email: row.email,
         email_verified: row.email_verified,
-        mfa_enabled: row.mfa_enabled
+        mfa_enabled: row.mfa_enabled,
+        suspended: Boolean(row.suspended)
       },
       claims
     };

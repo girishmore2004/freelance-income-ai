@@ -294,8 +294,16 @@ export async function verifyWebhookSignature(secret: string, rawBody: string, si
 /* Release and refund                                                  */
 /* ------------------------------------------------------------------ */
 
-/** Releases funds of an approved, funded milestone. Idempotent; safe to call repeatedly. */
-export async function releaseMilestone(sql: Sql, contractId: string, milestoneIndex: number): Promise<"released" | "not_funded" | "not_approved" | "already"> {
+/**
+ * Releases funds of an approved, funded milestone. Idempotent; safe to call repeatedly.
+ * `staffDecision` is only for a staff dispute resolution (release without client approval).
+ */
+export async function releaseMilestone(
+  sql: Sql,
+  contractId: string,
+  milestoneIndex: number,
+  staffDecision?: { disputeId: string }
+): Promise<"released" | "not_funded" | "not_approved" | "already"> {
   const intent = (await sql<IntentRow[]>`
     SELECT * FROM payment_intents WHERE contract_id = ${contractId} AND milestone_index = ${milestoneIndex} AND status IN ('funded', 'released')
     ORDER BY created_at DESC LIMIT 1
@@ -305,7 +313,7 @@ export async function releaseMilestone(sql: Sql, contractId: string, milestoneIn
   const approved = await sql<{ n: number }[]>`
     SELECT count(*)::int AS n FROM milestone_submissions WHERE contract_id = ${contractId} AND milestone_index = ${milestoneIndex} AND status = 'approved'
   `;
-  if ((approved[0]?.n ?? 0) === 0) return "not_approved";
+  if ((approved[0]?.n ?? 0) === 0 && !staffDecision) return "not_approved";
   const contract = (await sql<{ freelancer_user_id: string }[]>`SELECT freelancer_user_id FROM contracts WHERE id = ${contractId}`)[0];
   const amount = Number(intent.amount_minor);
   const freelancerFee = Number(intent.freelancer_fee_minor);
@@ -319,7 +327,9 @@ export async function releaseMilestone(sql: Sql, contractId: string, milestoneIn
   await postEntry(sql, {
     idempotency_key: `release:${intent.id}`,
     entry_type: "milestone.released",
-    description: `Milestone ${milestoneIndex + 1} approved: funds released`,
+    description: staffDecision
+      ? `Milestone ${milestoneIndex + 1}: funds released by dispute decision ${staffDecision.disputeId}`
+      : `Milestone ${milestoneIndex + 1} approved: funds released`,
     mode: intent.mode,
     currency: intent.currency,
     contract_id: contractId,
@@ -329,7 +339,9 @@ export async function releaseMilestone(sql: Sql, contractId: string, milestoneIn
     UPDATE payment_intents SET status = 'released', released_at = now(), updated_at = now() WHERE id = ${intent.id} AND status = 'funded' RETURNING id
   `;
   if (updated[0]) {
-    await recordContractEvent(sql, contractId, null, "system", "milestone.released", { milestone: milestoneIndex, amount_minor: amount - freelancerFee, mode: intent.mode });
+    await recordContractEvent(sql, contractId, null, "system", "milestone.released", {
+      milestone: milestoneIndex, amount_minor: amount - freelancerFee, mode: intent.mode, ...(staffDecision ? { dispute_id: staffDecision.disputeId } : {})
+    });
   }
   return "released";
 }

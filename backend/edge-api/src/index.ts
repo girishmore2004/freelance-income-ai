@@ -17,6 +17,7 @@ import { handleTrustRoute } from "./lib/trust-routes";
 import { handlePublicRoute } from "./lib/public-routes";
 import { handlePaymentRoute } from "./lib/payment-routes";
 import { handleNotificationRoute } from "./lib/notify";
+import { handleDisputeRoute } from "./lib/dispute-routes";
 import { releasePendingApprovals } from "./lib/payments";
 import { enforceRateLimit } from "./lib/rate-limit";
 import { applySessionCookies } from "./lib/auth-context";
@@ -410,6 +411,16 @@ async function routeRequest(
 
   if (notificationResponse) {
     return notificationResponse;
+  }
+
+  const disputeResponse = await handleDisputeRoute(
+    request,
+    env,
+    requestId
+  );
+
+  if (disputeResponse) {
+    return disputeResponse;
   }
 
   const paymentResponse = await handlePaymentRoute(

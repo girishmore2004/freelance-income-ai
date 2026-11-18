@@ -78,7 +78,11 @@ const CONTRACT_MESSAGES: Record<string, { title: string; to: "client" | "freelan
   "cancellation.requested": { title: "Cancellation requested", to: "both" },
   "cancellation.declined": { title: "Cancellation declined", to: "both" },
   "contract.cancelled": { title: "The contract was cancelled", to: "both" },
-  "review.submitted": { title: "You received a review", to: "both" }
+  "review.submitted": { title: "You received a review", to: "both" },
+  "dispute.opened": { title: "A dispute was opened on your contract", to: "both" },
+  "dispute.statement_added": { title: "A new statement was added to the dispute", to: "both" },
+  "dispute.withdrawn": { title: "The dispute was withdrawn", to: "both" },
+  "dispute.resolved": { title: "Staff decided the dispute", to: "both" }
 };
 
 export async function notifyContractEvent(sql: Queryable, contractId: string, actorUserId: string | null, eventType: string, details: Record<string, unknown>, eventId: string): Promise<void> {
