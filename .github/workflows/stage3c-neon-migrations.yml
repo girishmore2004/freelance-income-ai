@@ -35,8 +35,9 @@ jobs:
       - name: Require explicit migration confirmation
         if: ${{ inputs.confirm_migration != 'YES - migrate stage3c-integration-test' }}
         run: |
-          echo "Migration was not confirmed."
+          echo "Migration was not confirmed: the run was started with the NO option (the default)."
           echo "No database changes were made."
+          echo "To migrate: Run workflow, open the confirmation drop-down, choose the YES option, then press the green Run workflow button."
           exit 1
 
       - name: Checkout repository
