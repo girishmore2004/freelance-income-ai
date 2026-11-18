@@ -50,3 +50,7 @@ SELECT role, count(*) FROM user_roles GROUP BY role;            -- freelancer = 
 SELECT key, enabled FROM feature_flags ORDER BY key;            -- payments.live = false
 SELECT indexname FROM pg_indexes WHERE tablename IN ('applications','application_messages','integrations','background_jobs') ORDER BY 1;
 ```
+
+
+## 0070_discussions_interviews (5.75.0)
+Additive: `proposal_messages` (proposal_id → listing_proposals CASCADE, sender_party client|freelancer, body; index proposal_id+created_at) and `proposal_interviews` (proposed_party, starts_at, duration 15–180, mode video|phone|chat, meeting_link, agenda, status proposed|accepted|declined|cancelled|completed, responded_by/at, outcome_note; index proposal_id+starts_at). Downgrade drops both. Verify: `SELECT to_regclass('proposal_messages'), to_regclass('proposal_interviews');` → both non-null. Until it runs, discussion routes answer `MIGRATION_PENDING` (503) and the inbox shows contract and external threads only.

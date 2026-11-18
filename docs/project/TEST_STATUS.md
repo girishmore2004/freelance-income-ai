@@ -266,3 +266,9 @@ New files (`app/api/v1/[...path]/route.ts`, `lib/api-client.ts`) pass an isolate
 
 ## Must run in CI before deploy
 `Full CI` (pytest + Alembic on pgvector + frontend build + Playwright) and the new `Edge API CI` (clean npm install, typecheck, vitest, wrangler dry-run).
+
+
+## 5.75.0 (U9) — local
+- Edge: 363 passed, 0 failed (new `discussion.test.ts` 8; `agents.test.ts` and `notify.test.ts` expectations updated to the text-array parameter). Typecheck clean (known mfa-service noise excluded); bundle builds.
+- PostgreSQL 16 end-to-end through the real handlers: 503 before tables; messages both sides plus a client member; contact details refused (422); outsider 404; member cannot schedule (403); non-allowlisted link refused (422); proposer cannot accept own time (403); accept, accept again (409), complete early (409), cancel; calendar shows the interview; inbox merges proposal and contract threads; notifications to the other side; hired proposal closed (409). Re-ran next actions, overview, calendar, jobs filter, agent runs, notifications read and opportunity timeline after the array fix: all 200.
+- Frontend: strict typecheck app + e2e clean; unit tests 31 passed. Playwright, pytest and Alembic run in CI.
