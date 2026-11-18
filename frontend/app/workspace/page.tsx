@@ -15,7 +15,10 @@ type Goals = { monthly_income_target: number; weekly_hours_target: number; month
 type Metrics = Record<string, number | null | Record<string, number>>;
 type Alert = { id: string; severity: string; title: string; action: string; href: string };
 type Rec = { priority: string; title: string; reason: string; action: string; evidence: { type: string; value: number }[] };
-type Overview = { as_of: string; metrics: Metrics; goals: Goals; alerts: Alert[]; recommendations: Rec[]; data_policy: string };
+type ApplyNext = { external: Array<{ id: string; title: string; source: string; match_score: number; source_url: string }>; invitations: Array<{ listing_id: string; title: string }> };
+type Deadline = { contract_id: string; title: string; milestone: number; milestone_title: string; due_date: string; overdue: boolean; side: string };
+type Pending = { mode: string; amount_minor: number; milestones: number };
+type Overview = { as_of: string; metrics: Metrics; goals: Goals; alerts: Alert[]; recommendations: Rec[]; data_policy: string; apply_next?: ApplyNext; deadlines?: Deadline[]; pending_release?: Pending[] };
 type Event = { id: string; event_type: string; detail: string; created_at: string };
 
 const CARDS: Array<[string, string]> = [
@@ -90,6 +93,27 @@ export default function WorkspacePage() {
       <section className="grid" aria-label="Metrics">
         {CARDS.map(([key, label]) => <article className="card" key={key}><small className="muted">{label}</small><h2>{num(key)}</h2></article>)}
       </section>
+
+      <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', marginTop: 14 }}>
+        <section className="card" aria-labelledby="apply-heading">
+          <h2 id="apply-heading">Apply next</h2>
+          {(data?.apply_next?.invitations ?? []).map((i) => <p key={i.listing_id}><span className="badge native">Invitation</span> <a className="link" href="/projects">{i.title}</a></p>)}
+          {(data?.apply_next?.external ?? []).map((o) => <p key={o.id}><span className="badge external">External</span> <a className="link" href="/projects?view=external">{o.title}</a> <span className="muted small">{o.match_score}/100</span></p>)}
+          {(data?.apply_next?.invitations ?? []).length + (data?.apply_next?.external ?? []).length === 0 && <p className="muted">No new matches or invitations. <a className="link" href="/projects">Find work</a></p>}
+        </section>
+        <section className="card" aria-labelledby="deadline-heading">
+          <h2 id="deadline-heading">Upcoming deadlines</h2>
+          {(data?.deadlines ?? []).length === 0 ? <p className="muted">No milestone due in the next two weeks.</p> : (
+            <ul>{(data?.deadlines ?? []).map((d) => <li key={`${d.contract_id}:${d.milestone}`}><a className="link" href={`/contracts#${d.contract_id}`}>{d.title}</a> — {d.milestone_title} · <span className={d.overdue ? 'error' : 'muted'}>{d.overdue ? 'overdue since' : 'due'} {d.due_date}</span></li>)}</ul>
+          )}
+        </section>
+        <section className="card" aria-labelledby="pending-heading">
+          <h2 id="pending-heading">Waiting for release</h2>
+          {(data?.pending_release ?? []).length === 0 ? <p className="muted">No funded milestones waiting for approval.</p> : (data?.pending_release ?? []).map((p) => (
+            <p key={p.mode}>{formatMinor(p.amount_minor, 'INR')} across {p.milestones} funded milestone{p.milestones === 1 ? '' : 's'}{p.mode === 'sandbox' ? ' (test mode)' : ''} — released when the client approves.</p>
+          ))}
+        </section>
+      </div>
 
       <section className="card">
         <h2>Earnings this month</h2>

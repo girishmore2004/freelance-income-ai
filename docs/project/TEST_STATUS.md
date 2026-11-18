@@ -1,5 +1,13 @@
 # Test Status
 
+## Full lifecycle + U3 dashboard — 2026-11-18 IST (release 5.68.0)
+- **End-to-end lifecycle on PostgreSQL, real handlers, one run, 24/24 steps as expected:** client posts and publishes → matching (freelancer scored 82) → invitation → proposal → shortlist → offer (2 milestones, 1 revision) → freelancer accepts → both milestones funded in test mode → file uploaded → delivery with the file → revision requested → redelivery → approved → second milestone delivered and approved → contract completed, both payments released → two-way reviews → freelancer withdraws the available balance → client action plan has nothing left for the contract; 17 notifications for the contract; trial balance equal and nothing left held for the contract.
+- Edge API: **298 passed, 0 failed** (`business.test.ts` +1: deadlines within two weeks or overdue, approved milestones excluded, bad data ignored). Overview on PostgreSQL returns the new sections for freelancer and client.
+- Frontend: typecheck 0 errors; `/workspace` answers the five dashboard questions (apply next, what to do, deadlines, money waiting and earned, recommendations); `e2e/business.spec.ts` covers the new sections.
+
+## Audit + U2 — GitHub CI (verified)
+`main` @ 93e7d86: pytest 565 passed; Playwright 56 passed (bearer), 57 passed (cookie). Edge @ d978ad8: Edge API CI success (297/297).
+
 ## Audit + U2 — 2026-11-18 IST (release 5.67.0)
 - **Route audit:** every API call in the frontend (304 method/path pairs) was replayed through the real Edge router. All calls from current pages are served; the unserved ones were 6 unreachable dashboard tabs (inbox, workflows, delivery, research, portfolio, sources — Python-only routes). Those tabs were removed and the dashboard loader went from 24 requests per visit (13 failing) to 11.
 - Edge API: **297 passed, 0 failed** (`listings.test.ts` +1: visitors may browse public projects and categories, invite-only projects stay hidden, everything else 401; `public.test.ts` +2: freelancer directory without private fields, closed while the marketplace is off, profile with revealed reviews, hidden freelancers 404). PostgreSQL: a visitor saw the 1 public published project, the categories and the 2 opted-in freelancers; the non-visible freelancer 404; organisation routes 401.

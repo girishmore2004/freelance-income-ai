@@ -20,7 +20,10 @@ test('workspace shows marketplace metrics and saves goals', async ({ page }) => 
       return reply(ok({ as_of: '2026-11-18', goals: {}, data_policy: 'Own records only.',
         metrics: { active_contracts_as_freelancer: 3, deliveries_awaiting_client: 1, active_contracts_as_client: 0, deliveries_to_review: 0, month_proposals: 5, pending_proposal_approvals: 1, open_opportunities: null, overdue_invoices: null, overdue_tasks: null, released_this_month_minor: { sandbox: 975_000 }, paid_this_month_by_currency: {} },
         alerts: [{ id: 'a1', severity: 'high', title: 'Revise Cafe website, milestone 1', action: 'Deliver again.', href: '/contracts' }],
-        recommendations: [{ priority: 'medium', title: 'Clear proposal review queue', reason: 'Drafts waiting.', action: 'Review them.', evidence: [{ type: 'pending_approvals', value: 1 }] }] }));
+        recommendations: [{ priority: 'medium', title: 'Clear proposal review queue', reason: 'Drafts waiting.', action: 'Review them.', evidence: [{ type: 'pending_approvals', value: 1 }] }],
+        apply_next: { external: [{ id: 'O1', title: 'React dashboard contract', source: 'remotive', match_score: 82, source_url: 'https://x.example' }], invitations: [] },
+        deadlines: [{ contract_id: 'K1', title: 'Cafe website', milestone: 0, milestone_title: 'Design', due_date: '2026-11-15', overdue: true, side: 'freelancer' }],
+        pending_release: [{ mode: 'sandbox', amount_minor: 975_000, milestones: 1 }] }));
     }
     if (path === '/api/v1/business-goals' && request.method() === 'PUT') { saved.push(JSON.parse(request.postData() as string)); return reply(ok({ configured: true }, 'Business goals saved')); }
     if (path === '/api/v1/business-goals') return reply(ok({ monthly_income_target: 0, weekly_hours_target: 10, monthly_proposals_target: 4, monthly_outreach_target: 10, currency: 'INR', configured: false }));
@@ -30,6 +33,9 @@ test('workspace shows marketplace metrics and saves goals', async ({ page }) => 
   await page.goto('/workspace');
   await expect(page.getByText('Revise Cafe website, milestone 1')).toBeVisible();
   await expect(page.getByText(/₹9,750 \(test mode — not real money\)/)).toBeVisible();
+  await expect(page.getByRole('link', { name: 'React dashboard contract' })).toBeVisible();
+  await expect(page.getByText('overdue since 2026-11-15')).toBeVisible();
+  await expect(page.getByText(/across 1 funded milestone \(test mode\)/)).toBeVisible();
   await expect(page.getByRole('region', { name: 'Metrics' })).toContainText('—');
   await page.getByLabel('Monthly income target').fill('80000');
   await page.getByRole('button', { name: 'Save goals' }).click();
