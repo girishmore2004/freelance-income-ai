@@ -1,5 +1,8 @@
 # Test Status
 
+## Legacy pages — GitHub CI
+`main` @ cc9d422: pytest 565 passed; **frontend production build failed** (so Playwright could not start): in `app/clients/page.tsx` the gate import was inserted above `'use client'` (that file began with a blank line). TypeScript accepts this; Next.js does not. Fixed, and a new unit test `lib/client-directive.test.mts` checks every file under `app/` — it fails on the broken file and passes on the fix (frontend unit tests now 12/12). Re-verified with the next push.
+
 ## Legacy pages: workspace, action plan, coach on Edge — 2026-11-18 IST (release 5.65.0)
 - Edge API: **292 passed, 0 failed** (new `business.test.ts` 10: goal validation as in Python; defaults, upsert per user and event log; plan ordering, every action needs a human; marketplace + legacy items with missing legacy tables tolerated; plan is read-only and limited; overview reports unavailable counts as null; citation validation; empty question 422 and no-evidence honest answer; model used only through the governor, untrusted question fenced, cited answer kept, usage recorded under `business_coach`; registry switch off → no model call, honest fallback. `agents.test.ts` map updated with `business_coach → F11`).
 - **Defect found by the tests and fixed:** a follow-up reminder with an empty `due_at` would have crashed the overview (`Invalid time value`); dates are now checked.

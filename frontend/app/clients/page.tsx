@@ -1,6 +1,5 @@
-import { LegacyGate } from '../legacy-gate';
-
 'use client';
+import { LegacyGate } from '../legacy-gate';
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { API_BASE as API, authFetch, useSessionToken } from '@/lib/api-client';
