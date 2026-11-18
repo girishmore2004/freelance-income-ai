@@ -19,6 +19,7 @@ import { handlePublicRoute } from "./lib/public-routes";
 import { handlePaymentRoute } from "./lib/payment-routes";
 import { handleNotificationRoute } from "./lib/notify";
 import { handleDisputeRoute } from "./lib/dispute-routes";
+import { handleFileRoute } from "./lib/file-routes";
 import { releasePendingApprovals } from "./lib/payments";
 import { enforceRateLimit } from "./lib/rate-limit";
 import { applySessionCookies } from "./lib/auth-context";
@@ -422,6 +423,16 @@ async function routeRequest(
 
   if (notificationResponse) {
     return notificationResponse;
+  }
+
+  const fileResponse = await handleFileRoute(
+    request,
+    env,
+    requestId
+  );
+
+  if (fileResponse) {
+    return fileResponse;
   }
 
   const disputeResponse = await handleDisputeRoute(

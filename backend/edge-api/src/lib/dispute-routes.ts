@@ -208,6 +208,14 @@ export async function evidencePack(sql: Queryable, dispute: DisputeRow) {
   const cancellations = await sql<{ requested_by_party: string; reason: string; status: string; created_at: Date }[]>`
     SELECT requested_by_party, reason, status, created_at FROM contract_cancellations WHERE contract_id = ${dispute.contract_id} ORDER BY created_at ASC
   `;
+  let files: Array<{ id: string; party: string; filename: string; size_bytes: number; submission_id: string | null; created_at: string | null }> = [];
+  try {
+    files = (await sql<{ id: string; party: string; filename: string; size_bytes: string | number; submission_id: string | null; created_at: Date }[]>`
+      SELECT id, party, filename, size_bytes, submission_id, created_at FROM contract_files WHERE contract_id = ${dispute.contract_id} AND status = 'ready' ORDER BY created_at ASC LIMIT 200
+    `).map((f) => ({ id: f.id, party: f.party, filename: f.filename, size_bytes: Number(f.size_bytes), submission_id: f.submission_id, created_at: iso(f.created_at) }));
+  } catch {
+    // Migration 0065 not applied yet.
+  }
   const previous = await sql<DisputeRow[]>`
     SELECT * FROM disputes WHERE contract_id = ${dispute.contract_id} AND id <> ${dispute.id} ORDER BY created_at ASC
   `;
@@ -226,6 +234,7 @@ export async function evidencePack(sql: Queryable, dispute: DisputeRow) {
     messages: messages.map((m) => ({ party: m.sender_party, body: m.body, created_at: iso(m.created_at) })),
     events: events.map((e) => ({ party: e.actor_party, type: e.event_type, details: parse(e.details_json), created_at: iso(e.created_at) })),
     payments: payments.map(intentOut),
+    files,
     cancellations: cancellations.map((c) => ({ ...c, created_at: iso(c.created_at) })),
     previous_disputes: previous.map((d) => ({ id: d.id, status: d.status, resolution: d.resolution, created_at: iso(d.created_at) })),
     summary: {

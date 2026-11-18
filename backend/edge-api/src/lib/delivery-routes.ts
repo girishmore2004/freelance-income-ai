@@ -12,6 +12,7 @@ import { contractVersionOut } from "./contracts";
 import type { ContractRow, ContractVersionRow, Party } from "./contracts";
 import { recordContractEvent } from "./contract-events";
 import { releaseMilestone } from "./payments";
+import { attachFilesToSubmission, filesBySubmission } from "./file-routes";
 
 /**
  * Shared delivery workspace (Phase 3 batch 2), for the two parties of a contract:
@@ -62,7 +63,7 @@ export interface MilestoneView {
   due_date: string | null;
   state: MilestoneState;
   revisions_used: number;
-  submissions: Array<{ id: string; status: string; note: string; links: string[]; submitted_at: string; reviewed_at: string | null; review_note: string }>;
+  submissions: Array<{ id: string; status: string; note: string; links: string[]; submitted_at: string; reviewed_at: string | null; review_note: string; files: Array<{ id: string; filename: string; size_bytes: number }> }>;
 }
 
 function parseLinks(value: string): string[] {
@@ -75,7 +76,11 @@ function parseLinks(value: string): string[] {
 }
 
 /** Pure: combines agreed milestones with submissions (newest first per milestone). */
-export function milestoneViews(milestones: Array<{ title: string; amount_minor: number; due_date: string | null }>, submissions: SubmissionRow[]): MilestoneView[] {
+export function milestoneViews(
+  milestones: Array<{ title: string; amount_minor: number; due_date: string | null }>,
+  submissions: SubmissionRow[],
+  files: Map<string, Array<{ id: string; filename: string; size_bytes: number }>> = new Map()
+): MilestoneView[] {
   return milestones.map((m, index) => {
     const mine = submissions
       .filter((s) => s.milestone_index === index)
@@ -94,7 +99,8 @@ export function milestoneViews(milestones: Array<{ title: string; amount_minor: 
         links: parseLinks(s.links_json),
         submitted_at: new Date(s.submitted_at).toISOString(),
         reviewed_at: s.reviewed_at ? new Date(s.reviewed_at).toISOString() : null,
-        review_note: s.review_note
+        review_note: s.review_note,
+        files: files.get(s.id) ?? []
       }))
     };
   });
@@ -180,7 +186,7 @@ export async function handleDeliveryRoute(
         SELECT actor_party, event_type, details_json, created_at FROM contract_events
         WHERE contract_id = ${contract.id} ORDER BY created_at DESC LIMIT 50
       `;
-      const views = milestoneViews(agreed.milestones, submissions);
+      const views = milestoneViews(agreed.milestones, submissions, await filesBySubmission(sql, contract.id));
       return success(
         {
           contract_id: contract.id,
@@ -264,6 +270,10 @@ export async function handleDeliveryRoute(
       if (note.length > MAX_NOTE) return failure("INVALID_SUBMISSION", `Keep the note under ${MAX_NOTE} characters.`, 422, requestId);
       const links = validateLinks(payload.links);
       if (!links) return failure("INVALID_LINKS", `Add up to ${MAX_LINKS} https links.`, 422, requestId);
+      const fileIds = payload.file_ids === undefined ? [] : payload.file_ids;
+      if (!Array.isArray(fileIds) || fileIds.length > 10 || !fileIds.every((f): f is string => typeof f === "string" && /^[\w-]{1,64}$/.test(f)) || new Set(fileIds).size !== fileIds.length) {
+        return failure("INVALID_FILES", "Attach up to 10 uploaded files.", 422, requestId);
+      }
       if (screenText(note).length) {
         return failure("MESSAGE_NOT_ALLOWED", "Keep contact and payment on the platform: remove phone numbers, emails, messaging apps or payment requests.", 422, requestId);
       }
@@ -279,14 +289,20 @@ export async function handleDeliveryRoute(
           ORDER BY submitted_at DESC LIMIT 1
         `)[0];
         if (latest && latest.status !== "revision_requested") return { code: "WRONG_STATE" as const, state: latest.status };
+        const submissionId = crypto.randomUUID();
         await tx`
           INSERT INTO milestone_submissions (id, contract_id, milestone_index, contract_version, status, note, links_json, submitted_by, submitted_at)
-          VALUES (${crypto.randomUUID()}, ${locked.id}, ${index}, ${locked.agreed_version ?? locked.current_version}, 'submitted', ${note}, ${JSON.stringify(links)}, ${userId}, now())
+          VALUES (${submissionId}, ${locked.id}, ${index}, ${locked.agreed_version ?? locked.current_version}, 'submitted', ${note}, ${JSON.stringify(links)}, ${userId}, now())
         `;
+        if (!(await attachFilesToSubmission(tx, locked.id, userId, submissionId, fileIds))) throw new FilesNotAttachable();
         await recordContractEvent(tx, locked.id, userId, "freelancer", "milestone.submitted", { milestone: index, title: agreed.milestones[index].title });
         await tx`UPDATE contracts SET updated_at = now() WHERE id = ${locked.id}`;
         return { code: "OK" as const };
+      }).catch((error: unknown) => {
+        if (error instanceof FilesNotAttachable) return { code: "FILES" as const };
+        throw error;
       });
+      if (result.code === "FILES") return failure("INVALID_FILES", "Some files are missing, were uploaded by someone else, or are already part of another delivery.", 422, requestId);
       if (result.code === "CLOSED") return failure("CONTRACT_NOT_ACTIVE", "Work can only be delivered on an active contract.", 409, requestId);
       if (result.code === "NO_MILESTONE") return failure("NOT_FOUND", "Milestone not found", 404, requestId);
       if (result.code === "WRONG_STATE") {
@@ -380,3 +396,5 @@ export async function handleDeliveryRoute(
     await sql.end({ timeout: 5 });
   }
 }
+
+class FilesNotAttachable extends Error {}

@@ -29,6 +29,17 @@ export interface RateLimiterBinding {
   limit(options: { key: string; delta?: number }): Promise<{ success: boolean }>;
 }
 
+/** Minimal Cloudflare R2 bucket surface used by lib/file-routes.ts. */
+export interface R2BucketBinding {
+  put(
+    key: string,
+    value: ArrayBuffer | Uint8Array,
+    options?: { httpMetadata?: { contentType?: string; contentDisposition?: string }; customMetadata?: Record<string, string> }
+  ): Promise<unknown>;
+  get(key: string): Promise<{ body: ReadableStream; size: number } | null>;
+  delete(key: string): Promise<void>;
+}
+
 export interface Env {
   APP_NAME?: string;
   APP_VERSION?: string;
@@ -36,6 +47,8 @@ export interface Env {
   CORS_ORIGINS?: string;
 
   HYPERDRIVE: HyperdriveBinding;
+  // R2 bucket for contract files (optional until the bucket exists; see DEPLOYMENT_RUNBOOK "Files").
+  FILES?: R2BucketBinding;
   FREELANCE_JOBS?: QueueProducer;
   // Cloudflare Rate Limiting bindings (wrangler.jsonc "ratelimits").
   AUTH_RATE_LIMITER?: RateLimiterBinding;
