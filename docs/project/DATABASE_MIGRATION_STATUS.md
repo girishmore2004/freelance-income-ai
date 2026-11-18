@@ -1,6 +1,6 @@
 # Database Migration Status
 
-Chain head: **`0073_saved_searches`** (73 revisions, single head — verified by `tests/test_system_diagnostics_v542.py`). Neon staging was last migrated to 0046 (per workflow pin).
+Chain head: **`0074_profile_projects`** (74 revisions, single head — verified by `tests/test_system_diagnostics_v542.py`). Neon production: **0073** (2026-11-18, workflow "Neon PRODUCTION Database Migrations"); test branch `stage3c-integration-test`: 0073. 0074 to run next.
 
 | Revision | Change | Type | Downgrade |
 |---|---|---|---|
@@ -31,7 +31,7 @@ Chain head: **`0073_saved_searches`** (73 revisions, single head — verified by
 ## Safe deployment order
 1. **Back up** Neon (create a branch named `pre-0047-2026-11` from `main` in Neon → Branches). Branch creation is instant and is the rollback point.
 2. Optional dry run: run the migration workflow against the backup branch first.
-3. Run GitHub Action **"Stage 3C Neon migrations"** in `freelance-income-ai` (type the confirmation text). It expects `0073_saved_searches`.
+3. Run GitHub Action **"Stage 3C Neon migrations"** in `freelance-income-ai` (type the confirmation text). It expects `0074_profile_projects`.
 4. Deploy the Edge API (5.73.0 needs 0047–0068; saving projects and support tickets fail until 0068 runs, the calendar works without it; before 0067 the short proposal form still works and Studio sections return `MIGRATION_PENDING` before `marketplace.client_side` is switched on; AI keeps working on Worker limits if 0057 is not applied yet).
 5. Deploy the frontend.
 
@@ -43,7 +43,7 @@ If 0047 stops with "existing rows contain duplicates", nothing was committed: in
 
 ## Verification queries (Neon SQL Editor)
 ```sql
-SELECT version_num FROM alembic_version;                       -- 0073_saved_searches
+SELECT version_num FROM alembic_version;                       -- 0074_profile_projects
 SELECT count(*) FROM listing_proposal_versions;                 -- equals count(*) FROM listing_proposals right after the run
 SELECT slug, enabled FROM project_categories ORDER BY sort_order; -- only website_development = true
 SELECT role, count(*) FROM user_roles GROUP BY role;            -- freelancer = number of users
@@ -60,6 +60,9 @@ Additive: `listing_files` (listing CASCADE, unique R2 key, size > 0, status read
 
 ## 0072_contract_tasks_handover (5.77.0)
 Additive: `contract_tasks` (party/status/source checks, milestone_index ≥ 0, index contract+position) and `contract_handover_items` (kind/status checks). Downgrade drops both. Verify: `SELECT to_regclass('contract_tasks'), to_regclass('contract_handover_items');` → both non-null.
+
+## 0074_profile_projects (5.83.0)
+Additive. `profiles.portfolio_items_json` (Text, NOT NULL, default `'[]'`): the freelancer's own projects (title, description, skills, link, year; ≤ 20, validated by the Edge API). Registry: F3 Profile and Portfolio Coach `planned` → `partial`, runtime name `profile_coach` (rows an admin changed are left alone). Downgrade drops the column and restores F3 to `planned`. Edge before 0074: projects read as unavailable, saving returns 503 `MIGRATION_PENDING`; resume import and Projects for you still work. Verify: `SELECT portfolio_items_json FROM profiles LIMIT 1;` and `SELECT status FROM agent_definitions WHERE code='F3';` → `partial`.
 
 ## 0073_saved_searches (5.78.0)
 Additive: `saved_searches` (user CASCADE, budget ≥ 0 check, indexes by user and alerts). Downgrade drops it. Before it runs, saved searches answer `MIGRATION_PENDING` and publishing sends no alerts.

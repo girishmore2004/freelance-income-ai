@@ -86,5 +86,14 @@ Status values: DONE (implemented + tested here) · PARTIAL · BLOCKED · NOT STA
 | 1 | Remaining Phase 1: OpenAPI contract, consents (needs policy docs), verification references, staff/admin tooling | NOT STARTED | — | — | — | — | Consents BLOCKED on legal docs (D-1) |
 | 2–8 | Client marketplace, shared delivery, payments, business model, agents, trust, launch | NOT STARTED | — | — | — | — | Phase 1 first; payments BLOCKED on D-1/D-2 |
 
+## U17 — Profile page and resume import (5.83.0, 2026-11-18)
+| Item | Status | Evidence |
+|---|---|---|
+| `/profile` page in the freelancer sidebar ("My profile and resume"); old Profile tab points there | DONE (CI) | `app/profile/page.tsx`, `workspace-shell.tsx`, e2e `profile.spec.ts` |
+| Resume import: PDF (Workers AI `toMarkdown`), Word (built-in ZIP reader), text, paste; tick-to-accept | DONE (unit + real PostgreSQL) | `profile-routes.ts`, `profile.test.ts`, `lib/profile-import.ts` |
+| F3 Profile Coach governed (operation `resume_extract`, A2, `extract` tool); output grounded against the resume | DONE | `agents.ts`, migration 0074 |
+| Projects list (≤ 20) and Projects for you (native scored + external) | DONE (real PostgreSQL) | `/me/portfolio-projects`, `/me/suggested-projects` |
+| PDF reading on production | NEEDS CHECK | depends on the Workers AI `toMarkdown` binding; otherwise a clear message asks for Word or pasted text |
+
 ## Next exact step
 Decision D-11 decides how the remaining Python-only families are served; meanwhile: final end-to-end review and records. Previously: porting the remaining legacy pages to the Edge API.
