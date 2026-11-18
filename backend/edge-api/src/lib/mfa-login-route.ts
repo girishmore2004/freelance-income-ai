@@ -9,6 +9,7 @@ import {
   recoveryCodeHash,
   verifyMfaChallengeToken
 } from "./mfa-service";
+import { decryptWithRing, encryptTotpSecret, mfaKeyRing } from "./mfa";
 
 import { failure, success } from "./response";
 
@@ -246,10 +247,14 @@ export async function handleMfaLoginRoute(
       let valid = false;
 
       try {
-        const secret = await decryptTotpSecret(
-          user.mfa_secret_encrypted,
-          jwtSecret
-        );
+        // K-04: dedicated MFA key first, legacy JWT_SECRET as fallback.
+        const ring = mfaKeyRing(env);
+        const opened = await decryptWithRing(user.mfa_secret_encrypted, ring, decryptTotpSecret);
+        const secret = opened.secret;
+        if (opened.keyIndex > 0) {
+          // Move the secret to the current key; the old key can then be rotated safely.
+          await tx`UPDATE users SET mfa_secret_encrypted = ${await encryptTotpSecret(secret, ring[0])} WHERE id = ${user.id}`;
+        }
 
         const candidateStep = await matchingTotpStep(
           secret,

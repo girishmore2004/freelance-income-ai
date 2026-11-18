@@ -157,6 +157,41 @@ export async function alertSavedSearches(sql: Queryable, listingId: string): Pro
   }
 }
 
+/**
+ * Daily digest of new external matches (U15): one notification per freelancer
+ * per UTC day, listing the strongest new external opportunities found in the
+ * last 24 hours. Runs from the 6-hourly cron; only the run between 03:00 and
+ * 08:59 UTC sends. Never throws.
+ */
+export async function runDailyJobDigest(sql: Queryable, now: Date): Promise<number> {
+  const hour = now.getUTCHours();
+  if (hour < 3 || hour > 8) return 0;
+  const today = now.toISOString().slice(0, 10);
+  try {
+    const rows = await sql<Array<{ user_id: string; n: number; top: string[] }>>`
+      SELECT user_id, count(*)::int AS n,
+             (array_agg(title ORDER BY match_score DESC NULLS LAST))[1:3] AS top
+      FROM opportunities
+      WHERE created_at > ${new Date(now.getTime() - 86_400_000).toISOString()}::timestamptz AND status = 'new' AND COALESCE(match_score, 0) >= 60
+      GROUP BY user_id
+      LIMIT 1000
+    `;
+    for (const r of rows) {
+      await notifyUsers(sql, [r.user_id], {
+        kind: "jobs.daily_digest",
+        title: `${r.n} new strong match${r.n === 1 ? "" : "es"} today`,
+        message: (r.top ?? []).filter(Boolean).map((t) => String(t).slice(0, 80)).join(" · "),
+        link: "/projects?view=external",
+        dedupe: `jobs-digest:${today}`
+      });
+    }
+    return rows.length;
+  } catch (error) {
+    console.warn(JSON.stringify({ service: "freelance-income-ai-api-edge", event: "jobs_digest.failed", error: error instanceof Error ? error.message : "unknown" }));
+    return 0;
+  }
+}
+
 export async function handleGrowthRoute(request: Request, env: Env, requestId: string, deps: GrowthRouteDeps = defaultDeps): Promise<Response | null> {
   const url = new URL(request.url);
   const path = url.pathname;

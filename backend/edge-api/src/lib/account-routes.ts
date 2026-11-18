@@ -15,8 +15,10 @@ import {
 import { accountMailConfigured, publicAppUrl, sendAccountEmail } from "./account-mailer";
 import {
   decryptTotpSecret,
+  decryptWithRing,
   encryptTotpSecret,
   generateRecoveryCodes,
+  mfaKeyRing,
   generateTotpSecret,
   matchingTotpStep,
   provisioningUri,
@@ -62,8 +64,8 @@ function validNewPassword(value: unknown): string | null {
 }
 
 function mfaKey(env: Env): string | null {
-  // Must equal the Python SECRET_KEY so both services read the same MFA secrets.
-  return env.JWT_SECRET?.trim() || null;
+  // K-04: MFA_ENCRYPTION_KEY when set, else JWT_SECRET (equal to the Python SECRET_KEY).
+  return mfaKeyRing(env)[0] ?? null;
 }
 
 async function revokeAllSessions(sql: Queryable, userId: string): Promise<void> {
@@ -318,7 +320,7 @@ async function handlePrivate(
       const verifyCode = async (code: string, allowRecovery: boolean): Promise<{ ok: boolean; step: number | null }> => {
         let secret: string;
         try {
-          secret = await decryptTotpSecret(user.mfa_secret_encrypted, secretKey);
+          secret = (await decryptWithRing(user.mfa_secret_encrypted, mfaKeyRing(env), decryptTotpSecret)).secret;
         } catch {
           throw new Error("MFA_DECRYPT");
         }

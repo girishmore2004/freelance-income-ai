@@ -108,6 +108,8 @@ export interface Env {
 
   // Independent of JWT_SECRET. Base64/base64url, >= 32 bytes (a Fernet key works).
   OAUTH_ENCRYPTION_KEY?: string;
+  /** K-04: dedicated key for MFA secrets. Unset = JWT_SECRET (legacy). Old secrets keep working and move to this key at next sign-in. */
+  MFA_ENCRYPTION_KEY?: string;
   // Set only during key rotation; remove once the cron reports no remaining values.
   OAUTH_ENCRYPTION_KEY_PREVIOUS?: string;
   GOOGLE_CLIENT_ID?: string;

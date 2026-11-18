@@ -14,7 +14,7 @@ import { handleListingFileRoute } from "./lib/listing-file-routes";
 import { handleVerificationRoute } from "./lib/verification-routes";
 import { handleSourceRoute } from "./lib/source-routes";
 import { handleTaskRoute, runWeeklyProgressDigests } from "./lib/task-routes";
-import { handleGrowthRoute } from "./lib/growth-routes";
+import { handleGrowthRoute, runDailyJobDigest } from "./lib/growth-routes";
 import { handleStatementRoute } from "./lib/statement-routes";
 import { handleOpsRoute } from "./lib/ops-routes";
 import { handleSupportRoute } from "./lib/support-routes";
@@ -751,13 +751,16 @@ async function runScheduledPaymentReleases(env: Env): Promise<void> {
   }
 }
 
-/** U14: Monday progress summaries for active contracts (deduplicated per ISO week). */
+/** U14/U15: Monday contract progress summaries and the daily external-jobs digest (both deduplicated). */
 async function runScheduledProgressDigests(env: Env): Promise<void> {
   if (!env.HYPERDRIVE?.connectionString) return;
   const sql = database(env);
   try {
-    const sent = await runWeeklyProgressDigests(sql, new Date());
+    const now = new Date();
+    const sent = await runWeeklyProgressDigests(sql, now);
     if (sent) console.log(JSON.stringify({ service: "freelance-income-ai-api-edge", event: "progress_digest.sent", contracts: sent }));
+    const digests = await runDailyJobDigest(sql, now);
+    if (digests) console.log(JSON.stringify({ service: "freelance-income-ai-api-edge", event: "jobs_digest.sent", users: digests }));
   } finally {
     await sql.end({ timeout: 5 });
   }

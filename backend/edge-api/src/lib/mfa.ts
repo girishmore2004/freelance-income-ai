@@ -415,3 +415,32 @@ export async function recoveryCodeHash(code: string): Promise<string> {
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
 }
+
+
+/**
+ * K-04: keys that can read MFA secrets, newest first. A dedicated
+ * MFA_ENCRYPTION_KEY (when set) encrypts new secrets; JWT_SECRET stays in the
+ * ring so secrets written before it still decrypt, and are re-encrypted with
+ * the dedicated key at the next successful use. Rotating JWT_SECRET then no
+ * longer locks MFA users out once their secrets have moved.
+ */
+export function mfaKeyRing(env: { MFA_ENCRYPTION_KEY?: string; JWT_SECRET?: string }): string[] {
+  const ring = [env.MFA_ENCRYPTION_KEY?.trim() ?? "", env.JWT_SECRET?.trim() ?? ""].filter((k) => k.length > 0);
+  return [...new Set(ring)];
+}
+
+/** Decrypts with the first key in the ring that works; keyIndex > 0 means the secret should be re-encrypted. */
+export async function decryptWithRing(
+  ciphertext: string,
+  ring: string[],
+  decrypt: (ciphertext: string, key: string) => Promise<string> = decryptTotpSecret
+): Promise<{ secret: string; keyIndex: number }> {
+  for (let i = 0; i < ring.length; i += 1) {
+    try {
+      return { secret: await decrypt(ciphertext, ring[i]), keyIndex: i };
+    } catch {
+      // Try the next key.
+    }
+  }
+  throw new Error("MFA secret could not be decrypted with any configured key");
+}
