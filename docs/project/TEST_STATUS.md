@@ -1,5 +1,12 @@
 # Test Status
 
+## U3 — GitHub CI (verified)
+`main` @ a1a74e1: Playwright 56 passed (bearer), 57 passed (cookie); Edge @ 70b2b70: Edge API CI success (298/298).
+
+## U4 agent centre — 2026-11-18 IST (release 5.69.0)
+- Edge API: **299 passed, 0 failed** (`agents.test.ts` +1: my runs and AI calls grouped by agent, unknown runs ignored, missing approvals table tolerated).
+- Frontend: typecheck 0 errors; `e2e/agents.spec.ts` extends the catalogue journey with the overview, per-agent usage and the "Open" link to where the agent works.
+
 ## Full lifecycle + U3 dashboard — 2026-11-18 IST (release 5.68.0)
 - **End-to-end lifecycle on PostgreSQL, real handlers, one run, 24/24 steps as expected:** client posts and publishes → matching (freelancer scored 82) → invitation → proposal → shortlist → offer (2 milestones, 1 revision) → freelancer accepts → both milestones funded in test mode → file uploaded → delivery with the file → revision requested → redelivery → approved → second milestone delivered and approved → contract completed, both payments released → two-way reviews → freelancer withdraws the available balance → client action plan has nothing left for the contract; 17 notifications for the contract; trial balance equal and nothing left held for the contract.
 - Edge API: **298 passed, 0 failed** (`business.test.ts` +1: deadlines within two weeks or overdue, approved milestones excluded, bad data ignored). Overview on PostgreSQL returns the new sections for freelancer and client.

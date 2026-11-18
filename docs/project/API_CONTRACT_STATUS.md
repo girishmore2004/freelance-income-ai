@@ -31,6 +31,8 @@ Do not change `NEXT_PUBLIC_API_URL`/proxy targets per page until its families ar
 | `/delivery`, `/analytics`, `/clients`, `/client-insights`, `/agent-workflows`, `/marketplaces`, `/opportunity-intelligence`, `/payments` | Behind `LegacyGate`: a clear notice with links to the marketplace pages that do the same job, instead of failing calls. Build variable `NEXT_PUBLIC_LEGACY_PYTHON_PAGES=true` shows the original page (useful only once its routes are served; D-11). |
 | `/` (home) | Works for the Edge-served parts; some older widgets (tasks, milestones, invoices, research) still show "not available on Edge" (501). |
 
+**Agent usage (5.69.0):** `GET /me/agent-usage` → `{agents: {CODE: {runs, failed, last_run_at, ai_calls_today, ai_calls_month}}, pending_approvals}`.
+
 **Overview additions (5.68.0):** `GET /workspace/overview` also returns `apply_next {external[{id,title,source,match_score,source_url}], invitations[{listing_id,title}]}`, `deadlines[{contract_id,title,milestone,milestone_title,due_date,overdue,side}]`, `pending_release[{mode,amount_minor,milestones}]`.
 
 **Public browse (5.67.0, no login):** `GET /marketplace/listings` and `GET /marketplace/listings/{id}` and `GET /project-categories` now answer visitors (public listings only; invite-only listings need the invited session); `GET /public/freelancers?q=&offset=` → `{open, items[card + completed_contracts], more}`; `GET /public/freelancers/{id}` → card + `completed_contracts` + `reviews[{rating, comment, created_at}]` (revealed client reviews only).

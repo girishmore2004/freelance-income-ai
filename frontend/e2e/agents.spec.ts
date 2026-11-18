@@ -20,6 +20,7 @@ test('the agent catalogue shows autonomy, human gates and honest status; an admi
       ]));
     }
     if (path === '/api/v1/me/agent-runs') return reply(ok([{ id: 'r1', agent_code: 'F4', agent_name: 'proposal_agent', status: 'completed', summary: 'Generated model proposal', created_at: '2026-11-17T10:00:00Z' }]));
+    if (path === '/api/v1/me/agent-usage') return reply(ok({ agents: { F4: { runs: 3, failed: 1, last_run_at: '2026-11-17T10:00:00Z', ai_calls_today: 2, ai_calls_month: 5 } }, pending_approvals: 1 }));
     if (path === '/api/v1/admin/agents/F4') {
       toggles.push(JSON.parse(request.postData() as string));
       enabled = false;
@@ -32,6 +33,9 @@ test('the agent catalogue shows autonomy, human gates and honest status; an admi
   await expect(page.getByText('Autonomy: A2 (Draft for your review) · Human gate: Hash-bound approval before submission')).toBeVisible();
   await expect(page.getByText('Blocked (needs payments)')).toBeVisible();
   await expect(page.getByText('Generated model proposal')).toBeVisible();
+  await expect(page.getByText('Your use: 3 runs (1 failed) · AI calls 2 today, 5 this month')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Open: Draft a proposal from an opportunity' })).toHaveAttribute('href', '/projects?view=external');
+  await expect(page.getByRole('region', { name: 'Agent overview' })).toContainText('Drafts waiting for my approval1');
   await page.getByRole('button', { name: 'Switch off' }).click();
   await expect(page.getByText('Proposal Agent switched off')).toBeVisible();
   await expect(page.getByText('Live · switched off')).toBeVisible();
