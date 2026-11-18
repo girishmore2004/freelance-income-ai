@@ -1,7 +1,7 @@
 import type { Env } from "../types";
 import type { AuthenticatedSession } from "./session-service";
 import { authenticateRequest } from "./auth-context";
-import { body, database } from "./core-routes";
+import { body, database, textArray } from "./core-routes";
 import type { Queryable, Sql } from "./core-routes";
 import { failure, success } from "./response";
 import { FLAGS, isEnabled } from "./flags";
@@ -155,12 +155,12 @@ export async function handlePlannerRoute(request: Request, env: Env, requestId: 
       const orgs = (await sql<Array<{ organization_id: string }>>`
         SELECT organization_id FROM organization_memberships WHERE user_id = ${userId} AND status = 'active'
       `).map((r) => r.organization_id);
-      const orgList = orgs.length ? orgs : [""];
+      const orgList = orgs;
       const [contracts, saved, posted] = await Promise.all([
         sql<Array<{ id: string; title: string; milestones_json: string; side: "freelancer" | "client" }>>`
           SELECT c.id, v.title, v.milestones_json, CASE WHEN c.freelancer_user_id = ${userId} THEN 'freelancer' ELSE 'client' END AS side
           FROM contracts c JOIN contract_versions v ON v.contract_id = c.id AND v.version = COALESCE(c.agreed_version, c.current_version)
-          WHERE c.status = 'active' AND (c.freelancer_user_id = ${userId} OR c.organization_id = ANY(${orgList}))
+          WHERE c.status = 'active' AND (c.freelancer_user_id = ${userId} OR c.organization_id = ANY(${textArray(orgList)}::text[]))
           LIMIT 200
         `,
         sql<Array<{ id: string; title: string; closes_at: Date | null; deadline: string | Date | null; status: string }>>`
@@ -173,13 +173,13 @@ export async function handlePlannerRoute(request: Request, env: Env, requestId: 
         sql<Array<{ id: string; title: string; closes_at: Date | null; deadline: string | Date | null; status: string }>>`
           SELECT l.id, v.title, l.closes_at, v.deadline, l.status
           FROM project_listings l JOIN project_listing_versions v ON v.listing_id = l.id AND v.version = l.current_version
-          WHERE l.organization_id = ANY(${orgList}) AND l.status IN ('published', 'hiring', 'paused')
+          WHERE l.organization_id = ANY(${textArray(orgList)}::text[]) AND l.status IN ('published', 'hiring', 'paused')
           LIMIT 200
         `
       ]);
       const approved = contracts.length
         ? new Set((await sql<Array<{ contract_id: string; milestone_index: number }>>`
-            SELECT DISTINCT contract_id, milestone_index FROM milestone_submissions WHERE contract_id = ANY(${contracts.map((c) => c.id)}) AND status = 'approved'
+            SELECT DISTINCT contract_id, milestone_index FROM milestone_submissions WHERE contract_id = ANY(${textArray(contracts.map((c) => c.id))}::text[]) AND status = 'approved'
           `).map((r) => `${r.contract_id}:${Number(r.milestone_index)}`))
         : new Set<string>();
       const dayOf = (v: string | Date | null) => (v === null ? null : v instanceof Date ? v.toISOString().slice(0, 10) : String(v).slice(0, 10));
@@ -211,6 +211,29 @@ export async function handlePlannerRoute(request: Request, env: Env, requestId: 
           const overdue = d < today;
           if (d < window.from && !overdue) continue;
           events.push({ date: d, type: f.kind, title: f.title, detail: f.note.slice(0, 140), href: `/opportunities?id=${encodeURIComponent(f.opportunity_id)}`, overdue, side: "freelancer" });
+        }
+      }
+      if (await tableExists(sql, "proposal_interviews")) {
+        // Native interviews (U9): accepted and still-proposed times on proposals I sent or received.
+        const interviews = await sql<Array<{ starts_at: Date; status: string; duration_minutes: number; mode: string; proposal_id: string; title: string; side: "freelancer" | "client" }>>`
+          SELECT i.starts_at, i.status, i.duration_minutes, i.mode, i.proposal_id, v.title,
+                 CASE WHEN p.freelancer_user_id = ${userId} THEN 'freelancer' ELSE 'client' END AS side
+          FROM proposal_interviews i
+          JOIN listing_proposals p ON p.id = i.proposal_id
+          JOIN project_listings l ON l.id = p.listing_id
+          JOIN project_listing_versions v ON v.listing_id = l.id AND v.version = l.current_version
+          WHERE i.status IN ('proposed', 'accepted')
+            AND i.starts_at >= ${window.from}::date AND i.starts_at < (${window.to}::date + 1)
+            AND (p.freelancer_user_id = ${userId} OR l.organization_id = ANY(${textArray(orgList)}::text[]))
+          LIMIT 200
+        `;
+        for (const i of interviews) {
+          const at = new Date(i.starts_at);
+          events.push({
+            date: at.toISOString().slice(0, 10), type: "interview", title: i.title,
+            detail: `${i.status === "accepted" ? "Interview" : "Proposed interview"} at ${at.toISOString().slice(11, 16)} UTC · ${i.duration_minutes} min ${i.mode}`,
+            href: `/inbox?proposal=${encodeURIComponent(i.proposal_id)}`, overdue: false, side: i.side
+          });
         }
       }
       return success({ from: window.from, to: window.to, today, events: sortEvents(events) }, "Calendar", 200, requestId);

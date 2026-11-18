@@ -1,7 +1,7 @@
 import type { Env } from "../types";
 import type { AuthenticatedSession } from "./session-service";
 import { authenticateRequest } from "./auth-context";
-import { body, database } from "./core-routes";
+import { body, database, textArray } from "./core-routes";
 import type { Queryable, Sql } from "./core-routes";
 import { failure, success } from "./response";
 
@@ -161,7 +161,7 @@ export async function handleNotificationRoute(request: Request, env: Env, reques
       const payload = (await body(request)) ?? {};
       const ids = Array.isArray(payload.ids) ? payload.ids.filter((i): i is string => typeof i === "string" && /^[\w-]{1,64}$/.test(i)).slice(0, 200) : null;
       const rows = ids
-        ? await sql<{ id: string }[]>`UPDATE notifications SET read_at = now() WHERE user_id = ${userId} AND read_at IS NULL AND id = ANY(${ids}) RETURNING id`
+        ? await sql<{ id: string }[]>`UPDATE notifications SET read_at = now() WHERE user_id = ${userId} AND read_at IS NULL AND id = ANY(${textArray(ids)}::text[]) RETURNING id`
         : await sql<{ id: string }[]>`UPDATE notifications SET read_at = now() WHERE user_id = ${userId} AND read_at IS NULL RETURNING id`;
       return success({ marked: rows.length }, "Marked as read", 200, requestId);
     }

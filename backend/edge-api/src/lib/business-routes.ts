@@ -1,7 +1,7 @@
 import type { Env } from "../types";
 import type { AuthenticatedSession } from "./session-service";
 import { authenticateRequest } from "./auth-context";
-import { body, database, safeHttpUrl } from "./core-routes";
+import { body, database, safeHttpUrl, textArray } from "./core-routes";
 import type { Queryable, Sql } from "./core-routes";
 import { failure, success } from "./response";
 import { reserveAiCall, settleAiCall } from "./ai-governor";
@@ -144,19 +144,19 @@ export async function buildActionPlan(sql: Queryable, userId: string, today: str
     const reviews = await tolerant(() => sql<{ contract_id: string; milestone_index: number; title: string }[]>`
       SELECT s.contract_id, s.milestone_index, v.title FROM milestone_submissions s JOIN contracts c ON c.id = s.contract_id
       JOIN contract_versions v ON v.contract_id = c.id AND v.version = COALESCE(c.agreed_version, c.current_version)
-      WHERE c.organization_id = ANY(${orgs}) AND c.status = 'active' AND s.status = 'submitted' ORDER BY s.submitted_at ASC LIMIT 50
+      WHERE c.organization_id = ANY(${textArray(orgs)}::text[]) AND c.status = 'active' AND s.status = 'submitted' ORDER BY s.submitted_at ASC LIMIT 50
     `);
     for (const r of reviews ?? []) add({ priority: 1, category: "delivery", title: `Review delivery: ${r.title}, milestone ${Number(r.milestone_index) + 1}`, reason: "The freelancer delivered work and is waiting for your decision.", evidence: { type: "contract", id: r.contract_id }, suggested_action: "Check the work against the acceptance criteria, then approve or request a revision.", due_date: null, href: `/contracts#${r.contract_id}` });
 
     const proposals = await tolerant(() => sql<{ listing_id: string; n: number }[]>`
       SELECT p.listing_id, count(*)::int AS n FROM listing_proposals p JOIN project_listings l ON l.id = p.listing_id
-      WHERE l.organization_id = ANY(${orgs}) AND p.status = 'submitted' GROUP BY p.listing_id LIMIT 50
+      WHERE l.organization_id = ANY(${textArray(orgs)}::text[]) AND p.status = 'submitted' GROUP BY p.listing_id LIMIT 50
     `);
     for (const p of proposals ?? []) add({ priority: 2, category: "pipeline", title: `${p.n} new proposal${Number(p.n) === 1 ? "" : "s"} to review`, reason: "Freelancers replied to your project.", evidence: { type: "project_listing", id: p.listing_id }, suggested_action: "Compare proposals, shortlist or decline.", due_date: null, href: "/client/projects" });
 
     const clientOffers = await tolerant(() => sql<{ id: string; title: string }[]>`
       SELECT c.id, v.title FROM contracts c JOIN contract_versions v ON v.contract_id = c.id AND v.version = c.current_version
-      WHERE c.organization_id = ANY(${orgs}) AND c.status = 'offered' AND v.client_accepted_at IS NULL LIMIT 50
+      WHERE c.organization_id = ANY(${textArray(orgs)}::text[]) AND c.status = 'offered' AND v.client_accepted_at IS NULL LIMIT 50
     `);
     for (const o of clientOffers ?? []) add({ priority: 1, category: "pipeline", title: `Answer proposed terms: ${o.title}`, reason: "The freelancer proposed different terms.", evidence: { type: "contract", id: o.id }, suggested_action: "Accept the terms or propose changes.", due_date: null, href: `/contracts#${o.id}` });
   }
@@ -164,7 +164,7 @@ export async function buildActionPlan(sql: Queryable, userId: string, today: str
   /* Both sides */
   const disputes = await tolerant(() => sql<{ id: string; contract_id: string }[]>`
     SELECT d.id, d.contract_id FROM disputes d JOIN contracts c ON c.id = d.contract_id
-    WHERE d.status = 'open' AND (c.freelancer_user_id = ${userId} OR c.organization_id = ANY(${orgs.length ? orgs : [""]})) LIMIT 20
+    WHERE d.status = 'open' AND (c.freelancer_user_id = ${userId} OR c.organization_id = ANY(${textArray(orgs)}::text[])) LIMIT 20
   `);
   for (const d of disputes ?? []) add({ priority: 2, category: "communication", title: "A dispute is open on your contract", reason: "Staff are reviewing the contract record.", evidence: { type: "dispute", id: d.id }, suggested_action: "Add your statement and any evidence.", due_date: null, href: `/contracts#${d.contract_id}` });
 
@@ -470,9 +470,9 @@ async function overview(sql: Queryable, userId: string, today: string) {
     countOf(sql, (q) => q`SELECT count(*)::int AS n FROM email_drafts WHERE user_id = ${userId} AND status = 'pending_approval'`),
     countOf(sql, (q) => q`SELECT count(*)::int AS n FROM listing_proposals WHERE freelancer_user_id = ${userId} AND created_at >= ${monthStart}`),
     countOf(sql, (q) => q`SELECT count(*)::int AS n FROM contracts WHERE freelancer_user_id = ${userId} AND status = 'active'`),
-    orgs.length ? countOf(sql, (q) => q`SELECT count(*)::int AS n FROM contracts WHERE organization_id = ANY(${orgs}) AND status = 'active'`) : Promise.resolve(0),
+    orgs.length ? countOf(sql, (q) => q`SELECT count(*)::int AS n FROM contracts WHERE organization_id = ANY(${textArray(orgs)}::text[]) AND status = 'active'`) : Promise.resolve(0),
     countOf(sql, (q) => q`SELECT count(*)::int AS n FROM milestone_submissions s JOIN contracts c ON c.id = s.contract_id WHERE c.freelancer_user_id = ${userId} AND s.status = 'submitted'`),
-    orgs.length ? countOf(sql, (q) => q`SELECT count(*)::int AS n FROM milestone_submissions s JOIN contracts c ON c.id = s.contract_id WHERE c.organization_id = ANY(${orgs}) AND s.status = 'submitted'`) : Promise.resolve(0)
+    orgs.length ? countOf(sql, (q) => q`SELECT count(*)::int AS n FROM milestone_submissions s JOIN contracts c ON c.id = s.contract_id WHERE c.organization_id = ANY(${textArray(orgs)}::text[]) AND s.status = 'submitted'`) : Promise.resolve(0)
   ]);
   const paidRows = await tolerant(() => sql<{ currency: string; total: string | number }[]>`
     SELECT currency, COALESCE(sum(amount), 0) AS total FROM invoices WHERE user_id = ${userId} AND status = 'paid' AND created_at >= ${monthStart} GROUP BY currency
@@ -494,11 +494,11 @@ async function overview(sql: Queryable, userId: string, today: string) {
   const contractRows = await tolerant(() => sql<{ id: string; title: string; milestones_json: string; side: "freelancer" | "client" }[]>`
     SELECT c.id, v.title, v.milestones_json, CASE WHEN c.freelancer_user_id = ${userId} THEN 'freelancer' ELSE 'client' END AS side
     FROM contracts c JOIN contract_versions v ON v.contract_id = c.id AND v.version = COALESCE(c.agreed_version, c.current_version)
-    WHERE c.status = 'active' AND (c.freelancer_user_id = ${userId} OR c.organization_id = ANY(${orgs.length ? orgs : [""]}))
+    WHERE c.status = 'active' AND (c.freelancer_user_id = ${userId} OR c.organization_id = ANY(${textArray(orgs)}::text[]))
     LIMIT 50
   `);
   const approvedRows = contractRows?.length ? await tolerant(() => sql<{ contract_id: string; milestone_index: number }[]>`
-    SELECT DISTINCT contract_id, milestone_index FROM milestone_submissions WHERE contract_id = ANY(${contractRows.map((c) => c.id)}) AND status = 'approved'
+    SELECT DISTINCT contract_id, milestone_index FROM milestone_submissions WHERE contract_id = ANY(${textArray(contractRows.map((c) => c.id))}::text[]) AND status = 'approved'
   `) : [];
   const deadlines = upcomingDeadlines(contractRows ?? [], new Set((approvedRows ?? []).map((r) => `${r.contract_id}:${Number(r.milestone_index)}`)), today);
   const pending = await tolerant(() => sql<{ mode: string; net: string | number; n: number }[]>`

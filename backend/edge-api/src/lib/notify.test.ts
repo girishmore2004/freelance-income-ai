@@ -49,6 +49,6 @@ describe("notifications", () => {
     expect((await readJson((await handleNotificationRoute(jsonRequest("GET", "/api/v1/notifications"), env, "r", deps))!)).data[0]).toMatchObject({ read: false, link: "/x" });
     await handleNotificationRoute(jsonRequest("POST", "/api/v1/notifications/read", { ids: ["n1", "bad id!"] }), env, "r", deps);
     const update = fake.queries.find((q) => q.text.startsWith("UPDATE notifications"))!;
-    expect(update.values).toEqual(["u1", ["n1"]]);
+    expect(update.values).toEqual(["u1", "{\"n1\"}"]);
   });
 });

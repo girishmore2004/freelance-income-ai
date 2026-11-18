@@ -1,7 +1,7 @@
 import type { Env, R2BucketBinding } from "../types";
 import type { AuthenticatedSession } from "./session-service";
 import { authenticateRequest } from "./auth-context";
-import { database } from "./core-routes";
+import { database, textArray } from "./core-routes";
 import type { Queryable, Sql } from "./core-routes";
 import { failure, success } from "./response";
 import { FLAGS, isEnabled } from "./flags";
@@ -266,7 +266,7 @@ export async function attachFilesToSubmission(tx: Queryable, contractId: string,
   if (!fileIds.length) return true;
   const rows = await tx<{ id: string }[]>`
     UPDATE contract_files SET submission_id = ${submissionId}
-    WHERE id = ANY(${fileIds}) AND contract_id = ${contractId} AND uploaded_by = ${userId} AND status = 'ready' AND submission_id IS NULL
+    WHERE id = ANY(${textArray(fileIds)}::text[]) AND contract_id = ${contractId} AND uploaded_by = ${userId} AND status = 'ready' AND submission_id IS NULL
     RETURNING id
   `;
   return rows.length === fileIds.length;

@@ -36,6 +36,17 @@ export function database(env: Env): Sql {
   });
 }
 
+/**
+ * A Postgres text[] literal for `= ANY(${textArray(ids)}::text[])`.
+ * `database()` runs with fetch_types: false (Hyperdrive), so postgres.js cannot
+ * serialise a JS array parameter itself: it would send "a,b" and Postgres
+ * rejects it as a malformed array literal. Elements are always quoted and
+ * escaped, so commas, quotes, backslashes and the word NULL stay literal.
+ */
+export function textArray(values: readonly string[]): string {
+  return `{${values.map((v) => `"${String(v).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",")}}`;
+}
+
 export function iso(value: unknown): string | null {
   if (!value) return null;
   return value instanceof Date ? value.toISOString() : String(value);

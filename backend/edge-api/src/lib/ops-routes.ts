@@ -1,7 +1,7 @@
 import type { Env } from "../types";
 import type { AuthenticatedSession } from "./session-service";
 import { authenticateRequest } from "./auth-context";
-import { body, database } from "./core-routes";
+import { body, database, textArray } from "./core-routes";
 import type { Queryable, Sql } from "./core-routes";
 import { failure, success } from "./response";
 import { loadRoles } from "./identity";
@@ -173,7 +173,7 @@ export async function handleOpsRoute(request: Request, env: Env, requestId: stri
       const wanted = status === "dead" || status === "retrying" || status === "failed" ? [status] : ["failed", "dead", "retrying"];
       const rows = await sql<Array<Record<string, unknown>>>`
         SELECT id, user_id, job_type, status, attempts, error_code, error_message, created_at, finished_at, dead_lettered_at
-        FROM background_jobs WHERE status = ANY(${wanted}) ORDER BY created_at DESC LIMIT 100
+        FROM background_jobs WHERE status = ANY(${textArray(wanted)}::text[]) ORDER BY created_at DESC LIMIT 100
       `;
       return success(
         rows.map((r) => ({ ...r, attempts: Number(r.attempts ?? 0), retryable: JOB_TYPES.includes(String(r.job_type) as JobType) })),

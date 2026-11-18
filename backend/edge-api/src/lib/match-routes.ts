@@ -2,7 +2,7 @@ import type { Env } from "../types";
 import { notifyUsers, organizationManagers } from "./notify";
 import type { AuthenticatedSession } from "./session-service";
 import { authenticateRequest } from "./auth-context";
-import { body, database } from "./core-routes";
+import { body, database, textArray } from "./core-routes";
 import type { Queryable, Sql } from "./core-routes";
 import { failure, success } from "./response";
 import { FLAGS, isEnabled } from "./flags";
@@ -428,12 +428,12 @@ export async function handleMatchRoute(
       const ids = matches.map((m) => m.freelancer.user_id);
       const invited = ids.length
         ? await sql<{ freelancer_user_id: string; status: string }[]>`
-            SELECT freelancer_user_id, status FROM listing_invitations WHERE listing_id = ${listing.id} AND freelancer_user_id = ANY(${ids})
+            SELECT freelancer_user_id, status FROM listing_invitations WHERE listing_id = ${listing.id} AND freelancer_user_id = ANY(${textArray(ids)}::text[])
           `
         : [];
       const savedRows = ids.length
         ? await sql<{ freelancer_user_id: string }[]>`
-            SELECT freelancer_user_id FROM saved_freelancers WHERE organization_id = ${org.id} AND freelancer_user_id = ANY(${ids})
+            SELECT freelancer_user_id FROM saved_freelancers WHERE organization_id = ${org.id} AND freelancer_user_id = ANY(${textArray(ids)}::text[])
           `
         : [];
       const invitedMap = new Map(invited.map((r) => [r.freelancer_user_id, r.status]));

@@ -66,7 +66,7 @@ describe("agent registry", () => {
     const filtered = world();
     await call(filtered.deps, "GET", "/api/v1/me/agent-runs?agent=F4");
     const query = filtered.fake.queries.find((q) => q.text.includes("FROM agent_runs"))!;
-    expect(query.values).toEqual(["u1", ["proposal_agent", "apply_agent"]]);
+    expect(query.values).toEqual(["u1", "{\"proposal_agent\",\"apply_agent\"}"]);
     const unknown = await readJson((await call(world().deps, "GET", "/api/v1/me/agent-runs?agent=Z9"))!);
     expect(unknown.data).toEqual([]);
   });

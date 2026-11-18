@@ -1,7 +1,7 @@
 import type { Env } from "../types";
 import type { AuthenticatedSession } from "./session-service";
 import { authenticateRequest } from "./auth-context";
-import { body, database } from "./core-routes";
+import { body, database, textArray } from "./core-routes";
 import type { Queryable, Sql } from "./core-routes";
 import { failure, success } from "./response";
 import { loadRoles } from "./identity";
@@ -194,7 +194,7 @@ export async function handleAgentRoute(request: Request, env: Env, requestId: st
       const rows = filter
         ? await sql<{ id: string; agent_name: string; status: string; summary: string; created_at: Date }[]>`
             SELECT id, agent_name, status, summary, created_at FROM agent_runs
-            WHERE user_id = ${userId} AND agent_name = ANY(${names}) ORDER BY created_at DESC LIMIT 50
+            WHERE user_id = ${userId} AND agent_name = ANY(${textArray(names)}::text[]) ORDER BY created_at DESC LIMIT 50
           `
         : await sql<{ id: string; agent_name: string; status: string; summary: string; created_at: Date }[]>`
             SELECT id, agent_name, status, summary, created_at FROM agent_runs

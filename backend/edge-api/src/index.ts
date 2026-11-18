@@ -9,6 +9,7 @@ import { handleBusinessRoute } from "./lib/business-routes";
 import { handleAnalyticsRoute } from "./lib/analytics-routes";
 import { handlePlannerRoute } from "./lib/planner-routes";
 import { handleOpportunityRoute } from "./lib/opportunity-routes";
+import { handleDiscussionRoute } from "./lib/discussion-routes";
 import { handleOpsRoute } from "./lib/ops-routes";
 import { handleSupportRoute } from "./lib/support-routes";
 import { handleListingRoute } from "./lib/listing-routes";
@@ -393,6 +394,12 @@ async function routeRequest(
   const opportunityResponse = await handleOpportunityRoute(request, env, requestId);
   if (opportunityResponse) {
     return opportunityResponse;
+  }
+
+  // Proposal discussions, interviews and the unified inbox (U9).
+  const discussionResponse = await handleDiscussionRoute(request, env, requestId);
+  if (discussionResponse) {
+    return discussionResponse;
   }
 
   // Saved projects, calendar (U7) and support tickets.

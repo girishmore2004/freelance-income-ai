@@ -1,7 +1,7 @@
 import type { Env } from "../types";
 import type { AuthenticatedSession } from "./session-service";
 import { authenticateRequest } from "./auth-context";
-import { body, database, iso, jsonList, oppOut, proposalOut } from "./core-routes";
+import { body, database, iso, jsonList, oppOut, proposalOut, textArray } from "./core-routes";
 import type { Sql } from "./core-routes";
 import { failure, success } from "./response";
 import { screenText } from "./listings";
@@ -124,9 +124,9 @@ export async function handleOpportunityRoute(request: Request, env: Env, request
     const proposals = await sql<Record<string, unknown>[]>`SELECT * FROM proposals WHERE opportunity_id = ${oppId} AND user_id = ${userId} ORDER BY created_at ASC LIMIT 20`;
     const ids = proposals.map((p) => String(p.id));
     const [approvals, versions, applications, eventRows] = await Promise.all([
-      ids.length ? sql<Record<string, unknown>[]>`SELECT * FROM approvals WHERE proposal_id = ANY(${ids}) AND user_id = ${userId} ORDER BY created_at ASC` : Promise.resolve([]),
+      ids.length ? sql<Record<string, unknown>[]>`SELECT * FROM approvals WHERE proposal_id = ANY(${textArray(ids)}::text[]) AND user_id = ${userId} ORDER BY created_at ASC` : Promise.resolve([]),
       ids.length && (await tableExists(sql, "proposal_versions"))
-        ? sql<Record<string, unknown>[]>`SELECT proposal_id, version, content, proposed_price, currency, source, created_at FROM proposal_versions WHERE proposal_id = ANY(${ids}) ORDER BY version DESC LIMIT 100`
+        ? sql<Record<string, unknown>[]>`SELECT proposal_id, version, content, proposed_price, currency, source, created_at FROM proposal_versions WHERE proposal_id = ANY(${textArray(ids)}::text[]) ORDER BY version DESC LIMIT 100`
         : Promise.resolve([]),
       sql<Record<string, unknown>[]>`
         SELECT a.id, a.proposal_id, a.channel, a.status, a.recipient, a.external_ref, a.sent_at, a.created_at,
