@@ -205,3 +205,66 @@ export function HealthPanel() {
     </section>
   );
 }
+
+type Ticket = { id: string; topic: string; subject: string; body: string; status: string; resolution_note: string; created_at: string; resolved_at: string | null; email: string; name: string; signed_in: boolean };
+
+export function SupportPanel() {
+  const [status, setStatus] = useState<'open' | 'resolved'>('open');
+  const [items, setItems] = useState<Ticket[] | null>(null);
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    setError('');
+    try {
+      const r = await api<Ticket[]>(`/api/v1/admin/support/tickets?status=${status}`);
+      setItems(Array.isArray(r) ? r : []);
+    } catch (e) {
+      setError(messageOf(e));
+    }
+  }, [status]);
+  useEffect(() => { void load(); }, [load]);
+
+  async function resolve(t: Ticket) {
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const r = await api<{ message?: string }>(`/api/v1/admin/support/tickets/${t.id}/resolve`, 'POST', { note: notes[t.id] ?? '' });
+      setNotice(r?.message ?? 'Resolved');
+      await load();
+    } catch (e) {
+      setError(messageOf(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="card" aria-labelledby="support-heading">
+      <h3 id="support-heading">Support tickets</h3>
+      <div className="ws-role" role="group" aria-label="Ticket status" style={{ maxWidth: 260 }}>
+        <button type="button" aria-pressed={status === 'open'} onClick={() => setStatus('open')}>Open</button>
+        <button type="button" aria-pressed={status === 'resolved'} onClick={() => setStatus('resolved')}>Resolved</button>
+      </div>
+      <div aria-live="polite">{notice && <p className="success">{notice}</p>}{error && <p className="error" role="alert">{error}</p>}</div>
+      {items && items.length === 0 && <p className="empty">{status === 'open' ? 'No open tickets.' : 'No resolved tickets yet.'}</p>}
+      {items?.map((t) => (
+        <article className="card item" key={t.id}>
+          <div className="row between"><b>{t.subject}</b><span className="badge">{t.topic}</span></div>
+          <p className="muted">{t.signed_in ? 'Signed-in user' : 'Visitor'} · {t.email || 'no email'}{t.name ? ` · ${t.name}` : ''} · {when(t.created_at)}</p>
+          <p style={{ whiteSpace: 'pre-wrap' }}>{t.body}</p>
+          {t.status === 'resolved' ? <p className="muted">Answer: {t.resolution_note}</p> : (
+            <>
+              <div className="field"><label htmlFor={`t-${t.id}`}>{t.signed_in ? 'Answer (sent to their notifications)' : 'What you did (reply to the visitor by email yourself)'}</label>
+                <textarea id={`t-${t.id}`} rows={2} maxLength={2000} value={notes[t.id] ?? ''} onChange={(e) => setNotes((n) => ({ ...n, [t.id]: e.target.value }))} /></div>
+              <button className="btn primary" type="button" disabled={busy || (notes[t.id] ?? '').trim().length < 5} onClick={() => void resolve(t)}>Resolve</button>
+            </>
+          )}
+        </article>
+      ))}
+    </section>
+  );
+}

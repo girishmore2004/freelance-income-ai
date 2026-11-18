@@ -9,7 +9,8 @@ import { ReportButton } from './report-button';
 import { PublicNav } from '../public-nav';
 import { ExternalOpportunities } from './external-opportunities';
 
-type View = 'all' | 'native' | 'external';
+type View = 'all' | 'native' | 'external' | 'saved';
+type Saved = PublicListing & { closes_at: string | null; status: string; open: boolean; note: string; saved_at: string };
 
 /**
  * Projects posted by registered clients on this marketplace. Visitors can
@@ -43,6 +44,30 @@ export default function ProjectsPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [view, setView] = useState<View>('all');
   const [applied, setApplied] = useState('');
+  const [saved, setSaved] = useState<Saved[] | null>(null);
+  const savedIds = new Set((saved ?? []).map((s) => s.id));
+
+  const loadSaved = useCallback(async () => {
+    try {
+      const list = await api<Saved[]>('/api/v1/me/saved-listings');
+      setSaved(Array.isArray(list) ? list : []);
+    } catch {
+      setSaved(null); // Saving needs the client marketplace and migration 0068.
+    }
+  }, []);
+
+  useEffect(() => { if (token) void loadSaved(); }, [token, loadSaved]);
+
+  async function toggleSave(id: string) {
+    setError('');
+    try {
+      if (savedIds.has(id)) await api(`/api/v1/marketplace/listings/${id}/save`, 'DELETE');
+      else await api(`/api/v1/marketplace/listings/${id}/save`, 'POST', {});
+      await loadSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not update saved projects.');
+    }
+  }
 
   const fetchPage = useCallback(async (before: string | null, append: boolean, cat: string, q: string) => {
     setLoading(true);
@@ -69,7 +94,7 @@ export default function ProjectsPage() {
     const initial = typeof window === 'undefined' ? '' : (new URLSearchParams(window.location.search).get('q') ?? '').slice(0, 100);
     if (initial) { setQuery(initial); setApplied(initial); }
     const v = new URLSearchParams(window.location.search).get('view');
-    if (v === 'native' || v === 'external') setView(v);
+    if (v === 'native' || v === 'external' || v === 'saved') setView(v);
     void fetchPage(null, false, '', initial);
     api<Category[]>('/api/v1/project-categories').then(setCategories).catch(() => setCategories([]));
   }, [token, fetchPage]);
@@ -120,15 +145,33 @@ export default function ProjectsPage() {
           </form>
           {token && (
             <div className="ws-role" role="group" aria-label="Show" style={{ maxWidth: 460, margin: '4px 0 14px' }}>
-              {([['all', 'All'], ['native', 'Native projects'], ['external', 'External opportunities']] as const).map(([v, label]) => (
+              {([['all', 'All'], ['native', 'Native projects'], ['external', 'External opportunities'], ['saved', `Saved${saved && saved.length ? ` (${saved.length})` : ''}`]] as const).map(([v, label]) => (
                 <button key={v} type="button" aria-pressed={view === v} onClick={() => setView(v)}>{label}</button>
               ))}
             </div>
           )}
-          {token && view !== 'native' && <ExternalOpportunities query={applied} />}
-          {view !== 'external' && <h3 style={{ marginTop: 18 }}>Native projects <span className="muted small">posted by registered clients on this marketplace</span></h3>}
+          {token && view === 'saved' && (
+            <section aria-labelledby="saved-heading">
+              <h3 id="saved-heading">Saved projects</h3>
+              {saved === null && <p className="muted">Saving projects is not available yet.</p>}
+              {saved && saved.length === 0 && <p className="empty">Nothing saved yet. Use “Save” on a project to keep it here; its closing date appears on your calendar.</p>}
+              {saved?.map((p) => (
+                <article className="card item" key={p.id}>
+                  <div className="row between"><b>{p.title}</b><span className={`badge${p.open ? ' native' : ''}`}>{p.open ? 'Taking proposals' : 'No longer open'}</span></div>
+                  <p className="muted">{p.client_name} · {formatBudget(p.budget_min_minor, p.budget_max_minor, p.currency, p.budget_model)} · {p.deadline ? `Deadline ${p.deadline}` : 'No deadline set'}{p.closes_at ? ` · closes ${p.closes_at.slice(0, 10)}` : ''}</p>
+                  <p>{p.outcome}</p>
+                  <div className="row">
+                    {p.open && <button className="btn primary" type="button" onClick={() => { setView('native'); setOpen(p.id); setProposing(p.id); }}>Send a proposal</button>}
+                    <button className="btn" type="button" onClick={() => void toggleSave(p.id)}>Remove</button>
+                  </div>
+                </article>
+              ))}
+            </section>
+          )}
+          {token && (view === 'all' || view === 'external') && <ExternalOpportunities query={applied} />}
+          {(view === 'all' || view === 'native') && <h3 style={{ marginTop: 18 }}>Native projects <span className="muted small">posted by registered clients on this marketplace</span></h3>}
 
-          {view !== 'external' && <>
+          {(view === 'all' || view === 'native') && <>
           {error && <p className="error" role="alert">{error}</p>}
           {loading && items.length === 0 && <p className="muted">Loading projects…</p>}
           {!loading && !error && items.length === 0 && <p className="empty">No published projects match yet.</p>}
@@ -137,7 +180,10 @@ export default function ProjectsPage() {
             <article className="card item" key={p.id}>
               <div className="row between">
                 <b>{p.title}</b>
-                <span className="row" style={{ gap: 6 }}><span className="badge native">Native project</span><span className="badge">{categories.find((c) => c.slug === p.category_slug)?.name ?? p.category_slug}</span></span>
+                <span className="row" style={{ gap: 6 }}>
+                  <span className="badge native">Native project</span><span className="badge">{categories.find((c) => c.slug === p.category_slug)?.name ?? p.category_slug}</span>
+                  {token && saved !== null && <button className="btn" type="button" aria-pressed={savedIds.has(p.id)} onClick={() => void toggleSave(p.id)}>{savedIds.has(p.id) ? 'Saved' : 'Save'}</button>}
+                </span>
               </div>
               <p className="muted">{p.client_name} · {formatBudget(p.budget_min_minor, p.budget_max_minor, p.currency, p.budget_model)} · {p.deadline ? `Deadline ${p.deadline}` : 'No deadline set'}</p>
               <p>{p.outcome}</p>

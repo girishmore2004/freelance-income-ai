@@ -1388,6 +1388,40 @@ class ListingProposalVersion(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
 
 
+class SavedListing(Base):
+    """A freelancer's saved native project (migration 0068)."""
+    __tablename__ = "saved_listings"
+    __table_args__ = (UniqueConstraint("user_id", "listing_id", name="uq_saved_listing"), Index("ix_saved_listings_user", "user_id", "created_at"))
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    listing_id: Mapped[str] = mapped_column(ForeignKey("project_listings.id", ondelete="CASCADE"), nullable=False)
+    note: Mapped[str] = mapped_column(String(300), nullable=False, default="", server_default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
+
+class SupportTicket(Base):
+    """A Contact-page or in-app support message handled by staff (migration 0068)."""
+    __tablename__ = "support_tickets"
+    __table_args__ = (
+        CheckConstraint("topic IN ('account', 'payments', 'project', 'safety', 'business', 'other')", name="ck_support_tickets_topic"),
+        CheckConstraint("status IN ('open', 'resolved')", name="ck_support_tickets_status"),
+        Index("ix_support_tickets_status", "status", "created_at"),
+        Index("ix_support_tickets_user", "user_id", "created_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, default="", server_default="")
+    name: Mapped[str] = mapped_column(String(120), nullable=False, default="", server_default="")
+    topic: Mapped[str] = mapped_column(String(30), nullable=False)
+    subject: Mapped[str] = mapped_column(String(160), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="open", server_default="open")
+    resolution_note: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    resolved_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
+
 class Contract(Base):
     """An offer/agreement between a client organisation and a freelancer (migration 0053)."""
     __tablename__ = "contracts"

@@ -17,21 +17,21 @@ type NavItem = { href: string; label: string; match?: string[] };
 type NavGroup = { label: string; items: NavItem[] };
 
 /** Paths that never get the workspace frame (public website and join links). `/` is the public homepage for visitors and the external-opportunity dashboard once signed in. */
-const NO_FRAME = new Set(['/how-it-works', '/pricing', '/safety', '/help', '/join']);
+const NO_FRAME = new Set(['/how-it-works', '/pricing', '/safety', '/help', '/join', '/about']);
 
 const FREELANCER: NavGroup[] = [
-  { label: 'Home', items: [{ href: '/workspace', label: 'Overview' }, { href: '/agent', label: 'Next actions' }, { href: '/analytics', label: 'Analytics' }] },
-  { label: 'Find work', items: [{ href: '/projects', label: 'Find work' }, { href: '/', label: 'Proposals and applications' }] },
+  { label: 'Home', items: [{ href: '/workspace', label: 'Overview' }, { href: '/agent', label: 'Next actions' }, { href: '/calendar', label: 'Calendar' }, { href: '/analytics', label: 'Analytics' }] },
+  { label: 'Find work', items: [{ href: '/projects', label: 'Find work' }, { href: '/projects?view=saved', label: 'Saved projects' }, { href: '/', label: 'Proposals and applications' }] },
   { label: 'Work', items: [{ href: '/contracts', label: 'Offers and contracts' }, { href: '/earnings', label: 'Earnings and payouts' }] },
   { label: 'AI', items: [{ href: '/ai-agents', label: 'AI agent centre' }, { href: '/coach', label: 'Business coach' }] },
 ];
 const CLIENT: NavGroup[] = [
-  { label: 'Home', items: [{ href: '/workspace', label: 'Overview' }, { href: '/agent', label: 'Next actions' }, { href: '/analytics', label: 'Analytics' }] },
+  { label: 'Home', items: [{ href: '/workspace', label: 'Overview' }, { href: '/agent', label: 'Next actions' }, { href: '/calendar', label: 'Calendar' }, { href: '/analytics', label: 'Analytics' }] },
   { label: 'Hiring', items: [{ href: '/client/projects', label: 'Projects and proposals' }, { href: '/freelancers', label: 'Find freelancers' }] },
   { label: 'Work', items: [{ href: '/contracts', label: 'Contracts and deliveries' }] },
   { label: 'AI', items: [{ href: '/ai-agents', label: 'AI agent centre' }] },
 ];
-const ACCOUNT: NavGroup = { label: 'Account', items: [{ href: '/notifications', label: 'Notifications' }, { href: '/account', label: 'Account and team' }, { href: '/security', label: 'Security' }] };
+const ACCOUNT: NavGroup = { label: 'Account', items: [{ href: '/notifications', label: 'Notifications' }, { href: '/account', label: 'Account and team' }, { href: '/security', label: 'Security' }, { href: '/contact', label: 'Help and support' }] };
 const STAFF: NavGroup = { label: 'Staff', items: [{ href: '/admin', label: 'Admin' }, { href: '/finance', label: 'Finance' }] };
 
 function isActive(path: string, href: string): boolean {

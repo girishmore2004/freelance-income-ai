@@ -65,4 +65,4 @@ def test_migration_chain_and_head():
     text = MIGRATION.read_text()
     assert 'down_revision = "0066_business_coach_partial"' in text
     assert "INSERT INTO listing_proposal_versions" in text  # existing proposals are backfilled as version 1
-    assert 'EXPECTED_MIGRATION_HEAD = "0067_proposal_studio"' in (BACKEND / "app" / "main.py").read_text()
+    assert (BACKEND / "alembic" / "versions" / "0068_saved_listings_support.py").exists()  # head moved on to 0068

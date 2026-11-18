@@ -233,6 +233,8 @@ export function PublicHome({ signIn }: { signIn: ReactNode }) {
           <a href="/pricing">Pricing</a>
           <a href="/safety">Safety</a>
           <a href="/help">Help</a>
+          <a href="/about">About</a>
+          <a href="/contact">Contact</a>
         </div>
       </footer>
     </div>

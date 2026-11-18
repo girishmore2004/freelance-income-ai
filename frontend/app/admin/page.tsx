@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ApiError, api, useSessionToken } from '@/lib/api-client';
 import { formatBudget } from '@/lib/listing-format';
 import { TrustCases } from './trust-cases';
-import { AuditLogPanel, HealthPanel, UsersPanel } from './staff-tools';
+import { AuditLogPanel, HealthPanel, SupportPanel, UsersPanel } from './staff-tools';
 
 /**
  * Staff admin (moderator/admin). Moderation queue for held listings, user
@@ -151,6 +151,7 @@ export default function AdminPage() {
         </section>
       )}
 
+      {overview && <SupportPanel />}
       {overview && <UsersPanel />}
       {overview?.is_admin && <AuditLogPanel />}
       {overview?.is_admin && <HealthPanel />}

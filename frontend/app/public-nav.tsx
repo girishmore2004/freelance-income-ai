@@ -9,6 +9,8 @@ export function PublicNav() {
       <a className="link" href="/pricing">Pricing</a>
       <a className="link" href="/safety">Safety</a>
       <a className="link" href="/help">Help</a>
+      <a className="link" href="/about">About</a>
+      <a className="link" href="/contact">Contact</a>
     </nav>
   );
 }
