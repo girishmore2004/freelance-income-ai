@@ -1,4 +1,5 @@
 'use client';
+import { useMode } from '@/lib/mode';
 import { useCallback, useEffect, useState } from 'react';
 import { NotificationLink } from '../notification-link';
 import { ApiError, api, useSessionToken } from '@/lib/api-client';
@@ -10,6 +11,7 @@ import { FeeEstimate } from './fee-estimate';
 import { PaymentsPanel } from './payments-panel';
 import { DisputePanel } from './dispute-panel';
 import { HandoverPanel, TasksPanel, TimelinePanel } from './tasks-panel';
+import { HoursPanel } from './hours-panel';
 import { HireAgain } from './hire-again';
 import { defaultTab, tabsFor, type ContractTab } from '@/lib/contract-tabs';
 
@@ -30,6 +32,11 @@ type Detail = Summary & {
   organization_id?: string; freelancer_user_id?: string;
 };
 
+/** Hourly contracts (U19) are paid per approved week. */
+function isHourly(d: { terms?: { billing?: { type: string } } }): boolean {
+  return d.terms?.billing?.type === 'hourly';
+}
+
 function messageOf(e: unknown): string {
   return e instanceof Error ? e.message : 'Something went wrong. Please try again.';
 }
@@ -40,13 +47,14 @@ function when(value: string | null): string {
 
 export default function ContractsPage() {
   const [token] = useSessionToken();
+  const mode = useMode();
   const [items, setItems] = useState<Summary[]>([]);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [changing, setChanging] = useState(false);
   const [tab, setTab] = useState<ContractTab>('agreement');
   // A status change can remove the open tab (an offer withdrawn, say): fall back to the agreement.
   useEffect(() => {
-    if (detail && !tabsFor(detail.status).some((x) => x.key === tab)) setTab('agreement');
+    if (detail && !tabsFor(detail.status, isHourly(detail)).some((x) => x.key === tab)) setTab('agreement');
   }, [detail, tab]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -83,7 +91,7 @@ export default function ContractsPage() {
     try {
       const d = await api<Detail>(`/api/v1/contracts/${id}`);
       setDetail(d);
-      setTab(defaultTab(d.status));
+      setTab(defaultTab(d.status, isHourly(d)));
     } catch (e) {
       setError(messageOf(e));
     }
@@ -113,6 +121,9 @@ export default function ContractsPage() {
   }
 
   const t = detail?.terms;
+  // One side at a time (Freelancer / Client switch). A contract opened by link stays visible.
+  const shownItems = items.filter((c) => c.party === mode || c.id === detail?.id);
+  const hiddenCount = items.length - shownItems.length;
   return (
     <main className="shell">
       <div className="row between">
@@ -127,13 +138,14 @@ export default function ContractsPage() {
       {loading && <p className="muted">Loading…</p>}
       {!closed && !loading && items.length === 0 && <p className="empty">No contracts yet. Offers you send or receive appear here.</p>}
 
-      {items.map((c) => (
+      {hiddenCount > 0 && <p className="muted small">{hiddenCount} contract{hiddenCount === 1 ? '' : 's'} where you are the {mode === 'client' ? 'freelancer' : 'client'}: switch to {mode === 'client' ? 'Freelancer' : 'Client'} in the sidebar to see {hiddenCount === 1 ? 'it' : 'them'}.</p>}
+      {shownItems.map((c) => (
         <div className="card item" key={c.id}>
           <div className="row between">
             <b>{c.terms.title}</b>
             <span className="badge">{CONTRACT_LABELS[c.status] ?? c.status} · v{c.current_version}</span>
           </div>
-          <p className="muted">{c.party === 'client' ? 'You are the client' : `Client: ${c.client_name}`} · {formatMinor(c.terms.total_minor, c.terms.currency)}</p>
+          <p className="muted">{c.party === 'client' ? 'You are the client' : `Client: ${c.client_name}`} · {c.terms.billing?.type === 'hourly' ? `${formatMinor(c.terms.billing.hourly_rate_minor, c.terms.currency)}/hour` : formatMinor(c.terms.total_minor, c.terms.currency)}</p>
           <button className="btn" aria-expanded={detail?.id === c.id} onClick={() => (detail?.id === c.id ? setDetail(null) : void open(c.id))}>
             {detail?.id === c.id ? 'Hide' : 'Open'}
           </button>
@@ -149,7 +161,7 @@ export default function ContractsPage() {
               )}
               <p className="muted">{detail.funding.message}</p>
               <div className="tabs" role="tablist" aria-label="Contract sections">
-                {tabsFor(detail.status).map((tb) => (
+                {tabsFor(detail.status, isHourly(detail)).map((tb) => (
                   <button key={tb.key} type="button" role="tab" id={`tab-${detail.id}-${tb.key}`} aria-selected={tab === tb.key} aria-controls={`panel-${detail.id}-${tb.key}`} onClick={() => setTab(tb.key)}>{tb.label}</button>
                 ))}
               </div>
@@ -157,6 +169,9 @@ export default function ContractsPage() {
                 <div role="tabpanel" id={`panel-${detail.id}-agreement`} aria-labelledby={`tab-${detail.id}-agreement`}>
               {t.scope && <p>{t.scope}</p>}
               {t.deliverables.length > 0 && <><b>Deliverables</b><ul>{t.deliverables.map((d) => <li key={d}>{d}</li>)}</ul></>}
+              {t.billing?.type === 'hourly' ? (
+                <p><b>Hourly:</b> {formatMinor(t.billing.hourly_rate_minor, t.currency)} an hour, up to {t.billing.weekly_limit_hours} hours a week (at most {formatMinor(t.total_minor, t.currency)} a week). Paid per approved week.</p>
+              ) : (
               <table>
                 <caption>Milestones</caption>
                 <thead><tr><th scope="col">Milestone</th><th scope="col">Amount</th><th scope="col">Due</th></tr></thead>
@@ -165,13 +180,14 @@ export default function ContractsPage() {
                   <tr><th scope="row">Total</th><td><b>{formatMinor(t.total_minor, t.currency)}</b></td><td /></tr>
                 </tbody>
               </table>
+              )}
               <p className="muted">Revision rounds: {t.revision_rounds}</p>
               {t.acceptance_criteria.length > 0 && <><b>Acceptance criteria</b><ul>{t.acceptance_criteria.map((a) => <li key={a}>{a}</li>)}</ul></>}
               {t.ownership_terms && <p className="muted">Ownership: {t.ownership_terms}</p>}
               <p className="muted">Client accepted: {when(t.client_accepted_at)} · Freelancer accepted: {when(t.freelancer_accepted_at)}</p>
               {detail.status === 'active' && <p className="success">Both parties accepted version {t.version}.</p>}
-              {detail.status === 'completed' && <p className="success">All milestones approved. This contract is completed.</p>}
-              <FeeEstimate amountMinor={t.total_minor} currency={t.currency} party={detail.party} />
+              {detail.status === 'completed' && <p className="success">{isHourly(detail) ? 'This hourly contract has ended.' : 'All milestones approved. This contract is completed.'}</p>}
+              <FeeEstimate amountMinor={t.billing?.type === 'hourly' ? t.billing.hourly_rate_minor : t.total_minor} currency={t.currency} party={detail.party} />
 
               <div className="row">
                 {detail.allowed_actions.includes('accept') && (
@@ -188,6 +204,7 @@ export default function ContractsPage() {
               {changing && (
                 <TermsForm
                   initial={t}
+                  lockBilling={detail.status === 'active'}
                   submitLabel="Send proposed terms"
                   onCancel={() => setChanging(false)}
                   onSubmit={async (terms) => {
@@ -224,6 +241,11 @@ export default function ContractsPage() {
                 />
               )}
 
+                </div>
+              )}
+              {tab === 'hours' && (
+                <div role="tabpanel" id={`panel-${detail.id}-hours`} aria-labelledby={`tab-${detail.id}-hours`}>
+                  <HoursPanel key={`hours-${detail.id}-${detail.status}`} contractId={detail.id} onEnded={() => { void load(); void open(detail.id); }} />
                 </div>
               )}
               {tab === 'tasks' && (

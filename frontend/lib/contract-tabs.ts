@@ -3,11 +3,12 @@
  * apply to a contract in a given status. Pure, unit-tested.
  */
 
-export type ContractTab = 'agreement' | 'delivery' | 'tasks' | 'timeline' | 'files' | 'messages' | 'payments' | 'disputes' | 'handover' | 'reviews' | 'activity';
+export type ContractTab = 'agreement' | 'delivery' | 'hours' | 'tasks' | 'timeline' | 'files' | 'messages' | 'payments' | 'disputes' | 'handover' | 'reviews' | 'activity';
 
 export const CONTRACT_TABS: Array<{ key: ContractTab; label: string; statuses: string[] }> = [
   { key: 'agreement', label: 'Agreement', statuses: ['offered', 'active', 'completed', 'declined', 'withdrawn', 'cancelled'] },
   { key: 'delivery', label: 'Milestones and delivery', statuses: ['offered', 'active', 'completed'] },
+  { key: 'hours', label: 'Hours', statuses: ['offered', 'active', 'completed'] },
   { key: 'tasks', label: 'Tasks', statuses: ['active', 'completed'] },
   { key: 'timeline', label: 'Timeline', statuses: ['active', 'completed'] },
   { key: 'files', label: 'Files', statuses: ['offered', 'active', 'completed'] },
@@ -19,13 +20,16 @@ export const CONTRACT_TABS: Array<{ key: ContractTab; label: string; statuses: s
   { key: 'activity', label: 'Activity', statuses: ['offered', 'active', 'completed'] },
 ];
 
-export function tabsFor(status: string): Array<{ key: ContractTab; label: string }> {
-  return CONTRACT_TABS.filter((t) => t.statuses.includes(status)).map(({ key, label }) => ({ key, label }));
+/** Hourly contracts (U19) are paid per approved week: an Hours tab replaces milestones and delivery. */
+export function tabsFor(status: string, hourly = false): Array<{ key: ContractTab; label: string }> {
+  return CONTRACT_TABS
+    .filter((t) => t.statuses.includes(status) && (hourly ? t.key !== 'delivery' : t.key !== 'hours'))
+    .map(({ key, label }) => ({ key, label }));
 }
 
 /** Where a contract opens: the terms while offered, the work while active, reviews once completed. */
-export function defaultTab(status: string): ContractTab {
-  if (status === 'active') return 'delivery';
+export function defaultTab(status: string, hourly = false): ContractTab {
+  if (status === 'active') return hourly ? 'hours' : 'delivery';
   if (status === 'completed') return 'reviews';
   return 'agreement';
 }

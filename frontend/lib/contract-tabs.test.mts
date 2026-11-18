@@ -16,3 +16,12 @@ test('a contract opens on the tab that needs attention', () => {
   assert.equal(defaultTab('completed'), 'reviews');
   assert.equal(defaultTab('withdrawn'), 'agreement');
 });
+
+test('hourly contracts show Hours instead of milestones', () => {
+  const keys = tabsFor('active', true).map((t) => t.key);
+  assert.ok(keys.includes('hours'));
+  assert.ok(!keys.includes('delivery'));
+  assert.ok(!tabsFor('active').map((t) => t.key).includes('hours'));
+  assert.equal(defaultTab('active', true), 'hours');
+  assert.equal(defaultTab('completed', true), 'reviews');
+});

@@ -116,6 +116,14 @@ export function ProposalsPanel({ listingId, brief, canManage }: { listingId: str
   }
 
   function initialTerms(p: Proposal): Terms {
+    // An hourly proposal's price is a rate: the offer starts as hourly billing (U19).
+    if (p.budget_model === 'hourly') {
+      return {
+        title: brief.title, scope: '', deliverables: brief.deliverables, milestones: [], revision_rounds: brief.revision_rounds,
+        acceptance_criteria: brief.acceptance_criteria, ownership_terms: brief.ownership_notes,
+        billing: { type: 'hourly', hourly_rate_minor: p.price_minor, weekly_limit_hours: 20 },
+      };
+    }
     if (suggested) return suggested.terms;
     return {
       title: brief.title,

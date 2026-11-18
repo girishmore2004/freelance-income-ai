@@ -11,6 +11,8 @@ export type Discussion = {
 };
 export type InboxThread = {
   kind: 'contract' | 'proposal' | 'external'; id: string; title: string; last_message: string; last_at: string; from_other_side: boolean; href: string;
+  /** Which side the thread belongs to (5.85.0); absent from older API versions. */
+  side?: 'freelancer' | 'client';
 };
 
 export const INTERVIEW_LABELS: Record<string, string> = {

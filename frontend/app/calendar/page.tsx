@@ -1,4 +1,5 @@
 'use client';
+import { useMode } from '@/lib/mode';
 import { useCallback, useEffect, useState } from 'react';
 import { api, useSessionToken } from '@/lib/api-client';
 import { TYPE_LABELS, groupByDay, shiftDays, type CalendarEvent } from '@/lib/calendar';
@@ -17,7 +18,10 @@ export default function CalendarPage() {
   const [token] = useSessionToken();
   const [from, setFrom] = useState<string | null>(null);
   const [data, setData] = useState<{ from: string; to: string; today: string; events: CalendarEvent[] } | null>(null);
+  const mode = useMode();
+  // The active side (Freelancer / Client switch) decides what shows first; Everything stays one click away.
   const [filter, setFilter] = useState<Filter>('all');
+  useEffect(() => { setFilter(mode); }, [mode]);
   const [error, setError] = useState('');
 
   const load = useCallback(async (start: string | null) => {

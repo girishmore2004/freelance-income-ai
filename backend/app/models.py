@@ -1586,6 +1586,48 @@ class ContractHandoverItem(Base):
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class ContractTimesheet(Base):
+    """One ISO week of an hourly contract (migration 0076)."""
+    __tablename__ = "contract_timesheets"
+    __table_args__ = (
+        CheckConstraint("status IN ('open', 'submitted', 'approved', 'paid')", name="ck_timesheets_status"),
+        CheckConstraint("minutes >= 0 AND rate_minor > 0 AND (amount_minor IS NULL OR amount_minor >= 0)", name="ck_timesheets_amounts"),
+        UniqueConstraint("contract_id", "week_start", name="uq_timesheets_week"),
+        Index("ix_timesheets_status", "status", "submitted_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    contract_id: Mapped[str] = mapped_column(ForeignKey("contracts.id", ondelete="RESTRICT"), nullable=False)
+    week_start: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="open", server_default="open")
+    minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    rate_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    amount_minor: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    client_note: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    decided_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
+
+class ContractTimeEntry(Base):
+    """Work logged by the freelancer on an hourly contract (migration 0076)."""
+    __tablename__ = "contract_time_entries"
+    __table_args__ = (
+        CheckConstraint("minutes BETWEEN 1 AND 1440", name="ck_time_entries_minutes"),
+        Index("ix_time_entries_sheet", "timesheet_id", "work_date"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    contract_id: Mapped[str] = mapped_column(ForeignKey("contracts.id", ondelete="RESTRICT"), nullable=False)
+    timesheet_id: Mapped[str] = mapped_column(ForeignKey("contract_timesheets.id", ondelete="CASCADE"), nullable=False)
+    work_date: Mapped[date] = mapped_column(Date, nullable=False)
+    minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
+
 class Service(Base):
     """A freelancer's ready-made service with up to three packages (migration 0075)."""
     __tablename__ = "services"
@@ -1738,6 +1780,8 @@ class ContractVersion(Base):
     revision_rounds: Mapped[int] = mapped_column(Integer, nullable=False, default=2, server_default="2")
     acceptance_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
     ownership_terms: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    # 0076: empty = fixed price; hourly = {"type": "hourly", "hourly_rate_minor", "weekly_limit_hours"}.
+    billing_json: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     proposed_by: Mapped[str] = mapped_column(String(20), nullable=False)
     created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
@@ -2020,12 +2064,18 @@ class PaymentIntent(Base):
         CheckConstraint("total_minor = amount_minor + client_fee_minor", name="ck_payment_intents_total"),
         CheckConstraint("milestone_index >= 0 AND milestone_index < 20", name="ck_payment_intents_index"),
         Index("ix_payment_intents_contract", "contract_id", "milestone_index"),
+        # Since 0076 the milestone index covers milestone payments only; hourly weeks have their own.
         Index("uq_payment_intents_open_milestone", "contract_id", "milestone_index", unique=True,
-              postgresql_where=sql_text("status IN ('created', 'funded')"), sqlite_where=sql_text("status IN ('created', 'funded')")),
+              postgresql_where=sql_text("status IN ('created', 'funded') AND timesheet_id IS NULL"),
+              sqlite_where=sql_text("status IN ('created', 'funded') AND timesheet_id IS NULL")),
+        Index("uq_payment_intents_open_timesheet", "timesheet_id", unique=True,
+              postgresql_where=sql_text("status IN ('created', 'funded', 'released') AND timesheet_id IS NOT NULL"),
+              sqlite_where=sql_text("status IN ('created', 'funded', 'released') AND timesheet_id IS NOT NULL")),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
     contract_id: Mapped[str] = mapped_column(ForeignKey("contracts.id", ondelete="RESTRICT"), nullable=False)
     milestone_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    timesheet_id: Mapped[str | None] = mapped_column(ForeignKey("contract_timesheets.id", ondelete="RESTRICT"), nullable=True)
     contract_version: Mapped[int] = mapped_column(Integer, nullable=False)
     amount_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
     client_fee_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)

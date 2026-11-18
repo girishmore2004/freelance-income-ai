@@ -65,6 +65,9 @@ test('the calendar lists overdue items first and filters by side', async ({ page
   await page.goto('/calendar');
   await expect(page.getByRole('region', { name: 'Overdue' }).getByRole('link', { name: 'Cafe site: Design' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Today' }).getByText('Saved project closes')).toBeVisible();
+  // One side at a time: in Freelancer mode the client's dates are hidden until "Everything" is chosen.
+  await expect(page.getByRole('link', { name: 'Menu app' })).toHaveCount(0);
+  await page.getByRole('group', { name: 'Show dates for' }).getByRole('button', { name: 'Everything' }).click();
   await expect(page.getByRole('link', { name: 'Menu app' })).toBeVisible();
   await page.getByRole('group', { name: 'Show dates for' }).getByRole('button', { name: 'My work' }).click();
   await expect(page.getByRole('link', { name: 'Menu app' })).toHaveCount(0);

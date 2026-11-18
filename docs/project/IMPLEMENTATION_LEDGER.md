@@ -105,5 +105,13 @@ Status values: DONE (implemented + tested here) · PARTIAL · BLOCKED · NOT STA
 | Public profile shows projects and services for sale; `/contracts#id` opens the contract | DONE | `public-routes.ts`, `app/freelancers/page.tsx`, `app/contracts/page.tsx` |
 | Fees 5% + 3% (D-5) | WAITING FOR FOUNDER | entered in `/finance` by the founder (audited approval) |
 
+## U19 — Hourly contracts and one side at a time (5.85.0, 2026-11-18)
+| Item | Status | Evidence |
+|---|---|---|
+| Hourly terms in offers and change orders (billing locked once active) | DONE (real PostgreSQL) | `contracts.ts`, `hiring-routes.ts`, `terms-form.tsx`, migration 0076 |
+| Weekly time log, submit, approve/return, pay, end contract | DONE (real PostgreSQL, ledger reconciled) | `timesheet-routes.ts`, `payments.ts`, `timesheets.test.ts`, `app/contracts/hours-panel.tsx`, e2e `hours.spec.ts` |
+| Freelancer / Client switch: one side at a time (sidebar, overview, contracts, inbox, calendar, analytics), page-based switching | DONE | `lib/mode.ts`, `workspace-shell.tsx`, page filters, e2e `mode.spec.ts` |
+| Automatic approval of weeks the client ignores (Upwork approves after 5 days) | NOT BUILT — decision D-22 | explicit approval only |
+
 ## Next exact step
 Decision D-11 decides how the remaining Python-only families are served; meanwhile: final end-to-end review and records. Previously: porting the remaining legacy pages to the Edge API.

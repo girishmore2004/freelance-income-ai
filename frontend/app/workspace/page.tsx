@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import { api, useSessionToken } from '@/lib/api-client';
+import { useMode, type Mode } from '@/lib/mode';
 import { formatMinor } from '@/lib/listing-format';
 
 /**
@@ -21,15 +22,19 @@ type Pending = { mode: string; amount_minor: number; milestones: number };
 type Overview = { as_of: string; metrics: Metrics; goals: Goals; alerts: Alert[]; recommendations: Rec[]; data_policy: string; apply_next?: ApplyNext; deadlines?: Deadline[]; pending_release?: Pending[] };
 type Event = { id: string; event_type: string; detail: string; created_at: string };
 
-const CARDS: Array<[string, string]> = [
-  ['active_contracts_as_freelancer', 'Active contracts (freelancer)'], ['deliveries_awaiting_client', 'Deliveries waiting for clients'],
-  ['active_contracts_as_client', 'Active contracts (client)'], ['deliveries_to_review', 'Deliveries for you to review'],
-  ['month_proposals', 'Proposals this month'], ['pending_proposal_approvals', 'Proposal drafts to approve'],
-  ['open_opportunities', 'Open opportunities'], ['overdue_invoices', 'Overdue invoices'], ['overdue_tasks', 'Overdue tasks'],
-];
+// One side at a time (Freelancer / Client switch): each side sees only its own numbers.
+const CARDS: Record<Mode, Array<[string, string]>> = {
+  freelancer: [
+    ['active_contracts_as_freelancer', 'Active contracts'], ['deliveries_awaiting_client', 'Deliveries waiting for clients'],
+    ['month_proposals', 'Proposals this month'], ['pending_proposal_approvals', 'Proposal drafts to approve'],
+    ['open_opportunities', 'Open opportunities'], ['overdue_invoices', 'Overdue invoices'], ['overdue_tasks', 'Overdue tasks'],
+  ],
+  client: [['active_contracts_as_client', 'Active contracts'], ['deliveries_to_review', 'Deliveries for you to review']],
+};
 
 export default function WorkspacePage() {
   const [token] = useSessionToken();
+  const mode = useMode();
   const [data, setData] = useState<Overview | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
   const [goal, setGoal] = useState<Goals>({ monthly_income_target: 0, weekly_hours_target: 10, monthly_proposals_target: 4, monthly_outreach_target: 10, currency: 'INR' });
@@ -78,6 +83,7 @@ export default function WorkspacePage() {
   const m = data?.metrics ?? {};
   const num = (k: string) => (typeof m[k] === 'number' ? (m[k] as number) : m[k] === null ? '—' : '…');
   const released = (m.released_this_month_minor ?? {}) as Record<string, number>;
+  const deadlines = (data?.deadlines ?? []).filter((d) => !d.side || d.side === mode);
   const paid = (m.paid_this_month_by_currency ?? {}) as Record<string, number>;
   const setNum = (key: keyof Goals) => (e: { target: { value: string } }) => setGoal({ ...goal, [key]: Number(e.target.value) });
 
@@ -91,37 +97,45 @@ export default function WorkspacePage() {
       <div aria-live="polite">{notice && <p className="success">{notice}</p>}{error && <p className="error" role="alert">{error}</p>}</div>
 
       <section className="grid" aria-label="Metrics">
-        {CARDS.map(([key, label]) => <article className="card" key={key}><small className="muted">{label}</small><h2>{num(key)}</h2></article>)}
+        {CARDS[mode].map(([key, label]) => <article className="card" key={key}><small className="muted">{label}</small><h2>{num(key)}</h2></article>)}
       </section>
 
       <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', marginTop: 14 }}>
+        {mode === 'client' ? (
+        <section className="card" aria-labelledby="hire-heading">
+          <h2 id="hire-heading">Hiring</h2>
+          <p><a className="link" href="/client/projects">Post a project or review proposals</a></p>
+          <p><a className="link" href="/freelancers">Find freelancers</a> · <a className="link" href="/services">Buy a service</a></p>
+        </section>
+        ) : (
         <section className="card" aria-labelledby="apply-heading">
           <h2 id="apply-heading">Apply next</h2>
           {(data?.apply_next?.invitations ?? []).map((i) => <p key={i.listing_id}><span className="badge native">Invitation</span> <a className="link" href="/projects">{i.title}</a></p>)}
           {(data?.apply_next?.external ?? []).map((o) => <p key={o.id}><span className="badge external">External</span> <a className="link" href="/projects?view=external">{o.title}</a> <span className="muted small">{o.match_score}/100</span></p>)}
           {(data?.apply_next?.invitations ?? []).length + (data?.apply_next?.external ?? []).length === 0 && <p className="muted">No new matches or invitations. <a className="link" href="/projects">Find work</a></p>}
         </section>
+        )}
         <section className="card" aria-labelledby="deadline-heading">
           <h2 id="deadline-heading">Upcoming deadlines</h2>
-          {(data?.deadlines ?? []).length === 0 ? <p className="muted">No milestone due in the next two weeks.</p> : (
-            <ul>{(data?.deadlines ?? []).map((d) => <li key={`${d.contract_id}:${d.milestone}`}><a className="link" href={`/contracts#${d.contract_id}`}>{d.title}</a> — {d.milestone_title} · <span className={d.overdue ? 'error' : 'muted'}>{d.overdue ? 'overdue since' : 'due'} {d.due_date}</span></li>)}</ul>
+          {deadlines.length === 0 ? <p className="muted">No milestone due in the next two weeks.</p> : (
+            <ul>{deadlines.map((d) => <li key={`${d.contract_id}:${d.milestone}`}><a className="link" href={`/contracts#${d.contract_id}`}>{d.title}</a> — {d.milestone_title} · <span className={d.overdue ? 'error' : 'muted'}>{d.overdue ? 'overdue since' : 'due'} {d.due_date}</span></li>)}</ul>
           )}
         </section>
-        <section className="card" aria-labelledby="pending-heading">
+        {mode === 'freelancer' && <section className="card" aria-labelledby="pending-heading">
           <h2 id="pending-heading">Waiting for release</h2>
           {(data?.pending_release ?? []).length === 0 ? <p className="muted">No funded milestones waiting for approval.</p> : (data?.pending_release ?? []).map((p) => (
             <p key={p.mode}>{formatMinor(p.amount_minor, 'INR')} across {p.milestones} funded milestone{p.milestones === 1 ? '' : 's'}{p.mode === 'sandbox' ? ' (test mode)' : ''} — released when the client approves.</p>
           ))}
-        </section>
+        </section>}
       </div>
 
-      <section className="card">
+      {mode === 'freelancer' && <section className="card">
         <h2>Earnings this month</h2>
         {Object.keys(released).length === 0 && Object.keys(paid).length === 0 && <p className="muted">No released payments or paid invoices recorded this month.</p>}
         {Object.entries(released).map(([mode, minor]) => <p key={mode}>Released to you on the marketplace: {formatMinor(minor, 'INR')}{mode === 'sandbox' ? ' (test mode — not real money)' : ''}</p>)}
         {Object.entries(paid).map(([currency, amount]) => <p key={currency}>Invoices marked paid: {currency} {amount.toLocaleString('en-IN')}</p>)}
         <p className="muted">Proposals this month: {num('month_proposals')} / target {goal.monthly_proposals_target}</p>
-      </section>
+      </section>}
 
       <section className="card">
         <h2>Needs attention</h2>

@@ -1,4 +1,5 @@
 'use client';
+import { useMode } from '@/lib/mode';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api, useSessionToken } from '@/lib/api-client';
 import { THREAD_KIND_LABELS, inboxThreads, needsReplyCount, type InboxThread } from '@/lib/discussion';
@@ -17,6 +18,7 @@ export default function InboxPage() {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
   const [q, setQ] = useState('');
+  const mode = useMode();
   const [filter, setFilter] = useState<'all' | 'waiting'>('all');
   const [open, setOpen] = useState<string | null>(null);
 
@@ -45,8 +47,10 @@ export default function InboxPage() {
 
   if (!token) return <main className="shell"><div className="card"><h2>Inbox</h2><p className="muted">Sign in first to see your messages.</p><a className="btn" href="/">Go to sign in</a></div></main>;
 
-  const waiting = needsReplyCount(threads);
-  const shown = filter === 'waiting' ? threads.filter((t) => t.from_other_side) : threads;
+  const waiting = needsReplyCount(threads.filter((t) => !t.side || t.side === mode));
+  // Only the active side's threads (Freelancer / Client switch); older replies without a side show on both.
+  const mine = threads.filter((t) => !t.side || t.side === mode);
+  const shown = filter === 'waiting' ? mine.filter((t) => t.from_other_side) : mine;
   return (
     <main className="shell">
       <h2>Inbox</h2>

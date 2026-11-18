@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { api, useSessionToken } from '@/lib/api-client';
 import { routeCommand } from '@/lib/command-route';
+import { HOME, modeForPath, readMode, saveMode, type Mode } from '@/lib/mode';
 
 /**
  * One frame for every signed-in page (PRODUCT_EXPERIENCE_SPEC §3, §7, §15–16):
@@ -11,7 +12,6 @@ import { routeCommand } from '@/lib/command-route';
  * that exist are linked: no dead navigation.
  */
 
-type Mode = 'freelancer' | 'client';
 type Me = { id: string; email: string; roles: string[] };
 type NavItem = { href: string; label: string; match?: string[] };
 type NavGroup = { label: string; items: NavItem[] };
@@ -38,23 +38,6 @@ const STAFF: NavGroup = { label: 'Staff', items: [{ href: '/admin', label: 'Admi
 function isActive(path: string, href: string): boolean {
   if (href === '/') return path === '/';
   return path === href || path.startsWith(`${href}/`);
-}
-
-function readMode(): Mode | null {
-  try {
-    const v = localStorage.getItem('fia_mode');
-    return v === 'client' || v === 'freelancer' ? v : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveMode(mode: Mode): void {
-  try {
-    localStorage.setItem('fia_mode', mode);
-  } catch {
-    // Storage unavailable: the choice lasts for this page only.
-  }
 }
 
 export function AppFrame({ children }: { children: ReactNode }) {
@@ -85,9 +68,15 @@ function WorkspaceShell({ path, onSignedOut, children }: { path: string; onSigne
     if (user && typeof user.id === 'string') {
       const roles = Array.isArray(user.roles) ? user.roles : [];
       setMe({ id: user.id, email: String(user.email ?? ''), roles });
+      const canBeClient = roles.includes('client');
+      const canBeFreelancer = roles.includes('freelancer') || !canBeClient;
+      const allowed = (m: Mode | null): m is Mode => (m === 'client' ? canBeClient : m === 'freelancer' ? canBeFreelancer : false);
+      // A page that belongs to one side switches to it; otherwise the last choice; otherwise the account's side.
+      const pageMode = modeForPath(path, window.location.search);
       const saved = readMode();
-      const preferred: Mode = path.startsWith('/client') ? 'client' : saved ?? (roles.includes('freelancer') || !roles.includes('client') ? 'freelancer' : 'client');
-      setMode(preferred === 'client' && !roles.includes('client') ? 'freelancer' : preferred);
+      const next: Mode = allowed(pageMode) ? pageMode : allowed(saved) ? saved : canBeFreelancer ? 'freelancer' : 'client';
+      setMode(next);
+      if (next !== saved) saveMode(next);
     }
     if (count && typeof count.unread === 'number') setUnread(count.unread);
     if (plan && plan.usage && plan.limits && typeof plan.usage.today === 'number') setUsage({ today: plan.usage.today, daily: plan.limits.daily });
@@ -116,8 +105,12 @@ function WorkspaceShell({ path, onSignedOut, children }: { path: string; onSigne
   const initials = (me?.email ?? '?').slice(0, 2).toUpperCase();
 
   function switchMode(next: Mode) {
+    if (next === mode) return;
     setMode(next);
     saveMode(next);
+    // Leaving a page of the other side: start at this side's home so nothing is mixed.
+    const pageMode = modeForPath(path, window.location.search);
+    if (pageMode && pageMode !== next) window.location.href = HOME[next];
   }
 
   function submitSearch(e: FormEvent) {

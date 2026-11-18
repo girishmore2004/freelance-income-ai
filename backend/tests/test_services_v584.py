@@ -76,4 +76,5 @@ def test_migration_chain_and_head():
     text = MIGRATION.read_text()
     assert 'down_revision = "0074_profile_projects"' in text
     assert "UPDATE project_categories SET enabled = TRUE" in text
-    assert 'EXPECTED_MIGRATION_HEAD = "0075_services_categories"' in (BACKEND / "app" / "main.py").read_text()
+    # Later migrations move the head; the next one must exist.
+    assert (BACKEND / "alembic" / "versions" / "0076_hourly_contracts.py").exists()

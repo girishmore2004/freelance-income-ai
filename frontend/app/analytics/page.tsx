@@ -1,4 +1,5 @@
 'use client';
+import { useMode } from '@/lib/mode';
 import { Fragment, useCallback, useEffect, useState, type ReactNode } from 'react';
 import { ApiError, api, useSessionToken } from '@/lib/api-client';
 import { formatRate, modeLabel, rupees, sampleNote, type Rate } from '@/lib/analytics-format';
@@ -176,7 +177,10 @@ function PlatformView({ data }: { data: Platform }) {
 
 export default function AnalyticsPage() {
   const [token] = useSessionToken();
+  const mode = useMode();
   const [view, setView] = useState<View>('freelancer');
+  // Follow the Freelancer / Client switch (staff can still open the platform view).
+  useEffect(() => { setView((v) => (v === 'platform' ? v : mode)); }, [mode]);
   const [orgs, setOrgs] = useState<Org[]>([]);
   const [orgId, setOrgId] = useState('');
   const [staff, setStaff] = useState(false);
