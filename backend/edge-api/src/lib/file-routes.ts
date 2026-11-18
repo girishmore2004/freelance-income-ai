@@ -69,7 +69,7 @@ export function bytesMatch(kind: Kind, b: Uint8Array): boolean {
     case "text": {
       if (b.includes(0)) return false;
       try {
-        new TextDecoder("utf-8", { fatal: true }).decode(b);
+        new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(b);
         return true;
       } catch {
         return false;
