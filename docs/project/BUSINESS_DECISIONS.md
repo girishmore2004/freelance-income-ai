@@ -1,6 +1,6 @@
 # Business Decision Register
 
-No founder decisions were found recorded in the repositories or documents. Every item is open; nothing below is approved.
+Founder decisions are marked DECIDED with their date (D-5, D-6, D-20, D-21 on 2026-11-18). Everything else is open or provisional.
 
 | ID | Decision | Status | Blocks | Recommendation / note |
 |---|---|---|---|---|
