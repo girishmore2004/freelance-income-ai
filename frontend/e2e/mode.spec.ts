@@ -28,15 +28,16 @@ test('switching sides changes the sidebar, leaves the other side’s page and fi
   // A client page puts the account in Client mode.
   await page.goto('/client/projects');
   const sidebar = page.getByRole('complementary', { name: 'Workspace navigation' });
-  await expect(sidebar.getByRole('button', { name: 'Client' })).toHaveAttribute('aria-pressed', 'true');
+  const switcher = page.getByRole('group', { name: 'Workspace' });
+  await expect(switcher.getByRole('button', { name: 'Client' })).toHaveAttribute('aria-pressed', 'true');
   await expect(sidebar.getByRole('link', { name: 'Buy a service' })).toBeVisible();
   await expect(sidebar.getByRole('link', { name: 'Find work' })).toHaveCount(0);
   await expect(sidebar.getByRole('link', { name: 'My profile and resume' })).toHaveCount(0);
 
   // Switching to Freelancer leaves the client page for the freelancer home.
-  await sidebar.getByRole('button', { name: 'Freelancer' }).click();
+  await switcher.getByRole('button', { name: 'Freelancer' }).click();
   await expect(page).toHaveURL(/\/workspace$/);
-  await expect(sidebar.getByRole('button', { name: 'Freelancer' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(switcher.getByRole('button', { name: 'Freelancer' })).toHaveAttribute('aria-pressed', 'true');
   await expect(sidebar.getByRole('link', { name: 'Find work' }).first()).toBeVisible();
   await expect(sidebar.getByRole('link', { name: 'Buy a service' })).toHaveCount(0);
 
@@ -45,8 +46,35 @@ test('switching sides changes the sidebar, leaves the other side’s page and fi
   await expect(page.getByText('Logo for Acme')).toBeVisible();
   await expect(page.getByText('Website for my shop')).toHaveCount(0);
   await expect(page.getByText('1 contract where you are the client')).toBeVisible();
-  await sidebar.getByRole('button', { name: 'Client' }).click();
+  await switcher.getByRole('button', { name: 'Client' }).click();
   await expect(page).toHaveURL(/\/contracts$/);
   await expect(page.getByText('Website for my shop')).toBeVisible();
   await expect(page.getByText('Logo for Acme')).toHaveCount(0);
+});
+
+test('staff open the Admin workspace from the switch, and the theme toggle switches to dark mode', async ({ page }) => {
+  await signIn(page);
+  await page.route('**/api/v1/**', async (route: Route) => {
+    const path = new URL(route.request().url()).pathname.replace(/\/+$/, '');
+    const reply = (body: string) => route.fulfill({ status: 200, contentType: 'application/json', body });
+    if (path === '/api/v1/me') return reply(ok({ id: 'a1', roles: ['freelancer', 'admin'] }));
+    return reply(JSON.stringify([]));
+  });
+  await page.goto('/workspace');
+  await expect(page.getByRole('heading', { name: 'Freelancer dashboard' }).or(page.getByText('Freelancer dashboard'))).toBeVisible();
+  const switcher = page.getByRole('group', { name: 'Workspace' });
+  await switcher.getByRole('button', { name: 'Admin' }).click();
+  await expect(page).toHaveURL(/\/admin$/);
+  await expect(switcher.getByRole('button', { name: 'Admin' })).toHaveAttribute('aria-pressed', 'true');
+  const sidebar = page.getByRole('complementary', { name: 'Workspace navigation' });
+  await expect(sidebar.getByRole('link', { name: 'Disputes' })).toBeVisible();
+  await expect(sidebar.getByRole('link', { name: 'Find work' })).toHaveCount(0);
+  await expect(page.locator('html')).toHaveAttribute('data-side', 'admin');
+
+  await page.getByRole('button', { name: 'Switch to dark mode' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await page.getByRole('button', { name: 'Switch to light mode' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
 });

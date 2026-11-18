@@ -23,6 +23,14 @@ export function modeForPath(pathname: string, search = ''): Mode | null {
   return null;
 }
 
+/** The side a link opens (pages, contract links are shared). Pure. */
+export function sideOfHref(href: string | null | undefined): Mode | null {
+  if (!href || !href.startsWith('/')) return null;
+  const [pathAndSearch] = href.split('#');
+  const q = pathAndSearch.indexOf('?');
+  return modeForPath(q < 0 ? pathAndSearch : pathAndSearch.slice(0, q), q < 0 ? '' : pathAndSearch.slice(q));
+}
+
 /** Where a side starts after switching from a page of the other side. */
 export const HOME: Record<Mode, string> = { freelancer: '/workspace', client: '/workspace' };
 

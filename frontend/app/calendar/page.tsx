@@ -12,16 +12,15 @@ import { TYPE_LABELS, groupByDay, shiftDays, type CalendarEvent } from '@/lib/ca
  */
 
 const DAYS = 42;
-type Filter = 'all' | 'freelancer' | 'client';
+type Filter = 'freelancer' | 'client';
 
 export default function CalendarPage() {
   const [token] = useSessionToken();
   const [from, setFrom] = useState<string | null>(null);
   const [data, setData] = useState<{ from: string; to: string; today: string; events: CalendarEvent[] } | null>(null);
   const mode = useMode();
-  // The active side (Freelancer / Client switch) decides what shows first; Everything stays one click away.
-  const [filter, setFilter] = useState<Filter>('all');
-  useEffect(() => { setFilter(mode); }, [mode]);
+  // One side at a time: the Freelancer / Client switch decides which dates show.
+  const filter: Filter = mode;
   const [error, setError] = useState('');
 
   const load = useCallback(async (start: string | null) => {
@@ -40,7 +39,7 @@ export default function CalendarPage() {
 
   if (!token) return <main className="shell"><div className="card"><h2>Calendar</h2><p className="muted">Sign in first to see your dates.</p><a className="btn" href="/">Go to sign in</a></div></main>;
 
-  const events = (data?.events ?? []).filter((e) => filter === 'all' || e.side === filter);
+  const events = (data?.events ?? []).filter((e) => e.side === filter);
   const groups = data ? groupByDay(events, data.today) : [];
   const fmt = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 
@@ -55,11 +54,7 @@ export default function CalendarPage() {
           <button className="btn" type="button" disabled={!data} onClick={() => data && setFrom(shiftDays(data.from, DAYS))}>Later</button>
           {data && <span className="muted">{fmt(data.from)} – {fmt(data.to)}</span>}
         </div>
-        <div className="ws-role" role="group" aria-label="Show dates for" style={{ maxWidth: 360 }}>
-          {([['all', 'Everything'], ['freelancer', 'My work'], ['client', 'My hiring']] as const).map(([k, label]) => (
-            <button key={k} type="button" aria-pressed={filter === k} onClick={() => setFilter(k)}>{label}</button>
-          ))}
-        </div>
+        <span className="badge">{mode === 'client' ? 'Hiring dates' : 'Freelance work dates'}</span>
       </div>
       {error && <p className="error" role="alert">{error}</p>}
       {!data && !error && <p className="muted">Loading…</p>}

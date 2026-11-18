@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { modeForPath } from './mode.ts';
+import { modeForPath, sideOfHref } from './mode.ts';
 
 test('pages belong to one side or are shared', () => {
   assert.equal(modeForPath('/client/projects'), 'client');
@@ -15,4 +15,12 @@ test('pages belong to one side or are shared', () => {
   assert.equal(modeForPath('/contracts'), null);
   assert.equal(modeForPath('/inbox'), null);
   assert.equal(modeForPath('/workspace'), null);
+});
+
+test('links belong to the side of the page they open', () => {
+  assert.equal(sideOfHref('/client/projects#L1'), 'client');
+  assert.equal(sideOfHref('/projects?view=external'), 'freelancer');
+  assert.equal(sideOfHref('/contracts#K1'), null);
+  assert.equal(sideOfHref('https://x.dev'), null);
+  assert.equal(sideOfHref(undefined), null);
 });

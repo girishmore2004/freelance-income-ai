@@ -1,4 +1,5 @@
 'use client';
+import { useMode, sideOfHref } from '@/lib/mode';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, useSessionToken } from '@/lib/api-client';
 
@@ -10,6 +11,7 @@ type Plan = { as_of_date: string; actions: Action[]; total_actionable_records: n
 const LABELS: Record<string, string> = { pipeline: 'Pipeline', delivery: 'Delivery', approval: 'Approvals', communication: 'Communication', finance: 'Finance' };
 
 export default function AgentPlanPage() {
+  const mode = useMode();
   const [token] = useSessionToken();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [error, setError] = useState('');
@@ -36,7 +38,8 @@ export default function AgentPlanPage() {
     for (const a of plan?.actions ?? []) out[a.category] = (out[a.category] ?? 0) + 1;
     return out;
   }, [plan]);
-  const visible = (plan?.actions ?? []).filter((a) => filter === 'all' || a.category === filter);
+  // Only the active side's actions: an action belongs to the side of the page it opens.
+  const visible = (plan?.actions ?? []).filter((a) => filter === 'all' || a.category === filter).filter((a) => { const side = sideOfHref(a.href); return !side || side === mode; });
 
   if (!token) return <main className="shell"><p>Sign in first to see your action plan.</p><a className="btn" href="/">Back to dashboard</a></main>;
   return (

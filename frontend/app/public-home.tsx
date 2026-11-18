@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { api } from '@/lib/api-client';
+import { ThemeToggle } from './theme-toggle';
 
 /**
  * Public homepage for visitors (PRODUCT_EXPERIENCE_SPEC §2). Everything shown
@@ -75,6 +76,7 @@ export function PublicHome({ signIn }: { signIn: ReactNode }) {
             <a href="/pricing">Pricing</a>
           </nav>
           <div className="actions">
+            <ThemeToggle />
             <a className="btn" href="#signin">Log in</a>
             <a className="btn primary" href="#signin">Get started</a>
           </div>

@@ -180,7 +180,11 @@ export default function AnalyticsPage() {
   const mode = useMode();
   const [view, setView] = useState<View>('freelancer');
   // Follow the Freelancer / Client switch (staff can still open the platform view).
-  useEffect(() => { setView((v) => (v === 'platform' ? v : mode)); }, [mode]);
+  // One side at a time: the active side's numbers only. Platform numbers live in the Admin workspace (?view=platform).
+  useEffect(() => {
+    const platform = new URLSearchParams(window.location.search).get('view') === 'platform';
+    setView(platform ? 'platform' : mode);
+  }, [mode]);
   const [orgs, setOrgs] = useState<Org[]>([]);
   const [orgId, setOrgId] = useState('');
   const [staff, setStaff] = useState(false);
@@ -221,25 +225,21 @@ export default function AnalyticsPage() {
 
   if (!token) return <main className="shell"><div className="card"><h2>Analytics</h2><p className="muted">Sign in first to see your numbers.</p><a className="btn" href="/">Go to sign in</a></div></main>;
 
-  const tabs: Array<{ key: View; label: string }> = [
-    { key: 'freelancer', label: 'My freelance business' },
-    ...(orgs.length ? [{ key: 'client' as View, label: 'Hiring and spend' }] : []),
-    ...(staff ? [{ key: 'platform' as View, label: 'Marketplace operations' }] : []),
-  ];
+  const TITLES: Record<View, string> = { freelancer: 'My freelance business', client: 'Hiring and spend', platform: 'Marketplace operations' };
 
   return (
     <main className="shell">
       <div className="row between"><h2>Analytics</h2><a className="link" href="/analytics/planning">Planning tools</a></div>
       <p className="muted">Computed from your records on this platform. Small samples are marked; test-mode payments are labelled and never added to real money.</p>
-      <div className="tabs" role="tablist" aria-label="Analytics views">
-        {tabs.map((t) => <button key={t.key} type="button" role="tab" aria-selected={view === t.key} onClick={() => setView(t.key)}>{t.label}</button>)}
-      </div>
+      <h3>{TITLES[view]}</h3>
+      {view === 'client' && orgs.length === 0 && <p className="empty">Create a client account on the Account page to see hiring numbers.</p>}
+      {view === 'platform' && !staff && <p className="empty">Marketplace numbers are for staff.</p>}
       {view === 'client' && orgs.length > 1 && (
         <div className="field"><label htmlFor="an-org">Client account</label><select id="an-org" value={orgId} onChange={(e) => setOrgId(e.target.value)}>{orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</select></div>
       )}
       {error && <p className="error" role="alert">{error}</p>}
       {loading && <p className="muted">Loading…</p>}
-      <section role="tabpanel" aria-label={tabs.find((t) => t.key === view)?.label}>
+      <section aria-label={TITLES[view]}>
         {view === 'freelancer' && freelancer && <FreelancerView data={freelancer} />}
         {view === 'client' && client && <ClientView data={client} />}
         {view === 'platform' && platform && <PlatformView data={platform} />}

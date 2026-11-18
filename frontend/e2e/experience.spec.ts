@@ -44,10 +44,13 @@ test('signed-in pages get the workspace shell with role-aware navigation, AI usa
   const nav = page.getByRole('complementary', { name: 'Workspace navigation' });
   await expect(nav.getByRole('link', { name: 'Next actions' })).toHaveAttribute('aria-current', 'page');
   await expect(nav.getByRole('link', { name: 'Find work', exact: true })).toBeVisible();
-  await expect(nav.getByRole('link', { name: 'Admin' })).toBeVisible();
+  // Staff get a third workspace on the top-bar switch instead of admin links in the sidebar.
+  const switcher = page.getByRole('group', { name: 'Workspace' });
+  await expect(switcher.getByRole('button', { name: 'Admin' })).toBeVisible();
+  await expect(nav.getByRole('link', { name: 'Admin overview' })).toHaveCount(0);
   await expect(page.getByText('AI today 4/20')).toBeVisible();
   await expect(page.getByRole('link', { name: 'Notifications, 3 unread' })).toBeVisible();
-  await nav.getByRole('button', { name: 'Client' }).click();
+  await switcher.getByRole('button', { name: 'Client' }).click();
   await expect(nav.getByRole('link', { name: 'Projects and proposals' })).toBeVisible();
   await expect(nav.getByRole('link', { name: 'Find work', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Profile menu' }).click();

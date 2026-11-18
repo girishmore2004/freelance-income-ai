@@ -1,4 +1,5 @@
 'use client';
+import { useMode } from '@/lib/mode';
 import { useCallback, useEffect, useState } from 'react';
 import { api, useSessionToken } from '@/lib/api-client';
 import { AskAgent } from './ask-agent';
@@ -37,6 +38,10 @@ const WHERE: Record<string, { href: string; label: string }> = {
 const LEVELS: Record<string, string> = { A0: 'Observe', A1: 'Recommend', A2: 'Draft for your review', A3: 'Act after confirmation', A4: 'Bounded automation' };
 
 export default function AiAgentsPage() {
+  // One side at a time; the full catalogue with switches is in the Admin workspace (?view=admin).
+  const mode = useMode();
+  const [adminView, setAdminView] = useState(false);
+  useEffect(() => { setAdminView(new URLSearchParams(window.location.search).get('view') === 'admin'); }, []);
   const [token] = useSessionToken();
   const [agents, setAgents] = useState<Agent[]>([]);
   const [runs, setRuns] = useState<Run[]>([]);
@@ -107,7 +112,7 @@ export default function AiAgentsPage() {
         </section>
       )}
 
-      {SIDES.map(([side, title]) => {
+      {SIDES.filter(([side]) => adminView || side === mode).map(([side, title]) => {
         const group = agents.filter((a) => a.side === side);
         if (!group.length) return null;
         return (

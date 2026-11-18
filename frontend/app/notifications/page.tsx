@@ -1,12 +1,15 @@
 'use client';
+import { useMode } from '@/lib/mode';
 import { useCallback, useEffect, useState } from 'react';
 import { api, useSessionToken } from '@/lib/api-client';
 
 /** In-app notifications inbox. */
 
-type Item = { id: string; title: string; message: string; kind: string; link: string; read: boolean; created_at: string | null };
+type Item = { id: string; title: string; message: string; kind: string; link: string; read: boolean; created_at: string | null; side?: 'freelancer' | 'client' | null };
 
 export default function NotificationsPage() {
+  // Only the active side's notifications (account-wide ones show on both).
+  const mode = useMode();
   const [token] = useSessionToken();
   const [items, setItems] = useState<Item[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -53,7 +56,7 @@ export default function NotificationsPage() {
       {error && <p className="error" role="alert">{error}</p>}
       {loaded && items.length === 0 && !error && <p className="empty">No notifications yet.</p>}
       <ul aria-label="Notifications">
-        {items.map((n) => (
+        {items.filter((n) => !n.side || n.side === mode).map((n) => (
           <li key={n.id} className="card item">
             <button className="link" onClick={() => void open(n)}><b>{n.read ? '' : '● '}{n.title}</b></button>
             <p className="muted">{n.message}{n.created_at ? ` · ${new Date(n.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}` : ''}</p>

@@ -1,3 +1,5 @@
+import { ThemeToggle } from './theme-toggle';
+
 /** Navigation shared by the public (no-login) pages. */
 export function PublicNav() {
   return (
@@ -12,6 +14,7 @@ export function PublicNav() {
       <a className="link" href="/help">Help</a>
       <a className="link" href="/about">About</a>
       <a className="link" href="/contact">Contact</a>
+      <ThemeToggle />
     </nav>
   );
 }
