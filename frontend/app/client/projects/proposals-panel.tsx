@@ -1,4 +1,5 @@
 'use client';
+import { InterviewPrep } from './interview-prep';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/api-client';
 import { PROPOSAL_LABELS, formatMinor } from '@/lib/listing-format';
@@ -190,7 +191,10 @@ export function ProposalsPanel({ listingId, brief, canManage }: { listingId: str
           <button className="link" type="button" aria-expanded={history === p.id} onClick={() => setHistory(history === p.id ? null : p.id)}>{history === p.id ? 'Hide version history' : 'Version history'}</button>
           {history === p.id && <ProposalHistory proposalId={p.id} currency={p.currency} />}
           {['submitted', 'shortlisted'].includes(p.status) && (
-            <button className="link" type="button" aria-expanded={talk === p.id} onClick={() => setTalk(talk === p.id ? null : p.id)}>{talk === p.id ? 'Hide messages and interviews' : 'Messages and interviews'}</button>
+            <>
+              <button className="link" type="button" aria-expanded={talk === p.id} onClick={() => setTalk(talk === p.id ? null : p.id)}>{talk === p.id ? 'Hide messages and interviews' : 'Messages and interviews'}</button>
+              <InterviewPrep proposalId={p.id} />
+            </>
           )}
           {talk === p.id && <DiscussionPanel proposalId={p.id} />}
           {p.contract_id && <p className="muted">Contract {p.contract_status}. <a className="link" href="/contracts">Open contracts</a></p>}

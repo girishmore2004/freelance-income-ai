@@ -5,6 +5,7 @@ import { PROPOSAL_LABELS, formatMinor, rupeesToMinor } from '@/lib/listing-forma
 import { safeHref } from '@/lib/safe-url';
 import { DiscussionPanel } from '../inbox/discussion-panel';
 import { FeeEstimate } from '../contracts/fee-estimate';
+import { PriceAdvice } from './price-advice';
 import { EMPTY_FORM, buildPayload, formFrom, scopeSummary, type StudioForm, type StudioSections } from '@/lib/proposal-studio';
 
 /**
@@ -184,6 +185,16 @@ export function ProposalForm({ listingId, budgetModel, existing, onDone, onCance
           {err('estimated_days')}
         </div>
       </div>
+      {listingId && budgetModel !== 'hourly' && (
+        <PriceAdvice
+          listingId={listingId}
+          onUse={(rupees, assumptions, exclusions) => {
+            update('price', rupees);
+            const add = (current: string, lines: string[]) => [...current.split('\n').map((l) => l.trim()).filter(Boolean), ...lines.filter((l) => !current.includes(l))].join('\n');
+            setForm((f) => ({ ...f, assumptions: add(f.assumptions, assumptions), exclusions: add(f.exclusions, exclusions) }));
+          }}
+        />
+      )}
 
       <details open={Boolean(existing?.sections)}>
         <summary>Structured sections (recommended): approach, deliverables, milestones, assumptions</summary>
@@ -197,7 +208,7 @@ export function ProposalForm({ listingId, budgetModel, existing, onDone, onCance
         <div className="field"><label htmlFor={`rev-${id}`}>Revision rounds included (optional)</label><input id={`rev-${id}`} type="number" min={0} max={10} value={form.revisions} onChange={(e) => update('revisions', e.target.value)} />{err('sections.revision_rounds')}</div>
         <fieldset>
           <legend>Portfolio evidence (links from your profile only)</legend>
-          {suggested.length === 0 && <p className="muted small">No portfolio links on your profile yet. Add them under Proposals and applications → Profile.</p>}
+          {suggested.length === 0 && <p className="muted small">No portfolio links on your profile yet. Add them on My profile.</p>}
           {suggested.map((url) => (
             <label key={url} className="row" style={{ gap: 6 }}>
               <input type="checkbox" checked={evidenceUrls.has(url)} onChange={(e) => update('evidence', e.target.checked ? [...form.evidence, { url, note: '' }] : form.evidence.filter((x) => x.url !== url))} />

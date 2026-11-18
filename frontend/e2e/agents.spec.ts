@@ -31,11 +31,14 @@ test('the agent catalogue shows autonomy, human gates and honest status; an admi
   await page.goto('/ai-agents');
   await expect(page.getByText('F4 · Proposal Agent')).toBeVisible();
   await expect(page.getByText('Autonomy: A2 (Draft for your review) · Human gate: Hash-bound approval before submission')).toBeVisible();
-  await expect(page.getByText('Blocked (needs payments)')).toBeVisible();
+  // One side at a time: platform agents are listed in the Admin workspace only.
+  await expect(page.getByText('Blocked (needs payments)')).toHaveCount(0);
   await expect(page.getByText('Generated model proposal')).toBeVisible();
   await expect(page.getByText('Your use: 3 runs (1 failed) · AI calls 2 today, 5 this month')).toBeVisible();
   await expect(page.getByRole('link', { name: 'Open: Draft a proposal from an opportunity' })).toHaveAttribute('href', '/projects?view=external');
   await expect(page.getByRole('region', { name: 'Agent overview' })).toContainText('Drafts waiting for my approval1');
+  await page.goto('/ai-agents?view=admin');
+  await expect(page.getByText('Blocked (needs payments)')).toBeVisible();
   await page.getByRole('button', { name: 'Switch off' }).click();
   await expect(page.getByText('Proposal Agent switched off')).toBeVisible();
   await expect(page.getByText('Live · switched off')).toBeVisible();

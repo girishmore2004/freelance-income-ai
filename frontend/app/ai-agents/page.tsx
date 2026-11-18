@@ -1,5 +1,6 @@
 'use client';
 import { useMode } from '@/lib/mode';
+import { AgentHealthPanel } from './health-panel';
 import { useCallback, useEffect, useState } from 'react';
 import { api, useSessionToken } from '@/lib/api-client';
 import { AskAgent } from './ask-agent';
@@ -112,6 +113,7 @@ export default function AiAgentsPage() {
         </section>
       )}
 
+      {adminView && <AgentHealthPanel />}
       {SIDES.filter(([side]) => adminView || side === mode).map(([side, title]) => {
         const group = agents.filter((a) => a.side === side);
         if (!group.length) return null;

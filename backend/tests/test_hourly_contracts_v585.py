@@ -69,4 +69,5 @@ def test_constraints():
 def test_migration_chain_and_head():
     text = (BACKEND / "alembic" / "versions" / "0076_hourly_contracts.py").read_text()
     assert 'down_revision = "0075_services_categories"' in text
-    assert 'EXPECTED_MIGRATION_HEAD = "0076_hourly_contracts"' in (BACKEND / "app" / "main.py").read_text()
+    # Later migrations move the head; the next one must exist.
+    assert (BACKEND / "alembic" / "versions" / "0077_agent_registry_refresh.py").exists()

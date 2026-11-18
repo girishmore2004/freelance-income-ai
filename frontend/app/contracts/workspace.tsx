@@ -1,4 +1,5 @@
 'use client';
+import { DeliveryCheck } from './delivery-check';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ApiError, api } from '@/lib/api-client';
 import { formatMinor, linesToList } from '@/lib/listing-format';
@@ -166,6 +167,7 @@ export function ContractWorkspace({ contractId, onChanged, view = 'delivery' }: 
                     ))}
                   </fieldset>
                 )}
+                <DeliveryCheck contractId={contractId} index={m.index} note={note} links={links} />
                 <div className="row">
                   <button className="btn primary" type="submit" disabled={busy}>Deliver</button>
                   <button className="btn" type="button" onClick={() => setDeliverFor(null)}>Cancel</button>

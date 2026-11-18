@@ -1,6 +1,6 @@
 # Database Migration Status
 
-Chain head: **`0076_hourly_contracts`** (76 revisions, single head — verified by `tests/test_system_diagnostics_v542.py`). Neon production: **0075** (2026-11-18 22:21 IST, workflow "Neon PRODUCTION Database Migrations"); test branch `stage3c-integration-test`: 0073. 0076 to run next on production.
+Chain head: **`0077_agent_registry_refresh`** (77 revisions, single head — verified by `tests/test_system_diagnostics_v542.py`). Neon production: **0075** (2026-11-18 22:21 IST, workflow "Neon PRODUCTION Database Migrations"); test branch `stage3c-integration-test`: 0073. 0076 and 0077 to run next on production.
 
 | Revision | Change | Type | Downgrade |
 |---|---|---|---|
@@ -31,7 +31,7 @@ Chain head: **`0076_hourly_contracts`** (76 revisions, single head — verified 
 ## Safe deployment order
 1. **Back up** Neon (create a branch named `pre-0047-2026-11` from `main` in Neon → Branches). Branch creation is instant and is the rollback point.
 2. Optional dry run: run the migration workflow against the backup branch first.
-3. Run GitHub Action **"Stage 3C Neon migrations"** in `freelance-income-ai` (type the confirmation text). It expects `0076_hourly_contracts`.
+3. Run GitHub Action **"Stage 3C Neon migrations"** in `freelance-income-ai` (type the confirmation text). It expects `0077_agent_registry_refresh`.
 4. Deploy the Edge API (5.73.0 needs 0047–0068; saving projects and support tickets fail until 0068 runs, the calendar works without it; before 0067 the short proposal form still works and Studio sections return `MIGRATION_PENDING` before `marketplace.client_side` is switched on; AI keeps working on Worker limits if 0057 is not applied yet).
 5. Deploy the frontend.
 
@@ -43,7 +43,7 @@ If 0047 stops with "existing rows contain duplicates", nothing was committed: in
 
 ## Verification queries (Neon SQL Editor)
 ```sql
-SELECT version_num FROM alembic_version;                       -- 0076_hourly_contracts
+SELECT version_num FROM alembic_version;                       -- 0077_agent_registry_refresh
 SELECT count(*) FROM listing_proposal_versions;                 -- equals count(*) FROM listing_proposals right after the run
 SELECT slug, enabled FROM project_categories ORDER BY sort_order; -- only website_development = true
 SELECT role, count(*) FROM user_roles GROUP BY role;            -- freelancer = number of users
@@ -60,6 +60,9 @@ Additive: `listing_files` (listing CASCADE, unique R2 key, size > 0, status read
 
 ## 0072_contract_tasks_handover (5.77.0)
 Additive: `contract_tasks` (party/status/source checks, milestone_index ≥ 0, index contract+position) and `contract_handover_items` (kind/status checks). Downgrade drops both. Verify: `SELECT to_regclass('contract_tasks'), to_regclass('contract_handover_items');` → both non-null.
+
+## 0077_agent_registry_refresh (5.88.0)
+Data only. Rows still `planned` change: F5, F8, C4, P3 → `live` (runtime names `pricing_advice`, `delivery_qa`, `interview_prep`, `dispute_evidence`); F7, C7, P5, P7, P9 → `partial`. Payment agents (F10, P2, P6) stay blocked. Downgrade returns exactly these rows to `planned`. Verify: `SELECT code, status FROM agent_definitions WHERE code IN ('F5','F8','C4','P3');` → live.
 
 ## 0076_hourly_contracts (5.85.0)
 Additive. `contract_versions.billing_json` (empty = fixed price, all existing rows); `contract_timesheets` (one per contract and Monday week; status open/submitted/approved/paid; minutes ≥ 0, rate > 0; amount frozen at submission) and `contract_time_entries` (1–1440 minutes, CASCADE with the week). `payment_intents.timesheet_id` (nullable FK); the "one open funding per milestone" partial index now excludes hourly payments, and a new partial unique index allows one open or released payment per week. Downgrade refuses while hourly payments exist; otherwise reverses everything and restores the original index. Before it runs, hourly offers answer `MIGRATION_PENDING` and the Hours routes 503; fixed-price contracts are unaffected. Verify: `SELECT to_regclass('contract_timesheets'), to_regclass('contract_time_entries');` and `\d payment_intents` shows `timesheet_id`.

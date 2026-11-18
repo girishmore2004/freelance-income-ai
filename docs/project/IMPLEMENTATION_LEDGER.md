@@ -113,5 +113,16 @@ Status values: DONE (implemented + tested here) · PARTIAL · BLOCKED · NOT STA
 | Freelancer / Client switch: one side at a time (sidebar, overview, contracts, inbox, calendar, analytics), page-based switching | DONE | `lib/mode.ts`, `workspace-shell.tsx`, page filters, e2e `mode.spec.ts` |
 | Automatic approval of weeks the client ignores (Upwork approves after 5 days) | NOT BUILT — decision D-22 | explicit approval only |
 
+## U20–U21 — One side at a time, themes, simpler flows, agents (5.86.0–5.88.0, 2026-11-18)
+| Item | Status | Evidence |
+|---|---|---|
+| Top-bar Freelancer / Client / Admin switch, Admin workspace sidebar, side colours, per-side notifications, agents, analytics, calendar | DONE | `workspace-shell.tsx`, `lib/mode.ts`, `notify.ts` (`side`, `by_side`), e2e `mode.spec.ts`, `experience.spec.ts` |
+| Light/dark mode with contrast-checked tokens; theme toggle in app and public pages, applied before paint | DONE | `globals.css`, `lib/theme*.ts`, `theme-toggle.tsx`; contrast ratios ≥ 4.5 for text on buttons, links and status colours (faint labels 4.8) |
+| Sign-up side choice; contract focus page with Next step; 4-step posting; D-22 automatic approval of hourly weeks | DONE | `app/page.tsx`, `lib/contract-tabs.ts`, `lib/posting-wizard.ts`, `timesheet-routes.ts` (real PostgreSQL run) |
+| F5 price advice, F8 pre-delivery check, C4 interview questions; registry refresh 0077 | DONE (real PostgreSQL) | `agent-tools-routes.ts`, `agent-tools.test.ts`, UI in proposal form, delivery form, proposals panel |
+| Agent health with self-tests (12 agents incl. guard regression set) and live model test | DONE | `/admin/agents/health`, `app/ai-agents/health-panel.tsx`, e2e `agent-health.spec.ts` |
+| "Fund and start" at offer time | NOT BUILT | funding needs an active contract today; changing that touches the money flow — left for the live-payments work (D-1/D-2) |
+| Repository cleanup | DONE | main 777 → 575 files; Edge branch 708 → 132 files |
+
 ## Next exact step
 Decision D-11 decides how the remaining Python-only families are served; meanwhile: final end-to-end review and records. Previously: porting the remaining legacy pages to the Edge API.
