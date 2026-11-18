@@ -1,6 +1,6 @@
 # Project Status — Freelance Income AI
 
-As of 2026-11-18: Edge API **5.85.0** (branch `cloudflare-edge-api-phase1`), frontend **5.85.0** (`main`), migration head **`0076_hourly_contracts`**. Neon production is at `0073_saved_searches` (migrated and verified 2026-11-18); 0074–0076 apply in the next run. Every batch passed GitHub CI (Python, Alembic on PostgreSQL, frontend build, Playwright in bearer and cookie modes, Edge typecheck/vitest/dry-run) before the next one started. Cloudflare deploys each push automatically.
+As of 2026-11-18: Edge API **5.85.0** (branch `cloudflare-edge-api-phase1`), frontend **5.85.0** (`main`), migration head **`0076_hourly_contracts`**. Neon production is at `0075_services_categories` (workflow run 2026-11-18 22:21 IST, green); 0076 applies in the next run. Every batch passed GitHub CI (Python, Alembic on PostgreSQL, frontend build, Playwright in bearer and cookie modes, Edge typecheck/vitest/dry-run) before the next one started. Cloudflare deploys each push automatically.
 
 ## Where the project really stands
 - **Marketplace loop: built and CI-verified, switched OFF.** Post a brief (AI Brief Builder) → screening and moderation → matching with explanations → invitations → proposals → comparison → offer → two-party contract (versions, change orders) → funding (test mode) → delivery workspace (submissions, revisions, acceptance checklist, messages, activity log) → approval releases funds → completion → two-way reviews; cancellation by agreement with refunds; disputes decided by staff. All behind `marketplace.client_side` (OFF).
@@ -24,7 +24,7 @@ As of 2026-11-18: Edge API **5.85.0** (branch `cloudflare-edge-api-phase1`), fro
 | Database | Neon PostgreSQL via Hyperdrive | — | Shared |
 
 ## What only you can do
-1. **Neon:** run **Actions → "Neon PRODUCTION Database Migrations"** again; it applies 0074, 0075 and 0076 (backup branch first). `/admin` → System health then shows whether the database matches this release.
+1. **Neon:** run **Actions → "Neon PRODUCTION Database Migrations"** again; it applies 0076 (backup branch first). `/admin` → System health then shows whether the database matches this release.
 2. **Fees (D-5 decided):** `/finance` → Fee schedules → new schedule 500 / 300 basis points → Save draft → Approve.
 3. **Staff roles:** done for the founder's email (2026-11-18) with the "Neon - Check database and grant staff roles" workflow.
 4. **Try it on staging:** walk the journey with two emails (freelancer and client), including ordering a service.

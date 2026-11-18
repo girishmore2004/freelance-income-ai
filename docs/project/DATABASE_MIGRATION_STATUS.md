@@ -1,6 +1,6 @@
 # Database Migration Status
 
-Chain head: **`0076_hourly_contracts`** (76 revisions, single head — verified by `tests/test_system_diagnostics_v542.py`). Neon production: **0073** (2026-11-18, workflow "Neon PRODUCTION Database Migrations"); test branch `stage3c-integration-test`: 0073. 0074–0076 to run next.
+Chain head: **`0076_hourly_contracts`** (76 revisions, single head — verified by `tests/test_system_diagnostics_v542.py`). Neon production: **0075** (2026-11-18 22:21 IST, workflow "Neon PRODUCTION Database Migrations"); test branch `stage3c-integration-test`: 0073. 0076 to run next on production.
 
 | Revision | Change | Type | Downgrade |
 |---|---|---|---|
