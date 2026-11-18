@@ -83,6 +83,8 @@ class Profile(Base):
     marketplace_visible_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Staff reviewed the public evidence (migration 0071); not an identity check.
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Own project list, entered or confirmed from a resume (migration 0074).
+    portfolio_items_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
     user = relationship("User", back_populates="profile")
 class Opportunity(Base):
     __tablename__ = "opportunities"

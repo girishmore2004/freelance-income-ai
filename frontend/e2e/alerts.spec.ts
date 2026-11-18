@@ -21,8 +21,8 @@ test('a freelancer saves a search, sees what is new and opens the project from i
     if (path === '/api/v1/me') return reply(ok({ id: 'f1', roles: ['freelancer'] }));
     if (path === '/api/v1/me/profile-checklist') {
       return reply(ok({ applies: true, score: 60, items: [
-        { key: 'name', label: 'Add your name', done: true, why: '', href: '/?tab=profile' },
-        { key: 'portfolio', label: 'Add a link to your work', done: false, why: 'Proposals can only cite work from your profile.', href: '/?tab=profile' },
+        { key: 'name', label: 'Add your name', done: true, why: '', href: '/profile' },
+        { key: 'portfolio', label: 'Add a link to your work', done: false, why: 'Proposals can only cite work from your profile.', href: '/profile' },
         { key: 'visible', label: 'Show your profile to clients', done: false, why: 'Clients can only invite freelancers who opted in.', href: '/projects' },
       ] }));
     }
@@ -40,7 +40,7 @@ test('a freelancer saves a search, sees what is new and opens the project from i
   await page.goto('/projects');
   const checklist = page.getByRole('region', { name: 'Profile checklist' });
   await expect(checklist).toContainText('60% complete');
-  await expect(checklist.getByRole('link', { name: 'Add a link to your work' })).toHaveAttribute('href', '/?tab=profile');
+  await expect(checklist.getByRole('link', { name: 'Add a link to your work' })).toHaveAttribute('href', '/profile');
 
   await page.locator('#q').fill('bakery');
   await page.locator('#q').press('Enter');

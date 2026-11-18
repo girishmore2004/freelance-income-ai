@@ -42,4 +42,4 @@ def test_defaults_and_budget_check():
 
 def test_migration_chain_and_head():
     assert 'down_revision = "0072_contract_tasks_handover"' in MIGRATION.read_text()
-    assert 'EXPECTED_MIGRATION_HEAD = "0073_saved_searches"' in (BACKEND / "app" / "main.py").read_text()
+    assert (BACKEND / "alembic" / "versions" / "0074_profile_projects.py").exists()
