@@ -57,6 +57,9 @@ export interface ComparisonProposal {
   rating: { average: number; count: number } | null;
   invited: boolean;
   created_at: string;
+  /** Proposal Studio sections, when the freelancer used them (deliverables, assumptions, exclusions, questions). */
+  sections?: { deliverables: string[]; milestones: Array<{ title: string; amount_minor: number }>; assumptions: string[]; exclusions: string[]; questions: string[]; revision_rounds: number | null; evidence_count: number } | null;
+  version?: number;
 }
 
 export type BudgetFit = "within" | "below" | "above" | "no_budget";
@@ -76,6 +79,14 @@ export interface ComparisonRow {
   rating: { average: number; count: number } | null;
   invited: boolean;
   notes: string[];
+  deliverables: string[];
+  milestones: Array<{ title: string; amount_minor: number }>;
+  assumptions: string[];
+  exclusions: string[];
+  questions: string[];
+  revision_rounds: number | null;
+  evidence_count: number;
+  version: number;
 }
 
 function normal(s: string): string {
@@ -104,7 +115,8 @@ export function compareProposals(listing: ComparisonListing, proposals: Comparis
     const own = new Set(p.skills.map(normal));
     const covered = listing.skills.filter((s) => own.has(normal(s)));
     const missing = listing.skills.filter((s) => !own.has(normal(s)));
-    const mentioned = listing.deliverables.filter((d) => coverage(d, p.cover_letter).ratio >= 0.5).length;
+    const offered = [p.cover_letter, ...(p.sections?.deliverables ?? [])].join("\n");
+    const mentioned = listing.deliverables.filter((d) => coverage(d, offered).ratio >= 0.5).length;
     if (listing.deliverables.length && mentioned === 0) notes.push("The proposal does not mention your deliverables.");
     if (!p.rating) notes.push("No completed-contract reviews on the platform yet.");
 
@@ -121,7 +133,15 @@ export function compareProposals(listing: ComparisonListing, proposals: Comparis
       deliverables_total: listing.deliverables.length,
       rating: p.rating,
       invited: p.invited,
-      notes
+      notes,
+      deliverables: p.sections?.deliverables ?? [],
+      milestones: p.sections?.milestones ?? [],
+      assumptions: p.sections?.assumptions ?? [],
+      exclusions: p.sections?.exclusions ?? [],
+      questions: p.sections?.questions ?? [],
+      revision_rounds: p.sections?.revision_rounds ?? null,
+      evidence_count: p.sections?.evidence_count ?? 0,
+      version: p.version ?? 1
     };
   });
   const prices = proposals.map((p) => p.price_minor);

@@ -1,5 +1,6 @@
 import { screenText } from "./listings";
 import { sha256Hex } from "./core-routes";
+import { parseSections } from "./proposal-studio";
 
 /**
  * Proposals and two-party contract terms (Phase 3), deterministic rules only.
@@ -175,6 +176,12 @@ export interface ProposalRow {
   created_at: Date;
   updated_at: Date;
   decided_at: Date | null;
+  /* Proposal Studio (migration 0067); absent before it runs. */
+  sections_json?: unknown;
+  current_version?: number | null;
+  content_hash?: string | null;
+  revision_requested_at?: Date | null;
+  revision_note?: string | null;
 }
 
 export function proposalOut(row: ProposalRow) {
@@ -189,6 +196,11 @@ export function proposalOut(row: ProposalRow) {
     currency: row.currency,
     budget_model: row.budget_model,
     estimated_days: row.estimated_days,
+    sections: parseSections(row.sections_json),
+    current_version: Number(row.current_version ?? 1),
+    content_hash: row.content_hash ?? null,
+    revision_requested_at: row.revision_requested_at ? new Date(row.revision_requested_at).toISOString() : null,
+    revision_note: row.revision_note ?? null,
     created_at: new Date(row.created_at).toISOString(),
     updated_at: new Date(row.updated_at).toISOString()
   };

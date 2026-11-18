@@ -435,11 +435,12 @@ export async function handleCoreRoute(
         !skills || !services || !links || !types || !industries || !dealbreakers ||
         minimumBudget === null || minimumBudget < 0 ||
         weeklyHours === null || weeklyHours < 1 || weeklyHours > 80 ||
-        hourlyRate === null || hourlyRate < 0
+        hourlyRate === null || hourlyRate < 0 ||
+        links.some((link) => !safeHttpUrl(link))
       ) {
         return failure(
           "INVALID_PROFILE",
-          "Check the profile fields: lists must be lists, hours 1-80, money not negative.",
+          "Check the profile fields: lists must be lists, portfolio links must start with https:// or http://, hours 1-80, money not negative.",
           422,
           requestId
         );

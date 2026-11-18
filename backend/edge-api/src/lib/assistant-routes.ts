@@ -14,6 +14,7 @@ import { freelancerCard } from "./matching";
 import type { CandidateRow } from "./matching";
 import { agentEnabled } from "./agents";
 import { acceptanceChecklist, compareProposals, suggestTerms } from "./assistants";
+import { parseSections, studioSummary } from "./proposal-studio";
 
 /**
  * Deterministic client assistants (Phase 6 batch 2):
@@ -128,8 +129,9 @@ export async function handleAssistantRoute(request: Request, env: Env, requestId
     `)[0];
     if (!version) return failure("NOT_FOUND", "Listing not found", 404, requestId);
     const brief = versionOut(version);
-    const rows = await sql<Array<{ id: string; price_minor: string | number; estimated_days: number | null; cover_letter: string; invitation_id: string | null; created_at: Date } & Partial<CandidateRow>>>`
+    const rows = await sql<Array<{ id: string; price_minor: string | number; estimated_days: number | null; cover_letter: string; invitation_id: string | null; created_at: Date; sections_json: unknown; proposal_version: string | null } & Partial<CandidateRow>>>`
       SELECT p.id, p.price_minor, p.estimated_days, p.cover_letter, p.invitation_id, p.created_at,
+             to_jsonb(p)->'sections_json' AS sections_json, to_jsonb(p)->>'current_version' AS proposal_version,
              pr.full_name, pr.headline, pr.skills, pr.services, pr.hourly_rate, pr.weekly_hours, pr.timezone,
              u.created_at AS user_created_at, rt.rating_avg, rt.rating_count
       FROM listing_proposals p
@@ -160,7 +162,8 @@ export async function handleAssistantRoute(request: Request, env: Env, requestId
         );
         return {
           id: r.id, freelancer_name: card.display_name, price_minor: Number(r.price_minor), estimated_days: r.estimated_days, cover_letter: r.cover_letter,
-          skills: card.skills, rating: card.rating, invited: r.invitation_id !== null, created_at: new Date(r.created_at).toISOString()
+          skills: card.skills, rating: card.rating, invited: r.invitation_id !== null, created_at: new Date(r.created_at).toISOString(),
+          sections: studioSummary(parseSections(r.sections_json)), version: Number(r.proposal_version ?? 1) || 1
         };
       }),
       now

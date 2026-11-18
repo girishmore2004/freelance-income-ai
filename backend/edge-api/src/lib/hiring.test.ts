@@ -83,6 +83,7 @@ function session(userId: string): AuthenticatedSession {
 }
 
 interface World {
+  studio?: boolean;
   user?: string;
   flag?: boolean;
   roles?: string[];
@@ -103,6 +104,23 @@ function world(opts: World = {}) {
     : opts.version;
   const fake = createFakeSql((text, values) => {
     if (text.startsWith("SELECT enabled FROM feature_flags")) return [{ enabled: opts.flag ?? true }];
+    if (text.startsWith("SELECT to_regclass('listing_proposal_versions')")) return [{ ready: opts.studio === true }];
+    if (text.startsWith("UPDATE listing_proposals SET cover_letter")) return [{ id: "P1", listing_id: "L1", freelancer_user_id: "f1", status: "shortlisted", cover_letter: values[0], price_minor: values[1], currency: "INR", budget_model: "fixed", estimated_days: values[2], current_version: 3, created_at: NOW, updated_at: NOW, decided_at: null }];
+    if (text.startsWith("SELECT v.*, l.visibility, l.status")) {
+      return [{ version: 1, title: "Bakery ordering website", category_slug: "w", outcome: "Take orders online", description: "d", deliverables_json: "[]", skills_json: "[]", experience_level: "any", budget_model: "fixed", budget_min_minor: null, budget_max_minor: null, currency: "INR", deadline: null, milestones_json: "[]", acceptance_json: "[]", revision_rounds: 2, languages_json: "[]", timezone: "", confidentiality: "public", ownership_notes: "", assumptions_json: "[]", content_hash: "h", created_at: NOW, visibility: "public", status: "published", is_member: false, invited: false }];
+    }
+    if (text.startsWith("SELECT full_name, headline, bio, skills, portfolio_links FROM profiles")) return opts.studio === false ? [{ full_name: "F", skills: "[]", portfolio_links: "[]" }] : [{ full_name: "Asha", headline: "Web developer", bio: "", skills: JSON.stringify(["Next.js"]), portfolio_links: "[]" }];
+    if (text.startsWith("SELECT p.freelancer_user_id, l.organization_id, p.status")) return [{ freelancer_user_id: "f1", organization_id: "o1", status: "submitted" }];
+    if (text.startsWith("SELECT version, cover_letter, price_minor")) {
+      return [
+        { version: 1, cover_letter: "a", price_minor: "100", estimated_days: null, sections_json: null, content_hash: "h1", created_at: NOW },
+        { version: 2, cover_letter: "a", price_minor: "200", estimated_days: 5, sections_json: null, content_hash: "h2", created_at: NOW }
+      ];
+    }
+    if (text.startsWith("SELECT skills, portfolio_links FROM profiles")) return [{ skills: JSON.stringify(["Next.js", "React"]), portfolio_links: JSON.stringify(["https://example.dev/work/bakery-site"]) }];
+    if (text.startsWith("SELECT * FROM project_listing_versions WHERE listing_id")) {
+      return [{ version: 1, title: "Bakery ordering website", category_slug: "w", outcome: "o", description: "d", deliverables_json: JSON.stringify(["Order form"]), skills_json: JSON.stringify(["Next.js", "Stripe"]), experience_level: "any", budget_model: "fixed", budget_min_minor: "1000000", budget_max_minor: "2500000", currency: "INR", deadline: "2026-12-01", milestones_json: "[]", acceptance_json: "[]", revision_rounds: 2, languages_json: "[]", timezone: "", confidentiality: "public", ownership_notes: "", assumptions_json: "[]", content_hash: "h", created_at: NOW }];
+    }
     if (text.startsWith("SELECT role, status FROM user_roles")) return (opts.roles ?? ["freelancer", "client"]).map((role) => ({ role, status: "active" }));
     if (text.includes("FROM organization_memberships m JOIN organizations o")) {
       return opts.membership === null || opts.membership === undefined && (opts.user ?? "c1") !== "c1" ? [] : [{ id: "o1", name: "Acme", status: "active", membership_role: opts.membership ?? "owner" }];
@@ -131,6 +149,107 @@ function world(opts: World = {}) {
 
 const env = {} as Env;
 const call = (deps: HiringRouteDeps, method: string, path: string, payload?: unknown) => handleHiringRoute(jsonRequest(method, path, payload), env, "r", deps);
+
+describe("Proposal Studio routes", () => {
+  const SECTIONS = {
+    understanding: "You need online bakery orders with pickup slots.",
+    approach: "Next.js storefront with an order form and admin list.",
+    evidence: [{ url: "https://example.dev/work/bakery-site/", note: "Similar bakery site" }],
+    deliverables: ["Order form", "Admin order list"],
+    milestones: [{ title: "Design", amount_minor: 1_000_000 }, { title: "Build", amount_minor: 1_000_000 }],
+    assumptions: ["Client supplies menu photos"],
+    exclusions: ["Payment gateway setup"],
+    questions: ["Do you need delivery slots?"],
+    revision_rounds: 2
+  };
+
+  it("checks a draft without writing anything and returns the hash to approve", async () => {
+    const { deps, fake } = world({ user: "f1", studio: true });
+    const response = await call(deps, "POST", "/api/v1/marketplace/listings/L1/proposal-check", { cover_letter: COVER, price_minor: 3_000_000, estimated_days: 30, sections: SECTIONS });
+    expect(response!.status).toBe(200);
+    const data = (await readJson(response!)).data;
+    expect(data.content_hash).toMatch(/^[0-9a-f]{64}$/);
+    const codes = data.findings.map((f: { code: string }) => f.code);
+    expect(codes).toEqual(expect.arrayContaining(["price_above_budget", "milestones_total_mismatch", "timeline_after_deadline"]));
+    expect(data.evidence_suggestions[0].url).toBe("https://example.dev/work/bakery-site");
+    expect(fake.queries.some((q) => q.text.startsWith("INSERT") || q.text.startsWith("UPDATE"))).toBe(false);
+  });
+
+  it("refuses evidence links that are not on the freelancer's profile", async () => {
+    const { deps } = world({ user: "f1", studio: true });
+    const response = await call(deps, "POST", "/api/v1/marketplace/listings/L1/proposals", {
+      cover_letter: COVER, price_minor: 2_000_000, sections: { ...SECTIONS, evidence: [{ url: "https://made-up.example/portfolio", note: "x" }] }
+    });
+    expect(response!.status).toBe(422);
+    expect(JSON.stringify((await readJson(response!)).error)).toContain("sections.evidence.0");
+  });
+
+  it("submits version 1 with its hash in one transaction, and refuses a changed text after approval", async () => {
+    const { deps, fake } = world({ user: "f1", studio: true });
+    const draft = { cover_letter: COVER, price_minor: 2_000_000, estimated_days: 10, sections: SECTIONS };
+    const check = (await readJson((await call(deps, "POST", "/api/v1/marketplace/listings/L1/proposal-check", draft))!)).data;
+    const response = await call(deps, "POST", "/api/v1/marketplace/listings/L1/proposals", { ...draft, approved_hash: check.content_hash });
+    expect(response!.status).toBe(201);
+    const writes = fake.queries.filter((q) => q.text.startsWith("INSERT INTO listing_proposal"));
+    expect(writes.map((q) => q.text.match(/^INSERT INTO (\w+)/)![1])).toEqual(["listing_proposals", "listing_proposal_versions"]);
+    expect(writes.every((q) => q.inTransaction)).toBe(true);
+    expect(writes[1].values).toContain(check.content_hash);
+
+    const changed = world({ user: "f1", studio: true });
+    const refused = await call(changed.deps, "POST", "/api/v1/marketplace/listings/L1/proposals", { ...draft, price_minor: 2_100_000, approved_hash: check.content_hash });
+    expect(refused!.status).toBe(409);
+    expect((await readJson(refused!)).error!.code).toBe("APPROVAL_MISMATCH");
+  });
+
+  it("keeps the short form working and refuses sections before migration 0067", async () => {
+    const { deps } = world({ user: "f1", studio: false });
+    expect((await call(deps, "POST", "/api/v1/marketplace/listings/L1/proposals", { cover_letter: COVER, price_minor: 100, sections: SECTIONS }))!.status).toBe(503);
+    expect((await call(deps, "POST", "/api/v1/marketplace/listings/L1/proposals", { cover_letter: COVER, price_minor: 100 }))!.status).toBe(201);
+  });
+
+  it("records a new version on edit and clears the revision request", async () => {
+    const { deps, fake } = world({ user: "f1", studio: true, proposal: { current_version: 2, content_hash: "old" } });
+    const response = await call(deps, "PUT", "/api/v1/listing-proposals/P1", { cover_letter: COVER, price_minor: 2_000_000, sections: SECTIONS });
+    expect(response!.status).toBe(200);
+    const update = fake.queries.find((q) => q.text.startsWith("UPDATE listing_proposals SET cover_letter"))!;
+    expect(update.text).toContain("revision_requested_at = NULL");
+    expect(update.values).toContain(3);
+    const version = fake.queries.find((q) => q.text.startsWith("INSERT INTO listing_proposal_versions"))!;
+    expect(version.values).toContain(3);
+  });
+
+  it("lets only owners/admins request a revision, with a note", async () => {
+    const member = world({ membership: "member", studio: true });
+    expect((await call(member.deps, "POST", "/api/v1/listing-proposals/P1/status", { action: "request_revision", note: "Please add a timeline" }))!.status).toBe(403);
+    const owner = world({ studio: true });
+    expect((await call(owner.deps, "POST", "/api/v1/listing-proposals/P1/status", { action: "request_revision", note: "x" }))!.status).toBe(422);
+    await call(owner.deps, "POST", "/api/v1/listing-proposals/P1/status", { action: "request_revision", note: "Please add a timeline" });
+    expect(owner.fake.queries.some((q) => q.text.startsWith("UPDATE listing_proposals SET revision_requested_at = now()"))).toBe(true);
+  });
+
+  it("drafts from confirmed profile facts only, saves nothing, and needs skills on the profile", async () => {
+    const { deps, fake } = world({ user: "f1", studio: true });
+    const response = await call(deps, "POST", "/api/v1/marketplace/listings/L1/proposal-draft", {});
+    expect(response!.status).toBe(200);
+    const data = (await readJson(response!)).data;
+    expect(data.mode).toBe("safe_template");
+    expect(data.cover_letter).toContain("Bakery ordering website");
+    expect(fake.queries.some((q) => q.text.startsWith("INSERT INTO listing_proposals"))).toBe(false);
+    const empty = world({ user: "f1", studio: false });
+    expect((await call(empty.deps, "POST", "/api/v1/marketplace/listings/L1/proposal-draft", {}))!.status).toBe(409);
+  });
+
+  it("shows version history only to the freelancer and the client organisation", async () => {
+    const outsider = world({ user: "f9", membership: null, studio: true });
+    expect((await call(outsider.deps, "GET", "/api/v1/listing-proposals/P1/versions"))!.status).toBe(404);
+    const freelancer = world({ user: "f1", membership: null, studio: true });
+    const history = (await readJson((await call(freelancer.deps, "GET", "/api/v1/listing-proposals/P1/versions"))!)).data;
+    expect(history.versions.map((v: { version: number }) => v.version)).toEqual([2, 1]);
+    expect(history.versions[0].changes).toEqual(["Price ₹1 → ₹2", "Estimated days — → 5"]);
+    const client = world({ studio: true });
+    expect((await call(client.deps, "GET", "/api/v1/listing-proposals/P1/versions"))!.status).toBe(200);
+  });
+});
 
 describe("hiring routes", () => {
   it("leaves the existing external-proposal routes alone", async () => {
