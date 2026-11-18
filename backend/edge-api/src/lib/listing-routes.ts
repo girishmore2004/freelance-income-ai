@@ -195,9 +195,11 @@ export async function handleListingRoute(
     (marketMatch !== null && method === "GET");
   if (!known) return null;
 
+  // Visitors may browse published public projects and categories (spec §2); everything else needs a session.
+  const publicRead = method === "GET" && (marketMatch !== null || path === "/api/v1/project-categories");
   const auth = await deps.authenticate(request, env, requestId);
-  if (auth instanceof Response) return auth;
-  const userId = auth.user.id;
+  if (auth instanceof Response && !(publicRead && auth.status === 401)) return auth;
+  const viewerId: string | null = auth instanceof Response ? null : auth.user.id;
   const sql = deps.database(env);
 
   try {
@@ -222,7 +224,7 @@ export async function handleListingRoute(
           WHERE l.id = ${marketMatch[1]} AND l.status IN ('published', 'hiring')
             AND (l.visibility = 'public' OR EXISTS (
               SELECT 1 FROM listing_invitations i
-              WHERE i.listing_id = l.id AND i.freelancer_user_id = ${userId} AND i.status IN ('pending', 'accepted')
+              WHERE i.listing_id = l.id AND i.freelancer_user_id = ${viewerId} AND i.status IN ('pending', 'accepted')
             ))
             AND (l.closes_at IS NULL OR l.closes_at > now()) AND o.status = 'active'
           LIMIT 1
@@ -255,7 +257,9 @@ export async function handleListingRoute(
       return success({ items: page, next_before: next }, "Projects", 200, requestId);
     }
 
-    // Everything below is the client side.
+    // Everything below is the client side and needs a session.
+    if (!viewerId) return failure("AUTHENTICATION_REQUIRED", "Authentication required", 401, requestId);
+    const userId: string = viewerId;
     const roles = await loadRoles(sql, userId);
     if (!roles.includes("client")) {
       return failure("CLIENT_ROLE_REQUIRED", "Turn on the client (hiring) role first.", 403, requestId);

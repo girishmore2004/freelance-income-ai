@@ -63,3 +63,35 @@ describe("public home", () => {
     expect(json.data).toEqual({ client_marketplace_open: false, categories: [], agents: [], counts: null });
   });
 });
+
+describe("public freelancers", () => {
+  const row = { user_id: "f1", full_name: "Asha", headline: "Web developer", skills: '["React"]', services: "[]", minimum_budget: 5000, hourly_rate: 800, currency: "INR", weekly_hours: 20, timezone: "Asia/Kolkata", dealbreakers: '["crypto"]', user_created_at: new Date("2026-01-01"), rating_avg: 4.5, rating_count: 2, completed: 3 };
+
+  it("lists only opted-in freelancers without private fields, and is closed while the marketplace is off", async () => {
+    const fake = createFakeSql((text) => {
+      if (text.startsWith("SELECT enabled FROM feature_flags")) return [{ enabled: true }];
+      if (text.includes("p.marketplace_visible = true")) return [row];
+      return [];
+    });
+    const json = await readJson((await handlePublicRoute(jsonRequest("GET", "/api/v1/public/freelancers?q=react"), env, "r", { database: () => fake.sql }))!);
+    expect(json.data.items[0]).toMatchObject({ user_id: "f1", display_name: "Asha", completed_contracts: 3, rating: { average: 4.5, count: 2 } });
+    expect(JSON.stringify(json.data)).not.toMatch(/dealbreaker|minimum_budget|email|crypto/);
+    const closed = createFakeSql((text) => (text.startsWith("SELECT enabled FROM feature_flags") ? [{ enabled: false }] : [row]));
+    expect((await readJson((await handlePublicRoute(jsonRequest("GET", "/api/v1/public/freelancers"), env, "r", { database: () => closed.sql }))!)).data).toEqual({ open: false, items: [], more: false });
+    expect((await handlePublicRoute(jsonRequest("GET", "/api/v1/public/freelancers/f1"), env, "r", { database: () => closed.sql }))!.status).toBe(404);
+  });
+
+  it("returns a profile with revealed reviews, and 404 for hidden freelancers", async () => {
+    const fake = createFakeSql((text, values) => {
+      if (text.startsWith("SELECT enabled FROM feature_flags")) return [{ enabled: true }];
+      if (text.includes("WHERE p.user_id =")) return values.includes("f1") ? [row] : [];
+      if (text.startsWith("SELECT count(*)::int AS n FROM contracts")) return [{ n: 3 }];
+      if (text.startsWith("SELECT rv.rating")) return [{ rating: 5, comment: "Great work", created_at: new Date("2026-11-01") }];
+      return [];
+    });
+    const json = await readJson((await handlePublicRoute(jsonRequest("GET", "/api/v1/public/freelancers/f1"), env, "r", { database: () => fake.sql }))!);
+    expect(json.data.reviews).toEqual([{ rating: 5, comment: "Great work", created_at: "2026-11-01T00:00:00.000Z" }]);
+    expect((await handlePublicRoute(jsonRequest("GET", "/api/v1/public/freelancers/hidden"), env, "r", { database: () => fake.sql }))!.status).toBe(404);
+  });
+});
+

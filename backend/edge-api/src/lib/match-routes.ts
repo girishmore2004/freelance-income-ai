@@ -79,7 +79,7 @@ async function visibleCandidates(sql: Queryable, excludeOrganizationId: string):
   `;
 }
 
-async function visibleCandidate(sql: Queryable, freelancerUserId: string): Promise<CandidateRow | null> {
+export async function visibleCandidate(sql: Queryable, freelancerUserId: string): Promise<CandidateRow | null> {
   const rows = await sql<CandidateRow[]>`
     SELECT p.user_id, p.full_name, p.headline, p.skills, p.services, p.minimum_budget, p.hourly_rate,
            p.currency, p.weekly_hours, p.timezone, p.dealbreakers, u.created_at AS user_created_at,
@@ -98,6 +98,36 @@ async function visibleCandidate(sql: Queryable, freelancerUserId: string): Promi
     LIMIT 1
   `;
   return rows[0] ?? null;
+}
+
+/**
+ * Public freelancer directory: the same visibility rule as matching (opted in,
+ * active freelancer role; suspension switches visibility off), searchable by
+ * name, headline, skills or services, newest first, 24 per page.
+ */
+export async function publicFreelancerPage(sql: Queryable, q: string, offset: number): Promise<{ rows: (CandidateRow & { completed: number })[]; more: boolean }> {
+  const pattern = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  const rows = await sql<(CandidateRow & { completed: number })[]>`
+    SELECT p.user_id, p.full_name, p.headline, p.skills, p.services, p.minimum_budget, p.hourly_rate,
+           p.currency, p.weekly_hours, p.timezone, p.dealbreakers, u.created_at AS user_created_at,
+           rt.rating_avg, rt.rating_count,
+           (SELECT count(*)::int FROM contracts ct WHERE ct.freelancer_user_id = p.user_id AND ct.status = 'completed') AS completed
+    FROM profiles p
+    JOIN users u ON u.id = p.user_id
+    JOIN user_roles r ON r.user_id = p.user_id AND r.role = 'freelancer' AND r.status = 'active'
+    LEFT JOIN LATERAL (
+      SELECT avg(rv.rating)::float AS rating_avg, count(*)::int AS rating_count
+      FROM contract_reviews rv JOIN contracts ct ON ct.id = rv.contract_id
+      WHERE ct.freelancer_user_id = p.user_id AND rv.reviewer_party = 'client'
+        AND (ct.completed_at < now() - interval '14 days'
+             OR EXISTS (SELECT 1 FROM contract_reviews rf WHERE rf.contract_id = ct.id AND rf.reviewer_party = 'freelancer'))
+    ) rt ON true
+    WHERE p.marketplace_visible = true
+      AND (${q} = '' OR p.full_name ILIKE ${pattern} OR p.headline ILIKE ${pattern} OR p.skills ILIKE ${pattern} OR p.services ILIKE ${pattern})
+    ORDER BY p.marketplace_visible_at DESC NULLS LAST, p.user_id
+    LIMIT 25 OFFSET ${offset}
+  `;
+  return { rows: rows.slice(0, 24), more: rows.length > 24 };
 }
 
 interface InvitationRow {

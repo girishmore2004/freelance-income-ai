@@ -223,6 +223,20 @@ describe("listing routes", () => {
     }
   });
 
+  it("lets visitors browse public projects and categories but nothing else", async () => {
+    const { deps, fake } = world();
+    const anonymous: ListingRouteDeps = { ...deps, authenticate: async () => new Response(JSON.stringify({ success: false }), { status: 401 }) };
+    expect((await handleListingRoute(jsonRequest("GET", "/api/v1/marketplace/listings"), env, "r", anonymous))!.status).toBe(200);
+    expect((await handleListingRoute(jsonRequest("GET", "/api/v1/project-categories"), env, "r", anonymous))!.status).toBe(200);
+    const detail = fake.queries.length;
+    await handleListingRoute(jsonRequest("GET", "/api/v1/marketplace/listings/L1"), env, "r", anonymous);
+    // Invite-only projects stay hidden: the invitation check runs with no viewer.
+    expect(fake.queries.slice(detail).some((q) => q.text.includes("listing_invitations") && q.values.includes(null))).toBe(true);
+    for (const [method, path] of [["GET", "/api/v1/organizations/o1/listings"], ["GET", "/api/v1/listings/L1"], ["POST", "/api/v1/organizations/o1/listings"]]) {
+      expect((await handleListingRoute(jsonRequest(method, path, method === "POST" ? {} : undefined), env, "r", anonymous))!.status).toBe(401);
+    }
+  });
+
   it("requires the client role for organisation endpoints", async () => {
     const { deps } = world({ roles: ["freelancer"] });
     const response = await handleListingRoute(jsonRequest("GET", "/api/v1/organizations/o1/listings"), env, "r", deps);

@@ -3,6 +3,9 @@ import { database } from "./core-routes";
 import type { Sql } from "./core-routes";
 import { success } from "./response";
 import { FLAGS, isEnabled } from "./flags";
+import { failure } from "./response";
+import { freelancerCard } from "./matching";
+import { publicFreelancerPage, visibleCandidate } from "./match-routes";
 
 /**
  * Public, no-login information for the marketing pages (Phase 8):
@@ -62,10 +65,53 @@ async function publicHome(env: Env, sql: Sql, requestId: string): Promise<Respon
   );
 }
 
+/**
+ *   GET /api/v1/public/freelancers?q=&offset=   opted-in freelancers (same visibility rule as matching)
+ *   GET /api/v1/public/freelancers/{id}          one profile with completed contracts and revealed client reviews
+ * Cards never include email, minimum budget or dealbreakers. Closed while the client marketplace is off.
+ */
+async function publicFreelancers(env: Env, sql: Sql, url: URL, id: string | null, requestId: string): Promise<Response> {
+  if (!(await isEnabled(env, sql, FLAGS.clientMarketplace, false))) {
+    return id ? failure("NOT_FOUND", "Freelancer not found", 404, requestId) : success({ open: false, items: [], more: false }, "Freelancers", 200, requestId);
+  }
+  const now = new Date();
+  if (id) {
+    const row = await visibleCandidate(sql, id);
+    if (!row) return failure("NOT_FOUND", "Freelancer not found", 404, requestId);
+    const completed = (await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM contracts WHERE freelancer_user_id = ${id} AND status = 'completed'`)[0]?.n ?? 0;
+    const reviews = await sql<{ rating: number; comment: string; created_at: Date }[]>`
+      SELECT rv.rating, rv.comment, rv.created_at FROM contract_reviews rv JOIN contracts ct ON ct.id = rv.contract_id
+      WHERE ct.freelancer_user_id = ${id} AND rv.reviewer_party = 'client'
+        AND (ct.completed_at < now() - interval '14 days'
+             OR EXISTS (SELECT 1 FROM contract_reviews rf WHERE rf.contract_id = ct.id AND rf.reviewer_party = 'freelancer'))
+      ORDER BY rv.created_at DESC LIMIT 5
+    `;
+    return success(
+      { ...freelancerCard(row, now), completed_contracts: Number(completed), reviews: reviews.map((r) => ({ rating: Number(r.rating), comment: r.comment, created_at: new Date(r.created_at).toISOString() })) },
+      "Freelancer",
+      200,
+      requestId
+    );
+  }
+  const q = (url.searchParams.get("q") ?? "").trim().slice(0, 100);
+  const offset = Math.min(10_000, Math.max(0, Number.parseInt(url.searchParams.get("offset") ?? "0", 10) || 0));
+  const page = await publicFreelancerPage(sql, q, offset);
+  return success({ open: true, items: page.rows.map((r) => ({ ...freelancerCard(r, now), completed_contracts: Number(r.completed) })), more: page.more }, "Freelancers", 200, requestId);
+}
+
 export async function handlePublicRoute(request: Request, env: Env, requestId: string, deps: PublicRouteDeps = defaultDeps): Promise<Response | null> {
-  const path = new URL(request.url).pathname;
-  if (request.method.toUpperCase() !== "GET" || (path !== "/api/v1/public/pricing" && path !== "/api/v1/public/home")) return null;
+  const url = new URL(request.url);
+  const path = url.pathname;
+  const freelancer = path.match(/^\/api\/v1\/public\/freelancers(?:\/([\w-]{1,64}))?$/);
+  if (request.method.toUpperCase() !== "GET" || (path !== "/api/v1/public/pricing" && path !== "/api/v1/public/home" && !freelancer)) return null;
   const sql = deps.database(env);
+  if (freelancer) {
+    try {
+      return await publicFreelancers(env, sql, url, freelancer[1] ?? null, requestId);
+    } finally {
+      await sql.end({ timeout: 5 });
+    }
+  }
   if (path === "/api/v1/public/home") {
     try {
       return await publicHome(env, sql, requestId);
