@@ -20,11 +20,11 @@ As of 2026-11-18: Edge API **5.75.0** (branch `cloudflare-edge-api-phase1`), fro
 | Frontend (Next.js 16, OpenNext) | `freelance-income-ai/frontend` (`main`) | Worker `freelance-income-ai` | UI; same-origin proxy to the Edge API |
 | Edge API (TypeScript) | `backend/edge-api` (`cloudflare-edge-api-phase1`) | Worker `freelance-income-ai-api-edge` | The only live backend: auth, identity, listings, matching, hiring, contracts, delivery, reviews, payments (test mode), ledger/fees, plans, agents, trust/admin, disputes, suspensions, notifications, public pricing; queue consumer and 6-hourly cron |
 | Python API (FastAPI) | `backend/app` | not deployed | Reference implementation and schema models |
-| Migrations | `backend/alembic` | GitHub Action "Stage 3C Neon migrations" | Schema authority (head `0069_external_pipeline`) |
+| Migrations | `backend/alembic` | GitHub Action "Stage 3C Neon migrations" | Schema authority (head `0070_discussions_interviews`) |
 | Database | Neon PostgreSQL via Hyperdrive | — | Shared |
 
 ## What only you can do
-1. **Neon:** create a backup branch, then run **Actions → "Stage 3C Neon migrations"** (expects `0069_external_pipeline`). It applies 0051–0069 in one run. `/admin` → System health then shows whether the database matches this release.
+1. **Neon:** create a backup branch, then run **Actions → "Stage 3C Neon migrations"** (expects `0070_discussions_interviews`). It applies 0051–0070 in one run. `/admin` → System health then shows whether the database matches this release.
 2. **Staff roles:** give yourself `admin` (and `finance`, `moderator`) with the SQL in DEPLOYMENT_RUNBOOK.md (Phase 4 step 3).
 3. **Try it on staging:** `/admin` → Feature flags → turn **marketplace.client_side** on; walk the journey in the runbook; turn it off again if anything looks wrong.
 4. **Decisions** (BUSINESS_DECISIONS.md): D-1 legal entity/tax, D-2 payment provider, D-3/D-4 payment mode and loss rules, D-5 fees, D-6 categories, D-13 AI provider policy, D-14 plan prices, D-15 email sender domain, D-16 contact-details policy; confirm the provisional D-17 to D-19.
