@@ -7,6 +7,8 @@ import { handleIdentityRoute } from "./lib/identity-routes";
 import { handleTeamRoute } from "./lib/team-routes";
 import { handleBusinessRoute } from "./lib/business-routes";
 import { handleAnalyticsRoute } from "./lib/analytics-routes";
+import { handlePlannerRoute } from "./lib/planner-routes";
+import { handleSupportRoute } from "./lib/support-routes";
 import { handleListingRoute } from "./lib/listing-routes";
 import { handleMatchRoute, runScheduledListingExpiry } from "./lib/match-routes";
 import { handleHiringRoute } from "./lib/hiring-routes";
@@ -377,6 +379,16 @@ async function routeRequest(
   const analyticsResponse = await handleAnalyticsRoute(request, env, requestId);
   if (analyticsResponse) {
     return analyticsResponse;
+  }
+
+  // Saved projects, calendar (U7) and support tickets.
+  const plannerResponse = await handlePlannerRoute(request, env, requestId);
+  if (plannerResponse) {
+    return plannerResponse;
+  }
+  const supportResponse = await handleSupportRoute(request, env, requestId);
+  if (supportResponse) {
+    return supportResponse;
   }
 
   const teamResponse = await handleTeamRoute(

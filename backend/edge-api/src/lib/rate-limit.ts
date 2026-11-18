@@ -53,6 +53,10 @@ export async function rateKey(request: Request, env: Env): Promise<RateDecision>
   if (method === "POST" && AUTH_PATHS.has(path)) {
     return { limiter: "auth", key: `auth:${path.slice("/api/v1/auth/".length)}:${clientIp(request)}` };
   }
+  if (method === "POST" && path === "/api/v1/support/tickets") {
+    // Public form: the strict per-IP limiter, like sign-in.
+    return { limiter: "auth", key: `support:${clientIp(request)}` };
+  }
   const session = readSessionToken(request, env);
   return { limiter: "api", key: session ? `user:${await shortHash(session.token)}` : `ip:${clientIp(request)}` };
 }

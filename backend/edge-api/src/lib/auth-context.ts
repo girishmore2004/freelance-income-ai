@@ -118,7 +118,8 @@ const SUSPENDED_ALLOWED_WRITES = new Set([
   "/api/v1/auth/logout-all",
   "/api/v1/auth/password/change",
   "/api/v1/notifications/read",
-  "/api/v1/me/suspension/appeal"
+  "/api/v1/me/suspension/appeal",
+  "/api/v1/support/tickets"
 ]);
 
 export function suspensionBlocks(method: string, path: string): boolean {
