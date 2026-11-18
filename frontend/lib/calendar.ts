@@ -12,6 +12,7 @@ export const TYPE_LABELS: Record<string, string> = {
   listing_deadline: 'Your project deadline',
   follow_up: 'Follow-up',
   interview: 'Interview',
+  task_due: 'Task due',
 };
 
 /** Days in order, each with its events. Overdue items are collected first under "Overdue". */

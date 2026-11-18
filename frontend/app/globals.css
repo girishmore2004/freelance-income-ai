@@ -232,3 +232,7 @@ ul{padding-left:20px}
 .facts{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:4px 16px;margin:4px 0 8px}
 .facts dt{font-size:12px;color:var(--muted,#667)}
 .facts dd{margin:0}
+.timeline{list-style:none;padding:0;border-left:2px solid var(--line);margin-left:6px}
+.timeline li{padding:4px 0 4px 12px}
+.timeline li.overdue{color:var(--bad)}
+.timeline li.done{opacity:.75}

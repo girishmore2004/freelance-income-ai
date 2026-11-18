@@ -9,6 +9,7 @@ import { ContractReviews } from './reviews';
 import { FeeEstimate } from './fee-estimate';
 import { PaymentsPanel } from './payments-panel';
 import { DisputePanel } from './dispute-panel';
+import { HandoverPanel, TasksPanel, TimelinePanel } from './tasks-panel';
 import { defaultTab, tabsFor, type ContractTab } from '@/lib/contract-tabs';
 
 /**
@@ -214,6 +215,21 @@ export default function ContractsPage() {
                 />
               )}
 
+                </div>
+              )}
+              {tab === 'tasks' && (
+                <div role="tabpanel" id={`panel-${detail.id}-tasks`} aria-labelledby={`tab-${detail.id}-tasks`}>
+                  <TasksPanel key={`tasks-${detail.id}-${detail.status}`} contractId={detail.id} />
+                </div>
+              )}
+              {tab === 'timeline' && (
+                <div role="tabpanel" id={`panel-${detail.id}-timeline`} aria-labelledby={`tab-${detail.id}-timeline`}>
+                  <TimelinePanel key={`timeline-${detail.id}-${detail.status}`} contractId={detail.id} />
+                </div>
+              )}
+              {tab === 'handover' && (
+                <div role="tabpanel" id={`panel-${detail.id}-handover`} aria-labelledby={`tab-${detail.id}-handover`}>
+                  <HandoverPanel key={`handover-${detail.id}-${detail.status}`} contractId={detail.id} />
                 </div>
               )}
               {tab === 'files' && (

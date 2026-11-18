@@ -61,4 +61,4 @@ def test_migration_chain_and_head():
     text = MIGRATION.read_text()
     assert 'down_revision = "0070_discussions_interviews"' in text
     assert len("0071_files_verification_sources") <= 32
-    assert 'EXPECTED_MIGRATION_HEAD = "0071_files_verification_sources"' in (BACKEND / "app" / "main.py").read_text()
+    assert (BACKEND / "alembic" / "versions" / "0072_contract_tasks_handover.py").exists()

@@ -1538,6 +1538,52 @@ class DiscoverySourceRun(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
 
 
+class ContractTask(Base):
+    """Shared task on a contract (migration 0072)."""
+    __tablename__ = "contract_tasks"
+    __table_args__ = (
+        CheckConstraint("owner_party IN ('client', 'freelancer')", name="ck_contract_tasks_party"),
+        CheckConstraint("status IN ('todo', 'doing', 'done')", name="ck_contract_tasks_status"),
+        CheckConstraint("source IN ('manual', 'category_plan')", name="ck_contract_tasks_source"),
+        CheckConstraint("milestone_index IS NULL OR milestone_index >= 0", name="ck_contract_tasks_milestone"),
+        Index("ix_contract_tasks_contract", "contract_id", "position"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    contract_id: Mapped[str] = mapped_column(ForeignKey("contracts.id", ondelete="CASCADE"), nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    milestone_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    owner_party: Mapped[str] = mapped_column(String(20), nullable=False, default="freelancer", server_default="freelancer")
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="todo", server_default="todo")
+    source: Mapped[str] = mapped_column(String(20), nullable=False, default="manual", server_default="manual")
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ContractHandoverItem(Base):
+    """Item the freelancer hands over; the client confirms receipt (migration 0072)."""
+    __tablename__ = "contract_handover_items"
+    __table_args__ = (
+        CheckConstraint("kind IN ('source_files', 'documentation', 'access_transfer', 'deployment', 'other')", name="ck_handover_kind"),
+        CheckConstraint("status IN ('pending', 'confirmed', 'withdrawn')", name="ck_handover_status"),
+        Index("ix_handover_contract", "contract_id", "created_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    contract_id: Mapped[str] = mapped_column(ForeignKey("contracts.id", ondelete="CASCADE"), nullable=False)
+    kind: Mapped[str] = mapped_column(String(30), nullable=False)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    link: Mapped[str] = mapped_column(String(500), nullable=False, default="", server_default="")
+    note: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", server_default="pending")
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    confirmed_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class SavedListing(Base):
     """A freelancer's saved native project (migration 0068)."""
     __tablename__ = "saved_listings"
