@@ -27,6 +27,8 @@ export const API_BASE = AUTH_MODE === 'cookie' ? '' : (process.env.NEXT_PUBLIC_A
  * authFetch drops Authorization headers in cookie mode.
  */
 export const COOKIE_SESSION = 'cookie-session';
+/** Window event fired when this tab signs in or out. */
+export const SESSION_EVENT = 'fia-session-change';
 
 const LEGACY_TOKEN_KEY = 'fia_token';
 const CSRF_COOKIE = '__Host-fia_csrf';
@@ -194,23 +196,30 @@ export function useSessionToken(): [string, (value: string | null | undefined) =
     let cancelled = false;
     if (AUTH_MODE === 'bearer') {
       setTokenState(legacyToken());
-      return () => {
-        cancelled = true;
-      };
+    } else {
+      purgeLegacyToken();
+      void hasSession().then((ok) => {
+        if (!cancelled) setTokenState(ok ? COOKIE_SESSION : '');
+      });
     }
-    purgeLegacyToken();
-    void hasSession().then((ok) => {
-      if (!cancelled) setTokenState(ok ? COOKIE_SESSION : '');
-    });
+    // Other components using this hook (e.g. the workspace frame) follow sign-in and sign-out.
+    const onChange = (event: Event) => {
+      const detail = (event as CustomEvent<string>).detail;
+      if (!cancelled) setTokenState(typeof detail === 'string' ? detail : '');
+    };
+    window.addEventListener(SESSION_EVENT, onChange);
     return () => {
       cancelled = true;
+      window.removeEventListener(SESSION_EVENT, onChange);
     };
   }, []);
 
   const setToken = useCallback((value: string | null | undefined) => {
     const next = value || '';
     if (AUTH_MODE === 'bearer') storeLegacyToken(next);
-    setTokenState(AUTH_MODE === 'cookie' && next ? COOKIE_SESSION : next);
+    const state = AUTH_MODE === 'cookie' && next ? COOKIE_SESSION : next;
+    setTokenState(state);
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(SESSION_EVENT, { detail: state }));
   }, []);
 
   return [token, setToken];

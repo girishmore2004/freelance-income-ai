@@ -16,18 +16,18 @@ type Me = { id: string; email: string; roles: string[] };
 type NavItem = { href: string; label: string; match?: string[] };
 type NavGroup = { label: string; items: NavItem[] };
 
-/** Paths that never get the workspace frame (public website, join links, the older single-page dashboard). */
-const NO_FRAME = new Set(['/', '/how-it-works', '/pricing', '/safety', '/help', '/join']);
+/** Paths that never get the workspace frame (public website and join links). `/` is the public homepage for visitors and the external-opportunity dashboard once signed in. */
+const NO_FRAME = new Set(['/how-it-works', '/pricing', '/safety', '/help', '/join']);
 
 const FREELANCER: NavGroup[] = [
   { label: 'Home', items: [{ href: '/workspace', label: 'Overview' }, { href: '/agent', label: 'Next actions' }] },
-  { label: 'Find work', items: [{ href: '/projects', label: 'Marketplace projects' }, { href: '/', label: 'External opportunities' }] },
+  { label: 'Find work', items: [{ href: '/projects', label: 'Find work' }, { href: '/', label: 'Proposals and applications' }] },
   { label: 'Work', items: [{ href: '/contracts', label: 'Offers and contracts' }, { href: '/earnings', label: 'Earnings and payouts' }] },
   { label: 'AI', items: [{ href: '/ai-agents', label: 'AI agent centre' }, { href: '/coach', label: 'Business coach' }] },
 ];
 const CLIENT: NavGroup[] = [
   { label: 'Home', items: [{ href: '/workspace', label: 'Overview' }, { href: '/agent', label: 'Next actions' }] },
-  { label: 'Hiring', items: [{ href: '/client/projects', label: 'Projects and proposals' }] },
+  { label: 'Hiring', items: [{ href: '/client/projects', label: 'Projects and proposals' }, { href: '/freelancers', label: 'Find freelancers' }] },
   { label: 'Work', items: [{ href: '/contracts', label: 'Contracts and deliveries' }] },
   { label: 'AI', items: [{ href: '/ai-agents', label: 'AI agent centre' }] },
 ];
@@ -35,7 +35,7 @@ const ACCOUNT: NavGroup = { label: 'Account', items: [{ href: '/notifications', 
 const STAFF: NavGroup = { label: 'Staff', items: [{ href: '/admin', label: 'Admin' }, { href: '/finance', label: 'Finance' }] };
 
 function isActive(path: string, href: string): boolean {
-  if (href === '/') return false;
+  if (href === '/') return path === '/';
   return path === href || path.startsWith(`${href}/`);
 }
 

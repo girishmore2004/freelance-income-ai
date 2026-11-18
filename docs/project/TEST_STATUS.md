@@ -1,5 +1,13 @@
 # Test Status
 
+## Audit + U2 — 2026-11-18 IST (release 5.67.0)
+- **Route audit:** every API call in the frontend (304 method/path pairs) was replayed through the real Edge router. All calls from current pages are served; the unserved ones were 6 unreachable dashboard tabs (inbox, workflows, delivery, research, portfolio, sources — Python-only routes). Those tabs were removed and the dashboard loader went from 24 requests per visit (13 failing) to 11.
+- Edge API: **297 passed, 0 failed** (`listings.test.ts` +1: visitors may browse public projects and categories, invite-only projects stay hidden, everything else 401; `public.test.ts` +2: freelancer directory without private fields, closed while the marketplace is off, profile with revealed reviews, hidden freelancers 404). PostgreSQL: a visitor saw the 1 public published project, the categories and the 2 opted-in freelancers; the non-visible freelancer 404; organisation routes 401.
+- Frontend: typecheck 0 errors; unit 13/13; `e2e/experience.spec.ts` now 4 journeys (+ unified Find work with labelled native/external items and drafting; visitor freelancer directory and profile). `critical-journeys` login check now looks for the dashboard's workflow navigation (the old sidebar tagline was removed with the sidebar).
+
+## U1 — GitHub CI (verified)
+`main` @ 1b0ac64: pytest 565 passed; Playwright 54 passed (bearer), 55 passed (cookie). Edge @ 9adf15d: Edge API CI and Full CI success (294/294).
+
 ## U1 experience: design system, workspace shell, public homepage — 2026-11-18 IST (release 5.66.0)
 - Edge API: **294 passed, 0 failed** (`public.test.ts` +2: `/public/home` returns real categories closed while the marketplace is off, live agents and counts, read-only; degrades to empty data before migrations). Against PostgreSQL: 1 open category, 10 live or partly built agents, real counts.
 - Frontend: typecheck 0 errors; unit tests **13/13** (new `command-route.test.mts`: command words route to pages, questions go to the coach pre-filled). New `e2e/experience.spec.ts` (2 journeys: homepage with real data and only non-zero counts; shell with role-aware navigation, mode switch, AI usage, notifications, profile menu and command routing). Existing specs checked for selector collisions with the shell (desktop viewport; no shared label or role names).

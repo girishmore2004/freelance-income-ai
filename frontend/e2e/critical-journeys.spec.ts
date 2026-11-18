@@ -265,10 +265,9 @@ test('successful login stores a session and opens the authenticated workspace sh
     page.getByRole('button', { name: 'Log out' }),
   ).toBeVisible();
 
+  // The external-opportunity dashboard renders its workflow steps (inside the workspace frame).
   await expect(
-    page.getByText(
-      'Discover · Evaluate · Draft · Approve · Deliver',
-    ),
+    page.getByRole('navigation', { name: 'External opportunity workflow' }),
   ).toBeVisible();
 
   expect(pageErrors).toEqual([]);

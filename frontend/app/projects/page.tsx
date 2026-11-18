@@ -6,11 +6,16 @@ import { formatBudget } from '@/lib/listing-format';
 import { Invitations, MarketplaceVisibility } from './invitations';
 import { MyProposals, ProposalForm } from './proposal-form';
 import { ReportButton } from './report-button';
+import { PublicNav } from '../public-nav';
+import { ExternalOpportunities } from './external-opportunities';
+
+type View = 'all' | 'native' | 'external';
 
 /**
- * Native client projects for freelancers (Phase 2). Shows only published,
- * public listings, with the fields the client chose to make public.
- * Applying to native projects arrives with the hiring loop (Phase 3).
+ * Projects posted by registered clients on this marketplace. Visitors can
+ * browse and search (spec §2); signing in adds invitations, proposals and
+ * reporting. Only published, public listings with the fields the client
+ * chose to make public are shown.
  */
 
 type PublicListing = {
@@ -36,6 +41,8 @@ export default function ProjectsPage() {
   const [proposing, setProposing] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
+  const [view, setView] = useState<View>('all');
+  const [applied, setApplied] = useState('');
 
   const fetchPage = useCallback(async (before: string | null, append: boolean, cat: string, q: string) => {
     setLoading(true);
@@ -57,39 +64,46 @@ export default function ProjectsPage() {
   }, []);
 
   useEffect(() => {
-    if (!token) return;
+    // Visitors browse too; the list reloads once a session is known.
     // The top-bar search opens /projects?q=…
     const initial = typeof window === 'undefined' ? '' : (new URLSearchParams(window.location.search).get('q') ?? '').slice(0, 100);
-    if (initial) setQuery(initial);
+    if (initial) { setQuery(initial); setApplied(initial); }
+    const v = new URLSearchParams(window.location.search).get('view');
+    if (v === 'native' || v === 'external') setView(v);
     void fetchPage(null, false, '', initial);
     api<Category[]>('/api/v1/project-categories').then(setCategories).catch(() => setCategories([]));
   }, [token, fetchPage]);
 
   function search(event: FormEvent) {
     event.preventDefault();
+    setApplied(query);
     void fetchPage(null, false, category, query);
-  }
-
-  if (!token) {
-    return <main className="shell"><div className="card"><h2>Client projects</h2><p className="muted">Sign in first, then open this page to browse projects posted by clients.</p><a className="btn" href="/">Go to sign in</a></div></main>;
   }
 
   return (
     <main className="shell">
+      {!token && <div className="row between" style={{ marginBottom: 12 }}><a href="/" className="row" style={{ gap: 8 }}><span className="logo" aria-hidden="true">F</span><b>Freelance Income AI</b></a><PublicNav /></div>}
       <div className="row between">
-        <h2>Projects posted by clients</h2>
-        <span className="row"><NotificationLink /><a className="link" href="/contracts">Contracts</a><a className="link" href="/">← Back to workspace</a></span>
+        <h2>Find work</h2>
+        {token && <span className="row"><NotificationLink /><a className="link" href="/contracts">Contracts</a></span>}
       </div>
+      {!token && <p className="card muted">You are browsing as a visitor. <a className="link" href="/#signin">Sign in</a> to send proposals and see invitations.</p>}
 
       {closed ? (
-        <div className="card"><p className="muted">Client-posted projects open when the client marketplace launches. External matches stay on your workspace.</p></div>
+        <>
+          <div className="card"><p className="muted">Projects posted by clients open when the client marketplace launches.</p></div>
+          {token && <ExternalOpportunities query={applied} />}
+        </>
       ) : (
         <>
-          <MarketplaceVisibility />
-          {notice && <p className="success" role="status">{notice}</p>}
-          <Invitations onProposalSent={(message) => { setNotice(message); setRefreshKey((k) => k + 1); }} />
-          <MyProposals refreshKey={refreshKey} />
-          <h3>Public projects</h3>
+          {token && (
+            <>
+              <MarketplaceVisibility />
+              {notice && <p className="success" role="status">{notice}</p>}
+              <Invitations onProposalSent={(message) => { setNotice(message); setRefreshKey((k) => k + 1); }} />
+              <MyProposals refreshKey={refreshKey} />
+            </>
+          )}
           <form className="row" onSubmit={search} role="search">
             <div className="field">
               <label htmlFor="q">Search</label>
@@ -104,7 +118,17 @@ export default function ProjectsPage() {
             </div>
             <button className="btn primary" type="submit" disabled={loading}>Search</button>
           </form>
+          {token && (
+            <div className="ws-role" role="group" aria-label="Show" style={{ maxWidth: 460, margin: '4px 0 14px' }}>
+              {([['all', 'All'], ['native', 'Native projects'], ['external', 'External opportunities']] as const).map(([v, label]) => (
+                <button key={v} type="button" aria-pressed={view === v} onClick={() => setView(v)}>{label}</button>
+              ))}
+            </div>
+          )}
+          {token && view !== 'native' && <ExternalOpportunities query={applied} />}
+          {view !== 'external' && <h3 style={{ marginTop: 18 }}>Native projects <span className="muted small">posted by registered clients on this marketplace</span></h3>}
 
+          {view !== 'external' && <>
           {error && <p className="error" role="alert">{error}</p>}
           {loading && items.length === 0 && <p className="muted">Loading projects…</p>}
           {!loading && !error && items.length === 0 && <p className="empty">No published projects match yet.</p>}
@@ -113,7 +137,7 @@ export default function ProjectsPage() {
             <article className="card item" key={p.id}>
               <div className="row between">
                 <b>{p.title}</b>
-                <span className="badge">{categories.find((c) => c.slug === p.category_slug)?.name ?? p.category_slug}</span>
+                <span className="row" style={{ gap: 6 }}><span className="badge native">Native project</span><span className="badge">{categories.find((c) => c.slug === p.category_slug)?.name ?? p.category_slug}</span></span>
               </div>
               <p className="muted">{p.client_name} · {formatBudget(p.budget_min_minor, p.budget_max_minor, p.currency, p.budget_model)} · {p.deadline ? `Deadline ${p.deadline}` : 'No deadline set'}</p>
               <p>{p.outcome}</p>
@@ -128,8 +152,10 @@ export default function ProjectsPage() {
                   {p.milestones.length > 0 && <><b>Milestones</b><ol>{p.milestones.map((m) => <li key={m}>{m}</li>)}</ol></>}
                   {p.acceptance_criteria.length > 0 && <><b>Acceptance criteria</b><ul>{p.acceptance_criteria.map((a) => <li key={a}>{a}</li>)}</ul></>}
                   <p className="muted">Experience: {p.experience_level} · Revision rounds: {p.revision_rounds}</p>
-                  <div><ReportButton targetType="listing" targetId={p.id} /></div>
-                  {proposing === p.id ? (
+                  {token && <div><ReportButton targetType="listing" targetId={p.id} /></div>}
+                  {!token ? (
+                    <a className="btn primary" href="/#signin">Sign in to send a proposal</a>
+                  ) : proposing === p.id ? (
                     <ProposalForm
                       listingId={p.id}
                       budgetModel={p.budget_model}
@@ -145,6 +171,7 @@ export default function ProjectsPage() {
           ))}
 
           {next && <button className="btn" disabled={loading} onClick={() => void fetchPage(next, true, category, query)}>{loading ? 'Loading…' : 'Load more'}</button>}
+          </>}
         </>
       )}
     </main>

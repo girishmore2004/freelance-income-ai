@@ -16,16 +16,34 @@ type Home = {
   counts: { published_projects: number; visible_freelancers: number; completed_contracts: number } | null;
 };
 
+type Featured = { id: string; title: string; client_name: string; outcome: string; skills: string[]; budget_min_minor: number | null; budget_max_minor: number | null; currency: string };
+type Talent = { user_id: string; display_name: string; headline: string; skills: string[]; rating: { average: number; count: number } | null };
+
+function budget(f: Featured): string {
+  const fmt = (m: number) => `₹${Math.round(m / 100).toLocaleString('en-IN')}`;
+  if (f.budget_min_minor && f.budget_max_minor) return `${fmt(f.budget_min_minor)}–${fmt(f.budget_max_minor)}`;
+  if (f.budget_max_minor) return `up to ${fmt(f.budget_max_minor)}`;
+  return 'Budget on request';
+}
+
 const SIDE: Record<string, string> = { freelancer: 'For freelancers', client: 'For clients', platform: 'Platform safety' };
 
 export function PublicHome({ signIn }: { signIn: ReactNode }) {
   const [home, setHome] = useState<Home | null>(null);
   const [query, setQuery] = useState('');
+  const [projects, setProjects] = useState<Featured[]>([]);
+  const [talent, setTalent] = useState<Talent[]>([]);
 
   useEffect(() => {
     api<Home>('/api/v1/public/home')
       .then((h) => { if (h && Array.isArray(h.categories)) setHome(h); })
       .catch(() => setHome(null));
+    api<{ items: Featured[] }>('/api/v1/marketplace/listings')
+      .then((p) => setProjects(p && Array.isArray(p.items) ? p.items.slice(0, 6) : []))
+      .catch(() => setProjects([]));
+    api<{ items: Talent[] }>('/api/v1/public/freelancers')
+      .then((t) => setTalent(t && Array.isArray(t.items) ? t.items.slice(0, 6) : []))
+      .catch(() => setTalent([]));
   }, []);
 
   function search(event: FormEvent) {
@@ -51,7 +69,7 @@ export function PublicHome({ signIn }: { signIn: ReactNode }) {
           <a href="/" className="row" style={{ gap: 10 }}><span className="logo" aria-hidden="true">F</span><b>Freelance Income AI</b></a>
           <nav className="links" aria-label="Main">
             <a href="/projects">Find work</a>
-            <a href="/client/projects">Hire freelancers</a>
+            <a href="/freelancers">Hire freelancers</a>
             <a href="#categories">Categories</a>
             <a href="/how-it-works">How it works</a>
             <a href="/pricing">Pricing</a>
@@ -89,6 +107,46 @@ export function PublicHome({ signIn }: { signIn: ReactNode }) {
           </div>
           <div className="card" id="signin" aria-label="Sign in">{signIn}</div>
         </div>
+
+        {projects.length > 0 && (
+          <section className="section" aria-labelledby="featured-heading">
+            <div className="wrap">
+              <h2 id="featured-heading">Latest projects</h2>
+              <p className="sub">Posted by registered clients on this marketplace.</p>
+              <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))' }}>
+                {projects.map((f) => (
+                  <a className="card" key={f.id} href="/projects">
+                    <span className="badge native">Native project</span>
+                    <h3 style={{ marginTop: 8 }}>{f.title}</h3>
+                    <p className="muted small">{f.client_name} · {budget(f)}</p>
+                    <p className="small">{f.outcome.slice(0, 140)}{f.outcome.length > 140 ? '…' : ''}</p>
+                    <div className="chips">{f.skills.slice(0, 4).map((k) => <span className="chip" key={k}>{k}</span>)}</div>
+                  </a>
+                ))}
+              </div>
+              <p><a className="link" href="/projects">Browse all projects</a></p>
+            </div>
+          </section>
+        )}
+
+        {talent.length > 0 && (
+          <section className="section" aria-labelledby="talent-heading">
+            <div className="wrap">
+              <h2 id="talent-heading">Freelancers available to hire</h2>
+              <p className="sub">Ratings come only from completed contracts here.</p>
+              <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))' }}>
+                {talent.map((t) => (
+                  <a className="card" key={t.user_id} href={`/freelancers?id=${encodeURIComponent(t.user_id)}`}>
+                    <b>{t.display_name}</b>
+                    <p className="muted small">{t.headline || 'Freelancer'}{t.rating ? ` · ★ ${t.rating.average} (${t.rating.count})` : ''}</p>
+                    <div className="chips">{t.skills.slice(0, 4).map((k) => <span className="chip" key={k}>{k}</span>)}</div>
+                  </a>
+                ))}
+              </div>
+              <p><a className="link" href="/freelancers">Browse freelancers</a></p>
+            </div>
+          </section>
+        )}
 
         <section className="section" id="categories" aria-labelledby="cat-heading">
           <div className="wrap">

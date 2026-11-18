@@ -28,7 +28,7 @@ Baseline: 2026-11-18, release 5.65.0 (all CI green). The spec (founder addendum 
 | Batch | Scope | Status |
 |---|---|---|
 | U1 | Light-first design tokens; one app shell for signed-in pages (role-aware sidebar: freelancer / client / staff, top bar with search, AI command, notifications, AI usage, profile menu, mobile drawer); public marketing homepage on `/` for visitors (sign-in kept on the page) | DONE (code, 5.66.0) — the older single-page dashboard on `/` keeps its own navigation until U3 |
-| U2 | Public marketplace: browse projects and project detail without login (native only, clearly labelled), categories, browse freelancers and public profiles (opted-in only), About, Contact; legal pages as honest "awaiting legal review" | PLANNED |
+| U2 | Public marketplace: browse projects without login (native, labelled), browse freelancers and public profiles (opted-in only, real reviews), featured projects and freelancers on the homepage; **one Find work page** with native and external opportunities together (filter All / Native / External, source labels, freshness, original-post links), the separate Matches area removed from the dashboard (`/` = proposals and applications) | DONE (code, 5.67.0); About/Contact and legal pages pending (legal text D-1) |
 | U3 | Freelancer dashboard answering the five questions; client dashboard; unified discovery (native + external, filters, saved, freshness) | PLANNED |
 | U4 | AI Agent Centre: agent detail, ask/task with evidence, history, usage; command bar routing | PLANNED |
 | U5 | Posting wizard; Proposal Studio sections and version history; contract workspace tabs | PLANNED |

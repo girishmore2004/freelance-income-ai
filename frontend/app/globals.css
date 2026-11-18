@@ -115,6 +115,11 @@ ul{padding-left:20px}
 .toast{position:fixed;right:22px;bottom:22px;z-index:50;max-width:min(440px,calc(100vw - 44px));padding:12px 16px;border-radius:var(--radius);background:var(--text);color:#fff;box-shadow:var(--shadow);cursor:pointer;animation:pop .18s ease}
 @keyframes pop{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 
+/* ---- external-opportunity dashboard inside the frame ---- */
+.legacy-dash .tabs .nav-item{width:auto;padding:8px 12px;background:var(--surface);border:1px solid var(--line)}
+.legacy-dash .tabs .nav-item.active{background:var(--accent-soft);border-color:var(--accent-line)}
+.legacy-dash .main{padding:0;max-width:none}
+
 /* ---- workspace shell (signed-in pages) ---- */
 .ws{display:grid;grid-template-columns:var(--side-w) minmax(0,1fr);min-height:100vh}
 .ws-side{position:sticky;top:0;height:100vh;overflow-y:auto;background:var(--surface);border-right:1px solid var(--line);padding:16px 12px;display:flex;flex-direction:column;gap:4px}
