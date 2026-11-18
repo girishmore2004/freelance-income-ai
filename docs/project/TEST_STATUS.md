@@ -1,5 +1,9 @@
 # Test Status
 
+## U9 — GitHub CI (verified, 2026-11-18)
+`main` @ 6f8b8eb: pytest **573 passed**; Playwright **66 passed** (bearer), **67 passed** (cookie). Edge @ 3b2ccdd/4614baa: Edge API CI success, vitest **363 passed** (34 files); Full CI success.
+- Two CI problems on the way, neither a product defect: (1) GitHub moved `ubuntu-latest` to 26.04, where Playwright has no Chromium build, so the e2e job could not start on either branch — pinned to `ubuntu-24.04`; (2) the new inbox spec's `getByRole('alert')` also matched the empty Next.js route announcer — scoped to the discussion region.
+
 ## U8 — GitHub CI (verified, 2026-11-18)
 Green on the first push. `main` @ ec8d2ca: pytest **571 passed**; Playwright **64 passed** (bearer), **65 passed** (cookie). Edge @ b2b7774: Edge API CI and Full CI success, vitest **355 passed** (+12 `pipeline.test.ts`; existing governor/brief/coach tests updated only where the governor now reads the full registry row and the caller's role).
 - PostgreSQL end-to-end through the real core and workflow handlers (real session tokens): new → applied refused (409), → ready refused (system status); template draft with job-specific questions; edit → version 2; approval → ready; applied recorded with channel and reference; follow-up in 3 days; → interview; → drafted refused; timeline showed versions 2:edited, 1:safe_template, the submission, and events new>drafted, drafted>ready, ready>applied, submission, follow-up, applied>interview; other user 404; follow-up listed and on the calendar, marked done; won. Finance exceptions: none, reconciliation OK, both trial balances balanced; finance user refused job list (404); admin saw the dead job; retry without a queue → 503 logged (defect found and fixed: it crashed before); retry releases logged.
