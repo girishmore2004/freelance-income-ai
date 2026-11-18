@@ -1,5 +1,9 @@
 # Test Status
 
+## U11 — GitHub CI (verified, 2026-11-18)
+Green on the first push. `main` @ bd4522f: pytest **577 passed**; Playwright **71 passed** (bearer), **72 passed** (cookie). Edge @ 8939618: Edge API CI and Full CI success, vitest **376 passed**. Frontend unit 33 passed.
+- PostgreSQL end-to-end: member plan 403, outsider 404, plan of 10 tasks from the website category (Design approval, Staging review and Launch approval to the client, spread over 2 milestones), plan again 409, client task added, invalid milestone 422, task done, member edit 403, delete, completed contract add 409; handover with a password 422, client adding 403, freelancer item, member confirm 403, client confirm, withdraw after confirm 409; events tasks.planned / handover.added / handover.confirmed with notifications to the other side; calendar showed each side only its own due tasks.
+
 ## U10 — GitHub CI (verified, 2026-11-18)
 Green on the first push. `main` @ a923188: pytest **575 passed**; Playwright **69 passed** (bearer), **70 passed** (cookie). Edge @ f004417: Edge API CI and Full CI success, vitest **372 passed**.
 - PostgreSQL end-to-end (in-memory R2): member upload 403, disguised PNG 422, owner upload, member and freelancer listing, freelancer download as attachment, draft project hidden (404), freelancer delete 403, owner delete removed the object, closed project 409; verification: bad evidence 422, request, duplicate 409, member client request 403, owner request, non-staff queue 404, queue with platform facts, reject without note 422, approve, approve twice 409, `client_verified` on the project, `verified` on the public directory card, revoke without note 422, revoke cleared `verified_at`; moderation log and notifications written; sources: moderator switch 403, off without reason 422, off, unknown 404, discovery's disabled set, health computed from runs.
