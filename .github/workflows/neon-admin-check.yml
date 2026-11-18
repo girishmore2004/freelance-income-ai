@@ -17,6 +17,11 @@ on:
         options:
           - "production"
           - "stage3c-integration-test"
+      describe_tables:
+        description: "Optional, read-only: comma-separated tables whose columns to print (no row data)"
+        required: false
+        default: ""
+        type: string
       staff_email:
         description: "Email to make admin + finance + moderator (leave empty to only check)"
         required: false
@@ -52,6 +57,7 @@ jobs:
         env:
           STAGE3C_DATABASE_URL: ${{ inputs.target == 'production' && secrets.PRODUCTION_DATABASE_URL || secrets.STAGE3C_DATABASE_URL }}
           STAFF_EMAIL: ${{ inputs.staff_email }}
+          DESCRIBE_TABLES: ${{ inputs.describe_tables }}
         run: |
           python - <<'PY'
           import os, sys
@@ -72,6 +78,33 @@ jobs:
 
           with psycopg.connect(raw.replace("postgres://", "postgresql://", 1), connect_timeout=20) as conn:
               with conn.cursor() as cur:
+                  import re as _re
+                  for table in [t.strip() for t in os.environ.get("DESCRIBE_TABLES", "").split(",") if t.strip()]:
+                      if not _re.fullmatch(r"[a-z_][a-z0-9_]{0,62}", table):
+                          print(f"Skipping invalid table name: {table!r}")
+                          continue
+                      cur.execute("""
+                          SELECT column_name, data_type, is_nullable, column_default
+                          FROM information_schema.columns WHERE table_schema = 'public' AND table_name = %s ORDER BY ordinal_position
+                      """, (table,))
+                      cols = cur.fetchall()
+                      cur.execute("""
+                          SELECT c.conname, c.contype, pg_get_constraintdef(c.oid)
+                          FROM pg_constraint c JOIN pg_class t ON t.oid = c.conrelid JOIN pg_namespace n ON n.oid = t.relnamespace
+                          WHERE n.nspname = 'public' AND t.relname = %s ORDER BY c.conname
+                      """, (table,))
+                      cons = cur.fetchall()
+                      cur.execute("SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = 'public' AND tablename = %s ORDER BY indexname", (table,))
+                      idx = cur.fetchall()
+                      cur.execute(f'SELECT count(*) FROM public."{table}"') if cols else None
+                      rows = cur.fetchone()[0] if cols else 0
+                      print(f"TABLE {table}: " + ("missing" if not cols else f"{rows} rows"))
+                      for name, dtype, nullable, default in cols:
+                          print(f"  column {name} {dtype} {'NULL' if nullable == 'YES' else 'NOT NULL'}{' default ' + str(default) if default else ''}")
+                      for name, kind, definition in cons:
+                          print(f"  constraint {name} [{kind}] {definition}")
+                      for name, definition in idx:
+                          print(f"  index {name}: {definition}")
                   cur.execute("SELECT to_regclass('public.alembic_version') IS NOT NULL")
                   if not cur.fetchone()[0]:
                       sys.exit("This database has no alembic_version table; it has never been migrated.")
