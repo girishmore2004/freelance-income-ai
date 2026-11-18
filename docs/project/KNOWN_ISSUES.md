@@ -26,7 +26,9 @@
 | K-25 | Low | Contract messages block phone numbers/emails even after hiring (same rule as listings). Parties may legitimately need a call; meetings are not built. | Revisit with founder policy (D-16 proposed); add scheduled calls later. |
 | K-26 | Info | Deliveries are notes + https links only; file uploads (R2, size limits, malware scanning) are not built. | Phase 3 follow-up with R2 (K-19). |
 | K-27 | Low | The sidebar shows the Admin link to everyone; non-staff see "This page is for staff". | Hide by role when the home page is refactored. |
-| K-28 | Medium | Account suspension is not built (needs session revocation and appeal flow); staff can hide listings and action reports. | Phase 7 batch 2. |
+| K-28 | Info | Resolved in 5.62.0: account suspension with appeals (ADR-007). | — |
+| K-29 | Low | A suspended client's already-published listings stay visible (they cannot hire or act while suspended). | Pause the organisation's listings on suspension once team ownership (invitations) exists. |
+| K-30 | Low | Staff suspend by user ID (shown on user reports); there is no user search on `/admin` yet. | Add a staff user lookup. |
 | K-22 | Info | Invitations are in-app only (no email yet); freelancers see them on `/projects`. | Notifications in Phase 3 with Resend (D-15). |
 | K-20 | Low | Listing screen is keyword-based (e.g. it can miss obfuscated contact details and may flag legitimate mentions of "WhatsApp integration"). Flags only hold for review; they never reject. | Tune from moderation outcomes; P1 agent later. |
 | K-10 | Info | `password-service.test.ts` could not run offline (needs `bcryptjs`). | CI covers it. |

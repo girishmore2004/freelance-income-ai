@@ -126,6 +126,12 @@ Set build variable `NEXT_PUBLIC_AUTH_MODE=cookie`, redeploy, sign in, and confir
 3. To test: `/finance` → approve a fee schedule; `/admin` → Feature flags → turn on **payments.sandbox** (optionally **payments.require_funding**). On an active contract: Payments → **Fund milestone** → **Complete test payment**; the freelancer delivers; the client approves → the freelancer sees the money on **Earnings** and can **Withdraw** (test payout). Everything is labelled TEST MODE; no real money moves. `/finance` → trial balance must stay balanced.
 4. Real payments: keep `payments.live` OFF (it is locked). After D-1/D-2, a live provider adapter is written and `PAYMENT_WEBHOOK_SECRET` is set as a Worker secret.
 
+## Notifications (release 5.61.0) and Phase 7 batch 2 (release 5.62.0): disputes, suspension, appeals
+1. Neon backup branch → "Stage 3C Neon migrations" (expects `0063_disputes_suspensions`; applies 0062 and 0063 if not yet run). Check: `SELECT count(*) FROM disputes;` → 0 and `SELECT column_name FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'suspended_at';` → 1 row.
+2. Deploy Edge (5.62.0), then the frontend. Sign-in keeps working even if the Edge deploys before the migration (the suspension check tolerates the missing column).
+3. Disputes: on an active contract, either side → **Raise a dispute**; staff → `/admin` → **Open disputes** → **Open evidence pack** → write the explanation → **No money moves** (moderator or admin) or **Release funded to freelancer** / **Refund funded to client** (admin only; test money until D-1/D-2).
+4. Suspension: `/admin` → **Account suspensions** → user ID (from a user report) + reason → **Suspend**. The person sees the reason on `/account` and can appeal once; a different staff member accepts or rejects the appeal; anyone on staff can **Lift suspension**.
+
 ## Rollback
 - Edge or frontend: Cloudflare → Worker → **Deployments** → previous version → **Rollback**. If you roll the Edge API back, re-attach the old consumer to the queue.
 - Database: see DATABASE_MIGRATION_STATUS.md (5.45 code runs on the 0049 schema).

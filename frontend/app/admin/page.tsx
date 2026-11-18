@@ -2,11 +2,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError, api, useSessionToken } from '@/lib/api-client';
 import { formatBudget } from '@/lib/listing-format';
+import { TrustCases } from './trust-cases';
 
 /**
  * Staff admin (moderator/admin). Moderation queue for held listings, user
- * reports, platform overview and feature flags (admin only; real payments
- * cannot be switched on here). Every decision is logged.
+ * reports, disputes, suspensions and appeals, platform overview and feature
+ * flags (admin only; real payments cannot be switched on here). Every decision
+ * is logged.
  */
 
 type Held = { id: string; organization_name: string; findings: string[]; waiting_since: string; brief: { title: string; outcome: string; description: string; budget_min_minor: number | null; budget_max_minor: number | null; currency: string; budget_model: string } };
@@ -129,6 +131,8 @@ export default function AdminPage() {
           </div>
         ))}
       </section>
+
+      {overview && <TrustCases isAdmin={overview.is_admin} />}
 
       {overview && (
         <section className="card" aria-labelledby="flags-heading">

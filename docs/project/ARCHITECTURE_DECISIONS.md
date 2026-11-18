@@ -27,3 +27,9 @@ Decision: every Edge model call reserves a usage row first (worst-case estimate)
 Options (Master Plan 4.7 / Playbook 3.4): A port to Edge; B hybrid with Python as system of record; C Python primary with Edge gateway.
 Facts: Python is not deployed; B and C need an always-on Python host (new monthly cost, a second runtime to secure), and LangGraph/pgvector code cannot run in Workers unchanged.
 Recommendation: **A, deliberately** — keep Edge as the only runtime; keep Python as schema authority, reference spec and test oracle; port route families in the order the marketplace needs them (auth done → client/listings → proposals/offers → delivery → finance). Choose B only if you accept hosting Python (for example a small container service) to reuse LangGraph workflows quickly.
+
+## ADR-007 Account suspension is enforced at authentication — **Accepted (code)**
+Decision: `authenticateAccessToken` reads `users.suspended_at` (through `to_jsonb(u)`, so it works before migration 0063) and `authenticateRequest` refuses every unsafe request from a suspended account except sign-out, password change, marking notifications read and the appeal (`ACCOUNT_SUSPENDED`, 403). Reads stay allowed so the person can see their contracts, payments and the reason. Sessions are not revoked, because a revoked person could not appeal.
+Why: one central check covers every current and future route without editing each handler. Login itself is unaffected (it does not use `authenticateRequest`).
+Trade-off: one extra column read per authenticated request (same row already fetched).
+

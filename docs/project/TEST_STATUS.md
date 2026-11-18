@@ -1,5 +1,15 @@
 # Test Status
 
+## Phase 7 batch 2 — disputes, suspension and appeals — 2026-11-18 IST (release 5.62.0)
+- Edge API: **268 passed, 0 failed** (new `disputes.test.ts` 12: dispute validation and screening; either side opens one per active contract; outsiders 404, non-managing members 403; statements capped; only the opener withdraws; staff-only endpoints; evidence pack without any AI call; money outcomes admin-only; decision logged inside the transaction; same decision re-run is idempotent and a different one 409; suspension of non-staff only, hidden from discovery, notified; appeal decided by a second staff member; one appeal; suspension write-blocking rules).
+- PostgreSQL 16 with the 0063 DDL, real handlers, sandbox payments: two contracts with both milestones funded. **Release path:** freelancer opened a dispute, duplicate 409, client statement, client could not withdraw (403), evidence pack (2 milestones, ₹20,000 funded, 7 events), moderator refused for release (403), admin released → 2 milestones released, contract completed, funds held 0 and fees held 0; re-run released 0; different outcome 409. **Refund path:** admin refunded → 2 refunds, contract cancelled, held accounts 0. Trial balance equal (₹1,54,651 each side). Freelancer received 4 dispute notifications. **Suspension:** staff account refused (403); f3 suspended, duplicate 409; auth query reads `suspended = true`; marketplace visibility switched off; appeal once (second 409); suspender could not decide the appeal (403 `SECOND_REVIEWER_REQUIRED`); admin overturned → `suspended_at` cleared, status lifted/overturned; moderation log recorded dispute.release_funded, dispute.refund_funded, user.suspended, appeal.overturned.
+- Typecheck: 0 new errors (only the known `mfa-service` harness errors). Bundle builds.
+- Frontend: typecheck 0 errors (dispute panel on contracts, disputes and suspensions on `/admin`, suspension card with appeal on `/account`, `e2e/disputes.spec.ts` 3 journeys); unit tests 11/11.
+- Python: `tests/test_disputes_suspensions_v563.py` (3 tests) compiled; runs in CI (SQLAlchemy not installed in this workspace).
+
+## Notifications — GitHub CI (verified)
+Green on the first push. `main` @ f11562a: Backend tests 556 passed; Full CI success; Edge @ cfa1520: Edge API CI and Full CI success.
+
 ## Notifications — 2026-11-17 IST (release 5.61.0)
 - Edge API: **256 passed, 0 failed** (new `notify.test.ts` 4: one row per distinct recipient with per-user dedupe, failures never thrown, contract events go to the other party only, inbox list/count/mark limited to the signed-in user).
 - PostgreSQL 16 with the 0062 DDL, real handlers: invitation → proposal → shortlist → offer → accept → message → delivery → revision → redelivery produced, for the freelancer: invitation.received, proposal.shortlisted, offer.sent, contract.activated, milestone.revision_requested; for the client: proposal.received, contract.activated, message.received, milestone.submitted ×2 (no self-notifications; redeliveries not swallowed by dedupe); unread count 5 → mark one → mark all → 0.

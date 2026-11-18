@@ -1,31 +1,31 @@
 # Project Status — Freelance Income AI
 
-As of 2026-11-17: Edge API **5.59.0** (branch `cloudflare-edge-api-phase1`), frontend **5.59.0** (`main`), migration head **`0060_trust_admin`**. Every batch below passed GitHub CI (Python, Alembic on PostgreSQL, frontend build, Playwright in bearer and cookie modes, Edge typecheck/vitest/dry-run). Cloudflare deploys each push automatically.
+As of 2026-11-18: Edge API **5.62.0** (branch `cloudflare-edge-api-phase1`), frontend **5.62.0** (`main`), migration head **`0063_disputes_suspensions`**. Every batch passed GitHub CI (Python, Alembic on PostgreSQL, frontend build, Playwright in bearer and cookie modes, Edge typecheck/vitest/dry-run) before the next one started. Cloudflare deploys each push automatically.
 
 ## Where the project really stands
-- **Marketplace loop without money: built and CI-verified, switched OFF.** Post a brief (with AI Brief Builder) → screening and moderation → matching with explanations → invitations → proposals → comparison → offer → two-party contract (versions, change orders) → delivery workspace (submissions, revisions within agreed rounds, acceptance checklist, messages, activity log) → completion → two-way reviews. All of it sits behind `marketplace.client_side` (OFF).
-- **Not yet confirmed in production:** migrations 0051–0060 have not been confirmed as run on Neon. Until they are, the client-side features must stay OFF (the code tolerates missing plan/agent tables, but marketplace tables are required).
-- **Money loop: BLOCKED.** The double-entry ledger (DB-enforced balance and append-only), fee engine and finance page exist; no payment provider, funding, payouts, refunds or invoices. `payments.live` is OFF and locked in the admin UI. Needs D-1, D-2 (and D-3, D-4, D-5).
-- **Business model:** plans and AI credits work as data (free plan = today's limits); paid prices are not set (D-14); buying is BLOCKED with payments.
-- **Agents:** 28 catalogue agents in a governed registry with honest status — live: F2, F4, C1, C2, C3, C5, C6; partly: F1, F9, P1, P8; blocked: F10, P2, P6; the rest planned. Per-agent kill switch enforced by the AI governor.
-- **Trust/admin:** reports, moderation queue, append-only moderation log, overview, admin flag control. Not built: account suspension and appeals, disputes, policy documents (legal).
-- **Legacy pages:** 12 older pages still call Python routes that are not deployed (K-01); the new marketplace pages do not depend on them.
+- **Marketplace loop: built and CI-verified, switched OFF.** Post a brief (AI Brief Builder) → screening and moderation → matching with explanations → invitations → proposals → comparison → offer → two-party contract (versions, change orders) → funding (test mode) → delivery workspace (submissions, revisions, acceptance checklist, messages, activity log) → approval releases funds → completion → two-way reviews; cancellation by agreement with refunds; disputes decided by staff. All behind `marketplace.client_side` (OFF).
+- **Not yet confirmed in production:** migrations 0051–0063 have not been confirmed as run on Neon. Until they are, the client-side features must stay OFF.
+- **Money loop: works in test mode only.** Provider-agnostic funding, release, refunds, payouts, test invoices, all as balanced double-entry ledger entries (reconciled on PostgreSQL). Live money stays BLOCKED on D-1/D-2: `payments.live` is OFF, locked in the admin UI and refused in code.
+- **Business model:** plans and AI credits work as data (free plan = today's limits); fees (D-5) and paid prices (D-14) are not set; buying is BLOCKED with live payments.
+- **Agents:** 28 catalogue agents in a governed registry with honest status — live: F2, F4, C1, C2, C3, C5, C6; partly: F1, F9, P1, P8; blocked: F10, P2, P6; the rest planned. Per-agent kill switch enforced by the AI governor. Dispute and suspension decisions are human-only (Master Plan 3.5).
+- **Trust/admin:** reports, moderation queue, append-only moderation log, overview, flags, disputes with evidence packs, account suspension with appeals, in-app notifications. Not built: policy documents and account deletion (legal, D-1).
+- **Legacy pages:** 12 older pages still call Python routes that are not deployed (K-01); the marketplace pages do not depend on them. Next batches: team invitations, R2 attachments, legacy page porting.
 
 ## Repository and architecture map
 
 | Component | Repo / path | Runtime | Role today |
 |---|---|---|---|
 | Frontend (Next.js 16, OpenNext) | `freelance-income-ai/frontend` (`main`) | Worker `freelance-income-ai` | UI; same-origin proxy to the Edge API |
-| Edge API (TypeScript) | `backend/edge-api` (`cloudflare-edge-api-phase1`) | Worker `freelance-income-ai-api-edge` | The only live backend: auth, identity, listings, matching, hiring, contracts, delivery, reviews, ledger/fees, plans, agents, trust/admin, public pricing; queue consumer and 6-hourly cron |
+| Edge API (TypeScript) | `backend/edge-api` (`cloudflare-edge-api-phase1`) | Worker `freelance-income-ai-api-edge` | The only live backend: auth, identity, listings, matching, hiring, contracts, delivery, reviews, payments (test mode), ledger/fees, plans, agents, trust/admin, disputes, suspensions, notifications, public pricing; queue consumer and 6-hourly cron |
 | Python API (FastAPI) | `backend/app` | not deployed | Reference implementation and schema models |
-| Migrations | `backend/alembic` | GitHub Action "Stage 3C Neon migrations" | Schema authority (head `0060_trust_admin`) |
+| Migrations | `backend/alembic` | GitHub Action "Stage 3C Neon migrations" | Schema authority (head `0063_disputes_suspensions`) |
 | Database | Neon PostgreSQL via Hyperdrive | — | Shared |
 
 ## What only you can do
-1. **Neon:** create a backup branch, then run **Actions → "Stage 3C Neon migrations"** (expects `0060_trust_admin`). It applies 0051–0060 in one run.
+1. **Neon:** create a backup branch, then run **Actions → "Stage 3C Neon migrations"** (expects `0063_disputes_suspensions`). It applies 0051–0063 in one run.
 2. **Staff roles:** give yourself `admin` (and `finance`, `moderator`) with the SQL in DEPLOYMENT_RUNBOOK.md (Phase 4 step 3).
 3. **Try it on staging:** `/admin` → Feature flags → turn **marketplace.client_side** on; walk the journey in the runbook; turn it off again if anything looks wrong.
-4. **Decisions** (BUSINESS_DECISIONS.md): D-1 legal entity/tax, D-2 payment provider, D-3/D-4 payment mode and loss rules, D-5 fees, D-6 categories, D-13 AI provider policy, D-14 plan prices, D-15 email sender domain, D-16 contact-details policy.
+4. **Decisions** (BUSINESS_DECISIONS.md): D-1 legal entity/tax, D-2 payment provider, D-3/D-4 payment mode and loss rules, D-5 fees, D-6 categories, D-13 AI provider policy, D-14 plan prices, D-15 email sender domain, D-16 contact-details policy; confirm the provisional D-17 to D-19.
 5. **Cloudflare:** keep `RESEND_*` as runtime secrets; delete the old `freelance-income-ai-api` Worker when convenient.
 
 ## Conflicts between documents and code

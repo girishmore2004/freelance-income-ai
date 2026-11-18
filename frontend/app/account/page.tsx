@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ApiError, api, useSessionToken } from '@/lib/api-client';
 import { PlanCard } from './plan-card';
+import { SuspensionCard } from './suspension-card';
 
 /**
  * Account & roles (Phase 1). One login, two public roles:
@@ -175,6 +176,7 @@ export default function AccountPage() {
 
       {identity && (
         <>
+          <SuspensionCard />
           <PlanCard />
           <section className="card" aria-labelledby="roles-heading">
             <h3 id="roles-heading">Your roles</h3>

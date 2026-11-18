@@ -18,6 +18,7 @@ class User(Base):
     mfa_secret_encrypted: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     mfa_last_used_step: Mapped[int | None] = mapped_column(Integer, nullable=True)
     failed_login_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    suspended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     profile = relationship("Profile", back_populates="user", uselist=False, cascade="all, delete-orphan")
 
@@ -1797,4 +1798,69 @@ class ContractCancellation(Base):
     responded_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
     responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class Dispute(Base):
+    """A party's dispute on a contract and the staff resolution (migration 0063)."""
+    __tablename__ = "disputes"
+    __table_args__ = (
+        CheckConstraint("opened_by_party IN ('client', 'freelancer')", name="ck_disputes_party"),
+        CheckConstraint("reason IN ('quality', 'non_delivery', 'scope', 'payment', 'communication', 'other')", name="ck_disputes_reason"),
+        CheckConstraint("status IN ('open', 'resolved', 'withdrawn')", name="ck_disputes_status"),
+        CheckConstraint("resolution IS NULL OR resolution IN ('release_funded', 'refund_funded', 'no_action')", name="ck_disputes_resolution"),
+        Index("ix_disputes_status_created", "status", "created_at"),
+        Index("uq_disputes_open_per_contract", "contract_id", unique=True,
+              postgresql_where=sql_text("status = 'open'"), sqlite_where=sql_text("status = 'open'")),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    contract_id: Mapped[str] = mapped_column(ForeignKey("contracts.id", ondelete="RESTRICT"), nullable=False)
+    opened_by_party: Mapped[str] = mapped_column(String(20), nullable=False)
+    opened_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    reason: Mapped[str] = mapped_column(String(30), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    desired_outcome: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="open", server_default="open")
+    resolution: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    resolution_note: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    resolved_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
+
+class DisputeStatement(Base):
+    """A party's statement in a dispute (migration 0063)."""
+    __tablename__ = "dispute_statements"
+    __table_args__ = (
+        CheckConstraint("party IN ('client', 'freelancer')", name="ck_dispute_statements_party"),
+        Index("ix_dispute_statements_dispute", "dispute_id", "created_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    dispute_id: Mapped[str] = mapped_column(ForeignKey("disputes.id", ondelete="CASCADE"), nullable=False)
+    party: Mapped[str] = mapped_column(String(20), nullable=False)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
+
+class AccountSuspension(Base):
+    """Staff suspension of an account with one appeal (migration 0063)."""
+    __tablename__ = "account_suspensions"
+    __table_args__ = (
+        CheckConstraint("status IN ('active', 'lifted')", name="ck_account_suspensions_status"),
+        CheckConstraint("appeal_status IN ('none', 'pending', 'upheld', 'overturned')", name="ck_account_suspensions_appeal"),
+        Index("uq_account_suspensions_active", "user_id", unique=True,
+              postgresql_where=sql_text("status = 'active'"), sqlite_where=sql_text("status = 'active'")),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active", server_default="active")
+    created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    lifted_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    lifted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    lift_note: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    appeal_text: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    appeal_status: Mapped[str] = mapped_column(String(20), nullable=False, default="none", server_default="none")
+    appeal_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

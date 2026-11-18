@@ -8,6 +8,7 @@ import { ContractWorkspace } from './workspace';
 import { ContractReviews } from './reviews';
 import { FeeEstimate } from './fee-estimate';
 import { PaymentsPanel } from './payments-panel';
+import { DisputePanel } from './dispute-panel';
 
 /**
  * Contracts for both parties (Phase 3). An offer becomes active only when the
@@ -181,6 +182,17 @@ export default function ContractsPage() {
                   contractId={detail.id}
                   contractStatus={detail.status}
                   party={detail.party}
+                  canManage={detail.can_manage !== false}
+                  onChanged={() => {
+                    void load();
+                    api<Detail>(`/api/v1/contracts/${detail.id}`).then((d) => { if (d.status !== detail.status) setDetail(d); }).catch(() => undefined);
+                  }}
+                />
+              )}
+              {['active', 'completed', 'cancelled'].includes(detail.status) && (
+                <DisputePanel
+                  key={`dispute-${detail.id}-${detail.status}`}
+                  contractId={detail.id}
                   canManage={detail.can_manage !== false}
                   onChanged={() => {
                     void load();
