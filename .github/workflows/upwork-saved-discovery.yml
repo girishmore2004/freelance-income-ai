@@ -33,6 +33,12 @@ jobs:
           UPWORK_SCOPES: ${{ secrets.UPWORK_SCOPES }}
           UPWORK_CACHE_RETENTION_ENABLED: ${{ vars.UPWORK_CACHE_RETENTION_ENABLED }}
         run: |
+          # Not configured at all: the Upwork integration is off, so there is nothing to run.
+          if [ -z "$UPWORK_CLIENT_ID" ] && [ -z "$UPWORK_CLIENT_SECRET" ]; then
+            echo "::notice::Upwork integration is not configured (no UPWORK_CLIENT_ID/UPWORK_CLIENT_SECRET secrets); skipping."
+            exit 0
+          fi
+          # Partly configured is a real misconfiguration and fails loudly.
           for key in DATABASE_URL OAUTH_ENCRYPTION_KEY UPWORK_CLIENT_ID UPWORK_CLIENT_SECRET UPWORK_REDIRECT_URI UPWORK_SCOPES; do
             if [ -z "${!key}" ]; then echo "Missing required secret: $key" >&2; exit 1; fi
           done

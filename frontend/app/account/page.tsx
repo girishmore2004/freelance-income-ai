@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ApiError, api, useSessionToken } from '@/lib/api-client';
 import { PlanCard } from './plan-card';
 import { SuspensionCard } from './suspension-card';
+import { MyInvitations, TeamPanel } from './team-panel';
 
 /**
  * Account & roles (Phase 1). One login, two public roles:
@@ -24,7 +25,7 @@ type Organization = {
   membership_role: 'owner' | 'admin' | 'member';
   billing?: Billing;
 };
-type Identity = { roles: string[]; organizations: Organization[]; client_side_enabled: boolean };
+type Identity = { user_id?: string; roles: string[]; organizations: Organization[]; client_side_enabled: boolean };
 type OrgForm = {
   name: string;
   kind: 'individual' | 'company';
@@ -177,6 +178,7 @@ export default function AccountPage() {
       {identity && (
         <>
           <SuspensionCard />
+          <MyInvitations onJoined={() => void load()} />
           <PlanCard />
           <section className="card" aria-labelledby="roles-heading">
             <h3 id="roles-heading">Your roles</h3>
@@ -231,6 +233,9 @@ export default function AccountPage() {
                     <button className="btn" disabled={busy} onClick={() => { setEditingId(org.id); setForm(formFrom(org)); setNotice(''); setError(''); }}>
                       Edit
                     </button>
+                  )}
+                  {identity.user_id && (
+                    <TeamPanel organizationId={org.id} myRole={org.membership_role} myUserId={identity.user_id} onLeft={() => void load()} />
                   )}
                 </div>
               ))}

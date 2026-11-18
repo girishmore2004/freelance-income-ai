@@ -1,12 +1,13 @@
 # Database Migration Status
 
-Chain head: **`0063_disputes_suspensions`** (63 revisions, single head — verified by `tests/test_system_diagnostics_v542.py`). Neon staging was last migrated to 0046 (per workflow pin).
+Chain head: **`0064_org_invitations`** (64 revisions, single head — verified by `tests/test_system_diagnostics_v542.py`). Neon staging was last migrated to 0046 (per workflow pin).
 
 | Revision | Change | Type | Downgrade |
 |---|---|---|---|
 | 0047_edge_apply_tables | Captures `integrations`, `applications`, `application_messages` used by the Edge API; adds missing columns to hand-made tables; unique `(user_id, provider)`, unique `(user_id, external_id)`, partial unique "one live send per proposal"; `integrations.id` DB default | Additive; stops with a clear message if duplicates exist | Removes indexes only; keeps tables and data |
 | 0048_queue_job_reliability | `background_jobs`: `idempotency_key` (unique), `attempts`, `payload_json`, `source`, `dead_lettered_at`; index `(status, created_at)` | Additive | Drops added columns/indexes |
 | 0051_native_project_listings | `project_categories` (8 seeded from the Master Plan; only `website_development` enabled), `project_listings` (status/visibility/moderation check constraints, indexes for org lists and the marketplace), `project_listing_versions` (immutable, unique per listing+version, money in minor units, budget range check) | Additive + seed | Drops the three tables |
+| 0064_org_invitations | `organization_invitations` (role admin/member, status checks, unique token hash, one pending invitation per organisation + email, indexes by organisation and by email) | Additive | Drops the table |
 | 0063_disputes_suspensions | `users.suspended_at`; `disputes` (party/reason/status/resolution checks, one open dispute per contract via partial unique index, contract RESTRICT), `dispute_statements` (party check), `account_suspensions` (status and appeal checks, one active suspension per user) | Additive. The Edge reads `suspended_at` through `to_jsonb(users)`, so sign-in keeps working before this runs | Drops the three tables and the column |
 | 0062_notifications_inbox | `notifications`: `kind`, `link`, `read_at`, `dedupe_key` (unique), index (user_id, created_at) | Additive | Drops the added columns and indexes |
 | 0061_payments_sandbox | `payment_intents` (amount checks, total = amount + client fee, one open funding per milestone), `payment_events` (unique provider+event), `payouts` (unique idempotency key), `billing_invoices` (one per payment), `contract_cancellations` (one open per contract); flags `payments.sandbox` and `payments.require_funding` seeded OFF | Additive + flags | Drops the five tables and two flags |
@@ -25,8 +26,8 @@ Chain head: **`0063_disputes_suspensions`** (63 revisions, single head — verif
 ## Safe deployment order
 1. **Back up** Neon (create a branch named `pre-0047-2026-11` from `main` in Neon → Branches). Branch creation is instant and is the rollback point.
 2. Optional dry run: run the migration workflow against the backup branch first.
-3. Run GitHub Action **"Stage 3C Neon migrations"** in `freelance-income-ai` (type the confirmation text). It expects `0063_disputes_suspensions`.
-4. Deploy the Edge API (5.62.0 needs 0047–0063 before `marketplace.client_side` is switched on; AI keeps working on Worker limits if 0057 is not applied yet).
+3. Run GitHub Action **"Stage 3C Neon migrations"** in `freelance-income-ai` (type the confirmation text). It expects `0064_org_invitations`.
+4. Deploy the Edge API (5.63.0 needs 0047–0064 before `marketplace.client_side` is switched on; AI keeps working on Worker limits if 0057 is not applied yet).
 5. Deploy the frontend.
 
 If 0047 stops with "existing rows contain duplicates", nothing was committed: inspect the listed rows in Neon's SQL Editor, keep the correct one, then rerun.
@@ -37,7 +38,7 @@ If 0047 stops with "existing rows contain duplicates", nothing was committed: in
 
 ## Verification queries (Neon SQL Editor)
 ```sql
-SELECT version_num FROM alembic_version;                       -- 0063_disputes_suspensions
+SELECT version_num FROM alembic_version;                       -- 0064_org_invitations
 SELECT slug, enabled FROM project_categories ORDER BY sort_order; -- only website_development = true
 SELECT role, count(*) FROM user_roles GROUP BY role;            -- freelancer = number of users
 SELECT key, enabled FROM feature_flags ORDER BY key;            -- payments.live = false

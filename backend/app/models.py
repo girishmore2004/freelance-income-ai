@@ -1864,3 +1864,28 @@ class AccountSuspension(Base):
     appeal_status: Mapped[str] = mapped_column(String(20), nullable=False, default="none", server_default="none")
     appeal_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+
+class OrganizationInvitation(Base):
+    """Team invitation to an organisation; only the token hash is stored (migration 0064)."""
+    __tablename__ = "organization_invitations"
+    __table_args__ = (
+        CheckConstraint("role IN ('admin', 'member')", name="ck_org_invitations_role"),
+        CheckConstraint("status IN ('pending', 'accepted', 'declined', 'revoked')", name="ck_org_invitations_status"),
+        UniqueConstraint("token_hash", name="uq_org_invitations_token"),
+        Index("ix_org_invitations_org", "organization_id", "status"),
+        Index("ix_org_invitations_email", "email", "status"),
+        Index("uq_org_invitations_pending", "organization_id", "email", unique=True,
+              postgresql_where=sql_text("status = 'pending'"), sqlite_where=sql_text("status = 'pending'")),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    email: Mapped[str] = mapped_column(String(320), nullable=False)
+    role: Mapped[str] = mapped_column(String(20), nullable=False, default="member", server_default="member")
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", server_default="pending")
+    invited_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    accepted_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+

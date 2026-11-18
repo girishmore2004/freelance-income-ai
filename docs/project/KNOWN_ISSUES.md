@@ -16,8 +16,8 @@
 | K-13 | Low | Output guard is pattern-based: it reduces but cannot eliminate injected content (e.g. paraphrased off-platform requests). | Grow `ai-eval/guard-cases.json` from `ai.output_blocked` logs; add model-graded eval when D-13 is decided. |
 | K-14 | Medium | Worker `freelance-income-ai-consumer` still has a Workers Build connected to `main`; each push redeploys it and fails with code 11004 because the Edge API now owns the queue. | Disconnect its Git builds or delete the Worker (runbook step 5). `backend/queue-consumer` is retired. |
 | K-15 | Info | Resolved: the "login failure" e2e failure was a test-mock bug (`/me` answered 200 in cookie mode). CI Playwright runs against a production build. | — |
-| K-16 | Medium | If the only owner of an organisation deletes their account, the organisation is left without an owner (membership cascades). | Account-deletion flow must transfer or close owned organisations (Phase 7). |
-| K-17 | Low | Organisation invitations are not built yet; organisations have a single owner until then. | Phase 2/3 with email invitations. |
+| K-16 | Medium | If the only owner of an organisation deletes their account, the organisation is left without an owner (membership cascades). Ownership transfer now exists (5.63.0). | Account deletion (legal, D-1) must require a transfer first. |
+| K-17 | Info | Resolved in 5.63.0: team invitations by one-time link, roles, removal, ownership transfer. Invitations are not emailed until D-15; the inviter copies the link. | — |
 | K-18 | Info | Resolved in 5.58.0: `/admin` moderation queue. | — |
 | K-19 | Low | Listing attachments (R2) are not built. Invitations and closing dates shipped in 5.50.0. | Phase 3 with the delivery workspace. |
 | K-21 | Low | Matching ranks at most 500 opted-in freelancers per request (most recently opted-in first). Fine for launch; needs SQL pre-filtering by skill/category beyond that. | Add a skills index or pgvector retrieval when visible freelancers exceed ~400. |
@@ -28,6 +28,7 @@
 | K-27 | Low | The sidebar shows the Admin link to everyone; non-staff see "This page is for staff". | Hide by role when the home page is refactored. |
 | K-28 | Info | Resolved in 5.62.0: account suspension with appeals (ADR-007). | — |
 | K-29 | Low | A suspended client's already-published listings stay visible (they cannot hire or act while suspended). | Pause the organisation's listings on suspension once team ownership (invitations) exists. |
+| K-31 | Info | Resolved 2026-11-18: the scheduled "Upwork API cache retention" (hourly) and "Scheduled Upwork saved searches" (every 15 min) workflows failed on every run because `PRODUCTION_DATABASE_URL` and the Upwork secrets are not set. They now skip with a notice while the Upwork integration is not configured, and still fail if it is only partly configured. When you enable Upwork, add `PRODUCTION_DATABASE_URL`, `OAUTH_ENCRYPTION_KEY` and the `UPWORK_*` repository secrets. | — |
 | K-30 | Low | Staff suspend by user ID (shown on user reports); there is no user search on `/admin` yet. | Add a staff user lookup. |
 | K-22 | Info | Invitations are in-app only (no email yet); freelancers see them on `/projects`. | Notifications in Phase 3 with Resend (D-15). |
 | K-20 | Low | Listing screen is keyword-based (e.g. it can miss obfuscated contact details and may flag legitimate mentions of "WhatsApp integration"). Flags only hold for review; they never reject. | Tune from moderation outcomes; P1 agent later. |

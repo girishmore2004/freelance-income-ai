@@ -132,6 +132,11 @@ Set build variable `NEXT_PUBLIC_AUTH_MODE=cookie`, redeploy, sign in, and confir
 3. Disputes: on an active contract, either side → **Raise a dispute**; staff → `/admin` → **Open disputes** → **Open evidence pack** → write the explanation → **No money moves** (moderator or admin) or **Release funded to freelancer** / **Refund funded to client** (admin only; test money until D-1/D-2).
 4. Suspension: `/admin` → **Account suspensions** → user ID (from a user report) + reason → **Suspend**. The person sees the reason on `/account` and can appeal once; a different staff member accepts or rejects the appeal; anyone on staff can **Lift suspension**.
 
+## Teams (release 5.63.0)
+1. "Stage 3C Neon migrations" (expects `0064_org_invitations`). Check: `SELECT count(*) FROM organization_invitations;` → 0.
+2. Deploy Edge (5.63.0), then the frontend.
+3. To try: `/account` → Client accounts → **Team** → enter an email → **Create invitation** → **Copy link** and send it yourself (email sending waits for D-15). The person signs in with that email and opens the link (`/join?...`) → **Join**.
+
 ## Rollback
 - Edge or frontend: Cloudflare → Worker → **Deployments** → previous version → **Rollback**. If you roll the Edge API back, re-attach the old consumer to the queue.
 - Database: see DATABASE_MIGRATION_STATUS.md (5.45 code runs on the 0049 schema).

@@ -25,9 +25,15 @@ jobs:
         working-directory: backend
         env:
           DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          UPWORK_CLIENT_ID: ${{ secrets.UPWORK_CLIENT_ID }}
         run: |
           if [ -z "$DATABASE_URL" ]; then
-            echo "Missing PRODUCTION_DATABASE_URL repository secret" >&2
-            exit 1
+            # Retention is only required once Upwork data can be stored; then a missing database URL must fail.
+            if [ -n "$UPWORK_CLIENT_ID" ]; then
+              echo "Missing PRODUCTION_DATABASE_URL repository secret while the Upwork integration is configured" >&2
+              exit 1
+            fi
+            echo "::notice::Upwork integration is not configured and PRODUCTION_DATABASE_URL is not set; no Upwork cache to expire. Skipping."
+            exit 0
           fi
           python -m app.retention_cleanup
