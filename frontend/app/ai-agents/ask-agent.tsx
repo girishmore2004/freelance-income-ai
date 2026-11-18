@@ -32,7 +32,7 @@ export function AskAgent({ code, name }: { code: string; name: string }) {
 
   const cited = new Set(result?.citation_validation?.valid ?? []);
   return (
-    <form onSubmit={ask} aria-label={`Ask about ${name}`}>
+    <form onSubmit={ask} aria-label={`Question for ${name}`}>
       <div className="field">
         <label htmlFor={`ask-${code}`}>Ask about {name}</label>
         <input id={`ask-${code}`} maxLength={2000} value={question} placeholder="e.g. Why were my last searches empty?" onChange={(e) => setQuestion(e.target.value)} />
