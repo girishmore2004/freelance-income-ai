@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api, useSessionToken } from '@/lib/api-client';
 import { PublicNav } from '../public-nav';
+import { formatMinor } from '@/lib/listing-format';
 
 /**
  * Browse freelancers and open a public profile (spec §2 and §9). Only
@@ -14,7 +15,12 @@ type Card = {
   user_id: string; display_name: string; headline: string; skills: string[]; services: string[]; hourly_rate: number | null; currency: string;
   weekly_hours: number | null; timezone: string; newcomer: boolean; verified?: boolean; rating: { average: number; count: number } | null; completed_contracts: number;
 };
-type Profile = Card & { reviews: Array<{ rating: number; comment: string; created_at: string }> };
+type Profile = Card & {
+  reviews: Array<{ rating: number; comment: string; created_at: string }>;
+  /** U17 projects and U18 services for sale (absent before those migrations). */
+  projects?: Array<{ title: string; description: string; skills: string[]; link: string; year: string }>;
+  services_for_sale?: Array<{ id: string; title: string; from_price_minor: number }>;
+};
 type Directory = { open: boolean; items: Card[]; more: boolean };
 
 const stars = (n: number) => '★'.repeat(Math.round(n)) + '☆'.repeat(5 - Math.round(n));
@@ -60,7 +66,7 @@ export default function FreelancersPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const id = params.get('id');
+    const id = params.get('id') || params.get('freelancer');
     const q = (params.get('q') ?? '').slice(0, 100);
     if (q) setQuery(q);
     if (id) void openProfile(id);
@@ -103,6 +109,21 @@ export default function FreelancersPage() {
           <p>{profile.rating ? <><span aria-hidden="true">{stars(profile.rating.average)}</span> {profile.rating.average} from {profile.rating.count} client review{profile.rating.count === 1 ? '' : 's'}</> : 'No client reviews yet'} · {profile.completed_contracts} completed contract{profile.completed_contracts === 1 ? '' : 's'} here</p>
           {profile.skills.length > 0 && <div className="chips">{profile.skills.map((s) => <span className="chip ok" key={s}>{s}</span>)}</div>}
           {profile.services.length > 0 && <><b>Services</b><ul>{profile.services.map((s) => <li key={s}>{s}</li>)}</ul></>}
+          {profile.projects && profile.projects.length > 0 && (
+            <>
+              <b>Projects</b>
+              <ul aria-label="Projects">{profile.projects.map((p, i) => (
+                <li key={i}><b>{p.title}</b>{p.year && ` (${p.year})`}{p.description && ` — ${p.description}`}{p.skills.length > 0 && <span className="muted small"> · {p.skills.join(', ')}</span>}
+                  {p.link && <> · <a className="link" href={p.link} target="_blank" rel="noopener noreferrer nofollow">View work</a></>}</li>
+              ))}</ul>
+            </>
+          )}
+          {profile.services_for_sale && profile.services_for_sale.length > 0 && (
+            <>
+              <b>Services for sale</b>
+              <ul aria-label="Services for sale">{profile.services_for_sale.map((x) => <li key={x.id}><a className="link" href={`/services?service=${encodeURIComponent(x.id)}`}>{x.title}</a> <span className="muted small">from {formatMinor(x.from_price_minor, 'INR')}</span></li>)}</ul>
+            </>
+          )}
           {profile.reviews.length > 0 && (
             <>
               <b>Recent client reviews</b>

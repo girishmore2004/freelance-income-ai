@@ -9,7 +9,7 @@ const REASONS: Array<[string, string]> = [
   ['fake', 'Fake or misleading'], ['spam', 'Spam'], ['abuse', 'Abusive'], ['other', 'Something else'],
 ];
 
-export function ReportButton({ targetType, targetId }: { targetType: 'listing' | 'user' | 'proposal' | 'contract_message' | 'review'; targetId: string }) {
+export function ReportButton({ targetType, targetId }: { targetType: 'listing' | 'user' | 'proposal' | 'contract_message' | 'review' | 'service'; targetId: string }) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState('scam');
   const [details, setDetails] = useState('');

@@ -1586,6 +1586,56 @@ class ContractHandoverItem(Base):
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class Service(Base):
+    """A freelancer's ready-made service with up to three packages (migration 0075)."""
+    __tablename__ = "services"
+    __table_args__ = (
+        CheckConstraint("status IN ('draft', 'in_review', 'published', 'paused', 'removed')", name="ck_services_status"),
+        CheckConstraint("min_price_minor >= 0", name="ck_services_price"),
+        Index("ix_services_market", "status", "category_slug", "published_at"),
+        Index("ix_services_freelancer", "freelancer_user_id", "created_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    freelancer_user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    category_slug: Mapped[str] = mapped_column(ForeignKey("project_categories.slug", ondelete="RESTRICT"), nullable=False)
+    title: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    skills_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
+    packages_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]", server_default="[]")
+    requirements: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="INR", server_default="INR")
+    min_price_minor: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft", server_default="draft")
+    moderation_note: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
+
+class ServiceOrder(Base):
+    """An order of one service package; the work runs as the linked contract (migration 0075)."""
+    __tablename__ = "service_orders"
+    __table_args__ = (
+        CheckConstraint("package_key IN ('basic', 'standard', 'premium')", name="ck_service_orders_package"),
+        CheckConstraint("price_minor > 0 AND delivery_days BETWEEN 1 AND 90", name="ck_service_orders_terms"),
+        UniqueConstraint("contract_id", name="uq_service_orders_contract"),
+        Index("ix_service_orders_service", "service_id", "created_at"),
+        Index("ix_service_orders_org", "organization_id", "created_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    service_id: Mapped[str] = mapped_column(ForeignKey("services.id", ondelete="RESTRICT"), nullable=False)
+    contract_id: Mapped[str] = mapped_column(ForeignKey("contracts.id", ondelete="RESTRICT"), nullable=False)
+    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False)
+    client_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    freelancer_user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    package_key: Mapped[str] = mapped_column(String(20), nullable=False)
+    package_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}", server_default="{}")
+    price_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    delivery_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    client_requirements: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
+
 class SavedSearch(Base):
     """A freelancer's saved Find work filters with optional alerts (migration 0073)."""
     __tablename__ = "saved_searches"
@@ -1652,8 +1702,9 @@ class Contract(Base):
               postgresql_where=sql_text("status IN ('offered', 'active')"), sqlite_where=sql_text("status IN ('offered', 'active')")),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
-    listing_id: Mapped[str] = mapped_column(ForeignKey("project_listings.id", ondelete="RESTRICT"), nullable=False)
-    proposal_id: Mapped[str] = mapped_column(ForeignKey("listing_proposals.id", ondelete="RESTRICT"), nullable=False)
+    # Nullable since 0075: a contract created from a service order has no project or proposal.
+    listing_id: Mapped[str | None] = mapped_column(ForeignKey("project_listings.id", ondelete="RESTRICT"), nullable=True)
+    proposal_id: Mapped[str | None] = mapped_column(ForeignKey("listing_proposals.id", ondelete="RESTRICT"), nullable=True)
     organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False)
     freelancer_user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="offered", server_default="offered")
@@ -1926,7 +1977,7 @@ class Report(Base):
     """A user's report about content or another user (migration 0060)."""
     __tablename__ = "reports"
     __table_args__ = (
-        CheckConstraint("target_type IN ('listing', 'user', 'proposal', 'contract_message', 'review')", name="ck_reports_target"),
+        CheckConstraint("target_type IN ('listing', 'user', 'proposal', 'contract_message', 'review', 'service')", name="ck_reports_target"),
         CheckConstraint("reason IN ('spam', 'scam', 'off_platform', 'abuse', 'prohibited', 'fake', 'other')", name="ck_reports_reason"),
         CheckConstraint("status IN ('open', 'actioned', 'dismissed')", name="ck_reports_status"),
         Index("ix_reports_status_created", "status", "created_at"),

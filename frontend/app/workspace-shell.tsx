@@ -21,14 +21,14 @@ const NO_FRAME = new Set(['/how-it-works', '/pricing', '/safety', '/help', '/joi
 
 const FREELANCER: NavGroup[] = [
   { label: 'Home', items: [{ href: '/workspace', label: 'Overview' }, { href: '/agent', label: 'Next actions' }, { href: '/inbox', label: 'Inbox' }, { href: '/calendar', label: 'Calendar' }, { href: '/analytics', label: 'Analytics' }] },
-  { label: 'Profile', items: [{ href: '/profile', label: 'My profile and resume' }] },
+  { label: 'Profile', items: [{ href: '/profile', label: 'My profile and resume' }, { href: '/services?view=mine', label: 'My services' }] },
   { label: 'Find work', items: [{ href: '/projects', label: 'Find work' }, { href: '/projects?view=saved', label: 'Saved projects' }, { href: '/', label: 'Proposals and applications' }] },
   { label: 'Work', items: [{ href: '/contracts', label: 'Offers and contracts' }, { href: '/earnings', label: 'Earnings and payouts' }] },
   { label: 'AI', items: [{ href: '/ai-agents', label: 'AI agent centre' }, { href: '/coach', label: 'Business coach' }] },
 ];
 const CLIENT: NavGroup[] = [
   { label: 'Home', items: [{ href: '/workspace', label: 'Overview' }, { href: '/agent', label: 'Next actions' }, { href: '/inbox', label: 'Inbox' }, { href: '/calendar', label: 'Calendar' }, { href: '/analytics', label: 'Analytics' }] },
-  { label: 'Hiring', items: [{ href: '/client/projects', label: 'Projects and proposals' }, { href: '/freelancers', label: 'Find freelancers' }] },
+  { label: 'Hiring', items: [{ href: '/client/projects', label: 'Projects and proposals' }, { href: '/freelancers', label: 'Find freelancers' }, { href: '/services', label: 'Buy a service' }] },
   { label: 'Work', items: [{ href: '/contracts', label: 'Contracts and deliveries' }, { href: '/earnings?view=client', label: 'Spend and statements' }] },
   { label: 'AI', items: [{ href: '/ai-agents', label: 'AI agent centre' }] },
 ];

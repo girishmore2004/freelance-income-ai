@@ -5,6 +5,7 @@ export function PublicNav() {
       <a className="link" href="/#signin">Sign in</a>
       <a className="link" href="/projects">Find work</a>
       <a className="link" href="/freelancers">Hire freelancers</a>
+      <a className="link" href="/services">Services</a>
       <a className="link" href="/how-it-works">How it works</a>
       <a className="link" href="/pricing">Pricing</a>
       <a className="link" href="/safety">Safety</a>

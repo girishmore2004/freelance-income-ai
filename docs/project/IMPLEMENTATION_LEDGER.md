@@ -95,5 +95,15 @@ Status values: DONE (implemented + tested here) · PARTIAL · BLOCKED · NOT STA
 | Projects list (≤ 20) and Projects for you (native scored + external) | DONE (real PostgreSQL) | `/me/portfolio-projects`, `/me/suggested-projects` |
 | PDF reading on production | NEEDS CHECK | depends on the Workers AI `toMarkdown` binding; otherwise a clear message asks for Word or pasted text |
 
+## U18 — Services, categories, fees (5.84.0, 2026-11-18)
+| Item | Status | Evidence |
+|---|---|---|
+| All 8 categories open (D-6) + admin switches with logged reason | DONE (real PostgreSQL) | 0075, `service-routes.ts`, `/admin` Work categories |
+| Services: create, edit, screen, publish/pause/resume/remove, moderation queue (second reviewer for own) | DONE (real PostgreSQL) | `service-routes.ts`, `services.test.ts`, `app/services/*`, `app/admin/catalogue-tools.tsx` |
+| Ordering a package → contract (freelancer accepts; existing delivery, payments, reviews, disputes) | DONE (real PostgreSQL) | order → offered → accepted → active; tasks use the service's category |
+| Reports on services, hide pending review | DONE (real PostgreSQL) | `trust-routes.ts` |
+| Public profile shows projects and services for sale; `/contracts#id` opens the contract | DONE | `public-routes.ts`, `app/freelancers/page.tsx`, `app/contracts/page.tsx` |
+| Fees 5% + 3% (D-5) | WAITING FOR FOUNDER | entered in `/finance` by the founder (audited approval) |
+
 ## Next exact step
 Decision D-11 decides how the remaining Python-only families are served; meanwhile: final end-to-end review and records. Previously: porting the remaining legacy pages to the Edge API.

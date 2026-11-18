@@ -67,7 +67,14 @@ export default function ContractsPage() {
     }
   }, []);
 
-  useEffect(() => { if (token) void load(); }, [token, load]);
+  useEffect(() => {
+    if (!token) return;
+    void load();
+    // Links from notifications and orders (`/contracts#<id>` or `?contract=<id>`) open that contract.
+    const wanted = window.location.hash.slice(1) || new URLSearchParams(window.location.search).get('contract') || '';
+    if (/^[\w-]{1,64}$/.test(wanted)) void open(wanted);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, load]);
 
   async function open(id: string) {
     setError('');
