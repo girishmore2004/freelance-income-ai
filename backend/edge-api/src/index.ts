@@ -13,6 +13,7 @@ import { handleDiscussionRoute } from "./lib/discussion-routes";
 import { handleListingFileRoute } from "./lib/listing-file-routes";
 import { handleVerificationRoute } from "./lib/verification-routes";
 import { handleSourceRoute } from "./lib/source-routes";
+import { handleTaskRoute } from "./lib/task-routes";
 import { handleOpsRoute } from "./lib/ops-routes";
 import { handleSupportRoute } from "./lib/support-routes";
 import { handleListingRoute } from "./lib/listing-routes";
@@ -406,7 +407,7 @@ async function routeRequest(
   }
 
   // Project reference files, verification queues and source management (U10).
-  for (const handler of [handleListingFileRoute, handleVerificationRoute, handleSourceRoute]) {
+  for (const handler of [handleListingFileRoute, handleVerificationRoute, handleSourceRoute, handleTaskRoute]) {
     const response = await handler(request, env, requestId);
     if (response) {
       return response;

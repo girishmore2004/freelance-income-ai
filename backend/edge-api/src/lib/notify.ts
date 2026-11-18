@@ -61,6 +61,9 @@ export async function organizationManagers(sql: Queryable, organizationId: strin
 /** Plain-language text for contract events, sent to the other party. */
 const CONTRACT_MESSAGES: Record<string, { title: string; to: "client" | "freelancer" | "both" }> = {
   "offer.sent": { title: "You received an offer", to: "freelancer" },
+  "tasks.planned": { title: "A task plan was added to your contract", to: "both" },
+  "handover.added": { title: "The freelancer added a handover item", to: "client" },
+  "handover.confirmed": { title: "The client confirmed a handover item", to: "freelancer" },
   "offer.declined": { title: "Your offer was declined", to: "client" },
   "offer.withdrawn": { title: "An offer to you was withdrawn", to: "freelancer" },
   "terms.proposed": { title: "New contract terms were proposed", to: "both" },

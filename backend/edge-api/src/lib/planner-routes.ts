@@ -33,7 +33,7 @@ export interface PlannerRouteDeps {
 const defaultDeps: PlannerRouteDeps = { database, authenticate: authenticateRequest, now: () => new Date() };
 const MAX_SAVED = 200;
 
-export type CalendarType = "milestone_due" | "saved_closes" | "saved_deadline" | "listing_closes" | "listing_deadline" | "follow_up" | "interview";
+export type CalendarType = "milestone_due" | "saved_closes" | "saved_deadline" | "listing_closes" | "listing_deadline" | "follow_up" | "interview" | "task_due";
 
 export interface CalendarEvent {
   date: string;
@@ -211,6 +211,23 @@ export async function handlePlannerRoute(request: Request, env: Env, requestId: 
           const overdue = d < today;
           if (d < window.from && !overdue) continue;
           events.push({ date: d, type: f.kind, title: f.title, detail: f.note.slice(0, 140), href: `/opportunities?id=${encodeURIComponent(f.opportunity_id)}`, overdue, side: "freelancer" });
+        }
+      }
+      if (contracts.length && (await tableExists(sql, "contract_tasks"))) {
+        // Open contract tasks with a due date (U11), for the side that owns them.
+        const tasks = await sql<Array<{ contract_id: string; title: string; due_date: string | Date; owner_party: "client" | "freelancer" }>>`
+          SELECT contract_id, title, due_date, owner_party FROM contract_tasks
+          WHERE contract_id = ANY(${textArray(contracts.map((c) => c.id))}::text[]) AND status <> 'done' AND due_date IS NOT NULL AND due_date <= ${window.to}
+          LIMIT 300
+        `;
+        for (const t of tasks) {
+          const contract = contracts.find((c) => c.id === t.contract_id);
+          if (!contract || contract.side !== t.owner_party) continue;
+          const d = dayOf(t.due_date);
+          if (!d) continue;
+          const overdue = d < today;
+          if (d < window.from && !overdue) continue;
+          events.push({ date: d, type: "task_due", title: contract.title, detail: `Task: ${t.title.slice(0, 120)}`, href: `/contracts#${t.contract_id}`, overdue, side: t.owner_party });
         }
       }
       if (await tableExists(sql, "proposal_interviews")) {

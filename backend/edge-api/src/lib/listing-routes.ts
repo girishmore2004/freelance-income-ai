@@ -95,7 +95,7 @@ interface CategoryRow {
   template_json: string;
 }
 
-function parseTemplate(value: string): CategoryTemplate {
+export function parseTemplate(value: string): CategoryTemplate {
   try {
     const t = JSON.parse(value || "{}") as Partial<CategoryTemplate>;
     return {
