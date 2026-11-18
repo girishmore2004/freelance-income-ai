@@ -1,219 +1,245 @@
 'use client';
-import { LegacyGate } from '../legacy-gate';
-import {useEffect,useState} from 'react';
-import {API_BASE as API,authFetch,useSessionToken} from '@/lib/api-client';
-type Row=Record<string,any>;
-function AnalyticsPage(){
- const [token,setToken]=useSessionToken(); const [funnel,setFunnel]=useState<Row>({});
- const [sources,setSources]=useState<Row[]>([]); const [capacity,setCapacity]=useState<Row>({});
- const [projects,setProjects]=useState<Row[]>([]); const [projectRecords,setProjectRecords]=useState<Row[]>([]); const [opportunities,setOpportunities]=useState<Row[]>([]); const [selectedProject,setSelectedProject]=useState(''); const [selectedOpportunity,setSelectedOpportunity]=useState(''); const [earnings,setEarnings]=useState<Row>({});
- const [busy,setBusy]=useState(false); const [message,setMessage]=useState(''); const [proposalIntel,setProposalIntel]=useState<Row>({}); const [sourceTrends,setSourceTrends]=useState<Row>({}); const [sourceCohorts,setSourceCohorts]=useState<Row>({}); const [growth,setGrowth]=useState<Row>({}); const [capacityPlan,setCapacityPlan]=useState<Row>({}); const [serviceIntel,setServiceIntel]=useState<Row>({}); const [opportunityFit,setOpportunityFit]=useState<Row>({}); const [trendWindow,setTrendWindow]=useState('90'); const [commitmentPlan,setCommitmentPlan]=useState<Row>({}); const [calendarPlan,setCalendarPlan]=useState<Row>({}); const [dependencyPlan,setDependencyPlan]=useState<Row>({}); const [schedulePlan,setSchedulePlan]=useState<Row>({}); const [deliveryPerformance,setDeliveryPerformance]=useState<Row>({}); const [adaptiveEffort,setAdaptiveEffort]=useState<Row>({}); const [deliveryBottlenecks,setDeliveryBottlenecks]=useState<Row>({}); const [deliveryQuality,setDeliveryQuality]=useState<Row>({}); const [auditIntegrity,setAuditIntegrity]=useState<Row>({}); const [evidenceCoverage,setEvidenceCoverage]=useState<Row>({}); const [deliveryDisputes,setDeliveryDisputes]=useState<Row>({}); const [deliveryHealth,setDeliveryHealth]=useState<Row>({}); const [scheduleVersions,setScheduleVersions]=useState<Row[]>([]); const [taskRows,setTaskRows]=useState<Row[]>([]); const [predecessorTask,setPredecessorTask]=useState(''); const [successorTask,setSuccessorTask]=useState(''); const [blockDate,setBlockDate]=useState(new Date().toISOString().slice(0,10)); const [blockHours,setBlockHours]=useState('8'); const [blockKind,setBlockKind]=useState('leave'); const [blockNote,setBlockNote]=useState('');
- async function req(path:string,method='GET',body?:any){const r=await authFetch(API+path,{method,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const j=await r.json().catch(()=>({detail:'Invalid response'}));if(!r.ok)throw new Error(j.detail||'Request failed');return j}
- async function load(){if(!token)return;setBusy(true);setMessage('');try{const [f,s,c,p,e,pr,o,pi,st,sc,gr,si,of,cp,cm,cal,dp,sched,tasks,versions,delivery,adaptive,bottlenecks,quality,auditIntegrityResult,evidenceCoverageResult,deliveryDisputesResult,deliveryHealthResult]=await Promise.all([req('/api/v1/analytics/funnel'),req('/api/v1/analytics/source-performance?minimum_sample=5'),req('/api/v1/analytics/capacity?lookback_days=28'),req('/api/v1/analytics/project-profitability'),req('/api/v1/analytics/earnings-outlook?horizon_days=90'),req('/api/v1/projects'),req('/api/v1/opportunities'),req('/api/v1/analytics/proposal-intelligence'),req('/api/v1/analytics/source-trends'),req('/api/v1/analytics/source-cohorts'),req('/api/v1/analytics/growth-recommendations'),req('/api/v1/analytics/service-intelligence'),req('/api/v1/analytics/opportunity-fit'),req('/api/v1/analytics/capacity-planning?lookback_days=28'),req('/api/v1/analytics/commitment-planning?horizon_weeks=8'),req('/api/v1/analytics/calendar-planning?horizon_weeks=8'),req('/api/v1/analytics/dependency-planning'),req('/api/v1/analytics/schedule-recommendations?horizon_days=56'),req('/api/v1/tasks'),req('/api/v1/schedule-plans'),req('/api/v1/analytics/delivery-performance'),req('/api/v1/analytics/adaptive-effort'),req('/api/v1/analytics/delivery-bottlenecks'),req('/api/v1/analytics/delivery-quality?minimum_sample=3'),req('/api/v1/analytics/delivery-audit-integrity'),req('/api/v1/analytics/revision-evidence-coverage'),req('/api/v1/analytics/delivery-disputes'),req('/api/v1/analytics/delivery-health')]);setFunnel(f);setSourceTrends(st);setSourceCohorts(sc);setGrowth(gr);setServiceIntel(si);setOpportunityFit(of);setCapacityPlan(cp);setCommitmentPlan(cm);setCalendarPlan(cal);setDependencyPlan(dp);setSchedulePlan(sched);setDeliveryPerformance(delivery||{});setAdaptiveEffort(adaptive||{});setDeliveryBottlenecks(bottlenecks||{});setDeliveryQuality(quality||{});setAuditIntegrity(auditIntegrityResult||{});setEvidenceCoverage(evidenceCoverageResult||{});setDeliveryDisputes(deliveryDisputesResult||{});setDeliveryHealth(deliveryHealthResult||{});setTaskRows(tasks||[]);setScheduleVersions(versions||[]);setProposalIntel(pi);setSources(s.sources||[]);setCapacity(c);setProjects(p.projects||[]);setEarnings(e);setProjectRecords(pr);setOpportunities(o);}catch(err:any){setMessage(err.message)}finally{setBusy(false)}}
- 
- useEffect(()=>{if(token)load()},[token]);
- const money=(v:any,c='INR')=>v===null||v===undefined?'Not enough data':`${c} ${Number(v).toLocaleString('en-IN',{maximumFractionDigits:2})}`;
- async function createScheduleDraft(){setBusy(true);try{const r=await req('/api/v1/schedule-plans','POST',{horizon_days:56});setMessage(`Schedule plan v${r.version} saved as draft. Review before approval.`);await load()}catch(e:any){setMessage(e.message)}finally{setBusy(false)}}
- async function decideSchedulePlan(id:string,action:'approve'|'reject'|'rollback'){setBusy(true);try{const r=await req(`/api/v1/schedule-plans/${id}/${action}`,'POST',{reason:`User ${action} from Business Intelligence`});setMessage(`Schedule plan ${r.version??''} ${action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'rolled back'}. ${r.applied_changes??r.reverted_changes??0} date changes processed.`);await load()}catch(e:any){setMessage(e.message)}finally{setBusy(false)}}
- async function addTaskDependency(){if(!predecessorTask||!successorTask||predecessorTask===successorTask){setMessage('Choose two different tasks.');return}setBusy(true);try{await req(`/api/v1/tasks/${successorTask}/dependencies`,'POST',{predecessor_task_id:predecessorTask});setPredecessorTask('');setSuccessorTask('');await load()}catch(err:any){setMessage(err.message)}finally{setBusy(false)}}
- async function removeTaskDependency(id:string){setBusy(true);try{await req(`/api/v1/tasks/dependencies/${id}`,'DELETE');await load()}catch(err:any){setMessage(err.message)}finally{setBusy(false)}}
- async function addAvailabilityBlock(){setBusy(true);try{const r=await authFetch(`${API}/api/v1/calendar/availability-blocks`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({date:blockDate,unavailable_hours:Number(blockHours),kind:blockKind,note:blockNote})});const j=await r.json();if(!r.ok)throw new Error(j.detail||'Could not save availability');setMessage('Availability block saved.');setBlockNote('');await load()}catch(e:any){setMessage(e.message)}finally{setBusy(false)}}
- async function linkOrigin(){if(!selectedProject)return;setBusy(true);try{const r=await authFetch(`${API}/api/v1/projects/${selectedProject}/origin-opportunity`,{method:'PUT',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({opportunity_id:selectedOpportunity||null})});const j=await r.json();if(!r.ok)throw new Error(j.detail||'Could not link');setMessage('Project source attribution saved. Refreshing analytics…');await load()}catch(e:any){setMessage(e.message)}finally{setBusy(false)}}
- if(!token)return <main style={{padding:30}}>Sign in first, then open analytics.</main>;
- return <main style={{maxWidth:1150,margin:'30px auto',padding:20,fontFamily:'sans-serif'}}>
- <a href="/">← Back to dashboard</a><h1>Business Intelligence</h1>
- <p>Understand your freelance funnel, source performance, capacity, project profitability and revenue outlook using your saved records.</p>
- {message&&<p role="alert">{message}</p>}
- <button disabled={busy} onClick={load}>{busy?'Refreshing…':'Refresh analytics'}</button>
- <h2 style={{marginTop:28}}>Project delivery health and change-control readiness</h2>
- <p>Explainable internal review based on recorded task dates, deliverable decisions, disputes, audit integrity and revision evidence. Labels are not guarantees of client satisfaction. Change summaries are prepared for human review only.</p>
- <section style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:10}}>
- {Object.entries({"Projects reviewed":deliveryHealth.summary?.projects_reviewed,"On track":deliveryHealth.summary?.on_track,"Watch":deliveryHealth.summary?.watch,"Needs attention":deliveryHealth.summary?.needs_attention,"Insufficient data":deliveryHealth.summary?.insufficient_data}).map(([k,v])=><section key={k} style={{border:'1px solid #ddd',borderRadius:10,padding:12}}><small>{k}</small><h3>{v??'—'}</h3></section>)}
- </section>
- <div style={{overflowX:'auto',marginTop:12}}><table style={{width:'100%',borderCollapse:'collapse'}}><thead><tr>{['Project','Health review','Open / overdue tasks','Unresolved / high-critical issues','Feedback decisions','Audit chain','Missing / mismatched evidence','Review warnings'].map(x=><th key={x} style={{textAlign:'left',padding:8,borderBottom:'1px solid #bbb'}}>{x}</th>)}</tr></thead><tbody>{(deliveryHealth.projects||[]).map((r:Row)=><tr key={r.project_id}><td style={{padding:8,borderBottom:'1px solid #eee'}}>{r.project}</td>{[r.health_status,`${r.signals?.open_tasks||0} / ${r.signals?.overdue_tasks||0}`,`${r.signals?.unresolved_issues||0} / ${r.signals?.unresolved_high_critical_issues||0}`,r.signals?.feedback_decisions,r.signals?.audit_chain_status,`${r.signals?.evidence_missing||0} / ${r.signals?.evidence_mismatched||0}`,(r.review_warnings||[]).join(' · ')||'No recorded warning'].map((v:any,i:number)=><td key={i} style={{padding:8,borderBottom:'1px solid #eee'}}>{String(v??'Unknown').replaceAll('_',' ')}</td>)}</tr>)}</tbody></table></div>
- {(deliveryHealth.projects||[]).map((r:Row)=><section key={`${r.project_id}-health-detail`} style={{border:'1px solid #ddd',borderRadius:10,padding:12,marginTop:12}}><h3>{r.project} — recorded facts and missing information</h3><ul>{[...(r.recorded_facts||[]).map((f:Row)=>`${f.label}: ${f.detail}`),...(r.missing_data||[]).map((v:string)=>`Missing: ${v}`)].map((v:string,i:number)=><li key={i}><small>{v}</small></li>)}</ul><h4>Change-control review summaries</h4>{(r.change_control?.requests||[]).length===0?<small>No scope-change requests recorded.</small>:(r.change_control.requests||[]).map((c:Row)=><article key={c.id} style={{borderTop:'1px solid #eee',paddingTop:8,marginTop:8}}><b>{c.title}</b><p>{c.summary}</p><small>Status: {c.status} · Readiness: {c.readiness} · Client acceptance recorded: {c.client_accepted?'Yes':'No'} · Missing: {(c.missing_fields||[]).join(', ')||'None'}</small><p><small>Human review only. This summary does not approve a scope change, amend a contract or send a client message.</small></p></article>)}</section>)}
- <small>{deliveryHealth.health_method||''}</small><ul>{(deliveryHealth.limitations||[]).map((v:string,i:number)=><li key={i}><small>{v}</small></li>)}</ul>
- <h2 style={{marginTop:28}}>Delivery dispute analytics and SLA review</h2>
- <p>Operational review of recorded delivery issues. Root-cause labels are user-entered, overdue status uses the recorded due date, and elapsed-time metrics require actual event timestamps.</p>
- <section style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10}}>
- {Object.entries({"Total issues":deliveryDisputes.overall?.issue_count,"Unresolved":deliveryDisputes.overall?.unresolved_count,"Overdue open issues":deliveryDisputes.overall?.overdue_open_count,"Median minutes to triage":deliveryDisputes.overall?.median_minutes_to_triage??'Insufficient timestamps',"Median minutes to resolution":deliveryDisputes.overall?.median_minutes_to_resolution??'Insufficient timestamps'}).map(([k,v])=><section key={k} style={{border:'1px solid #ddd',borderRadius:10,padding:12}}><small>{k}</small><h3>{v??'—'}</h3></section>)}
- </section>
- <div style={{overflowX:'auto',marginTop:12}}><table style={{width:'100%',borderCollapse:'collapse'}}><thead><tr>{['Project','Issues','Unresolved','Overdue','Severity','Root causes','Median triage (min)','Median resolution (min)','Sample'].map(x=><th key={x} style={{textAlign:'left',padding:8,borderBottom:'1px solid #bbb'}}>{x}</th>)}</tr></thead><tbody>{(deliveryDisputes.projects||[]).map((r:Row)=><tr key={r.project_id}><td style={{padding:8,borderBottom:'1px solid #eee'}}>{r.project_name||r.project_id}</td>{[r.issue_count,r.unresolved_count,r.overdue_open_count,JSON.stringify(r.severity_counts),JSON.stringify(r.root_cause_counts),r.median_minutes_to_triage??'Unknown',r.median_minutes_to_resolution??'Unknown',r.sample_quality].map((v:any,i:number)=><td key={i} style={{padding:8,borderBottom:'1px solid #eee'}}>{String(v)}</td>)}</tr>)}</tbody></table></div>
- <small>{deliveryDisputes.disclaimer||''}</small>
- <h2 style={{marginTop:28}}>Adaptive effort estimation and delivery learning</h2>
- <p>Read-only estimates derived from similar completed tasks with recorded time. Review the matched examples and confidence before changing any estimate manually.</p>
- <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))',gap:10}}>
- {Object.entries({"Open tasks reviewed":adaptiveEffort.summary?.open_tasks_reviewed,"Recommendations available":adaptiveEffort.summary?.tasks_with_recommendations,"Insufficient history":adaptiveEffort.summary?.insufficient_history,"Completed tasks with time":adaptiveEffort.summary?.historical_completed_tasks_with_time}).map(([k,v])=><section key={k} style={{border:'1px solid #ddd',borderRadius:10,padding:12}}><small>{k}</small><h3>{v??'—'}</h3></section>)}
- </div>
- <div style={{overflowX:'auto',marginTop:12}}><table style={{width:'100%',borderCollapse:'collapse'}}><thead><tr>{['Task','Current estimate','Suggested hours','Historical range','Similar tasks','Confidence','Matched examples'].map(x=><th key={x} style={{textAlign:'left',padding:8,borderBottom:'1px solid #bbb'}}>{x}</th>)}</tr></thead><tbody>{(adaptiveEffort.suggestions||[]).map((r:Row)=><tr key={r.task_id}><td style={{padding:8,borderBottom:'1px solid #eee'}}>{r.title}</td><td style={{padding:8,borderBottom:'1px solid #eee'}}>{r.current_estimated_hours===null?'Not set':`${r.current_estimated_hours}h`}</td><td style={{padding:8,borderBottom:'1px solid #eee'}}>{r.recommended_hours===null?'Insufficient data':`${r.recommended_hours}h`}</td><td style={{padding:8,borderBottom:'1px solid #eee'}}>{r.suggested_range_hours?`${r.suggested_range_hours.low}–${r.suggested_range_hours.high}h`:'—'}</td><td style={{padding:8,borderBottom:'1px solid #eee'}}>{r.similar_completed_tasks}</td><td style={{padding:8,borderBottom:'1px solid #eee'}}>{r.confidence}</td><td style={{padding:8,borderBottom:'1px solid #eee'}}>{(r.matched_history||[]).slice(0,3).map((m:Row)=>`${m.title} (${m.hours}h)`).join('; ')||'—'}</td></tr>)}</tbody></table></div>
- <small>{adaptiveEffort.method||''}</small><ul>{(adaptiveEffort.limitations||[]).map((v:string,i:number)=><li key={i}><small>{v}</small></li>)}</ul>
- <h2 style={{marginTop:28}}>Delivery bottleneck and revision intelligence</h2>
- <p>Highlights tasks worth reviewing based on explicit dependencies, critical-path position and due dates. Revision counts reflect saved deliverable versions, not proof of avoidable rework.</p>
- <section style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10}}>
- {Object.entries({"Open tasks reviewed":deliveryBottlenecks.summary?.open_tasks_reviewed,"Bottleneck review candidates":deliveryBottlenecks.summary?.bottleneck_review_candidates,"Overdue open tasks":deliveryBottlenecks.summary?.overdue_open_tasks,"Deliverables with multiple revisions":deliveryBottlenecks.summary?.deliverables_with_multiple_revisions,"Additional revision versions":deliveryBottlenecks.summary?.additional_revision_versions}).map(([k,v])=><section key={k} style={{border:'1px solid #ddd',borderRadius:10,padding:12}}><small>{k}</small><h3>{v??'—'}</h3></section>)}
- </section>
- <h3>Tasks to review</h3>
- <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}><thead><tr>{['Project / task','Review signal','Critical path','Predecessors','Successors','Due date','Signals'].map(x=><th key={x} style={{textAlign:'left',padding:8,borderBottom:'1px solid #bbb'}}>{x}</th>)}</tr></thead><tbody>{(deliveryBottlenecks.bottleneck_candidates||[]).map((r:Row)=><tr key={r.task_id}><td style={{padding:8,borderBottom:'1px solid #eee'}}><b>{r.title}</b><small style={{display:'block'}}>{r.project}</small></td>{[r.interpretation,r.critical_path_candidate?'Yes':'No',r.predecessor_count,r.successor_count,r.due_date||'Unknown',(r.signals||[]).join(', ')||'No recorded warning'].map((v:any,i:number)=><td key={i} style={{padding:8,borderBottom:'1px solid #eee'}}>{String(v).replaceAll('_',' ')}</td>)}</tr>)}</tbody></table></div>
- <h3>Deliverable revision activity</h3>
- <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}><thead><tr>{['Project','Deliverable','Status','Revision versions','Additional revisions','Review note recorded'].map(x=><th key={x} style={{textAlign:'left',padding:8,borderBottom:'1px solid #bbb'}}>{x}</th>)}</tr></thead><tbody>{(deliveryBottlenecks.deliverable_revision_activity||[]).map((r:Row)=><tr key={r.deliverable_id}>{[r.project,r.title,r.status,r.revision_versions,r.additional_revisions_after_initial,r.review_note_present?'Yes':'No'].map((v:any,i:number)=><td key={i} style={{padding:8,borderBottom:'1px solid #eee'}}>{v}</td>)}</tr>)}</tbody></table></div>
- <small>{deliveryBottlenecks.method||''}</small><ul>{(deliveryBottlenecks.limitations||[]).map((v:string,i:number)=><li key={i}><small>{v}</small></li>)}</ul>
- <h2 style={{marginTop:28}}>Client feedback and delivery quality intelligence</h2>
- <p>Uses recorded client decisions and handover timestamps. Acceptance rates are hidden for projects with fewer than three decisions; revisions without explicit origin remain unclassified.</p>
- <section style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10}}>
- {Object.entries({"Recorded feedback decisions":deliveryQuality.summary?.feedback_decisions,"Accepted decisions":deliveryQuality.summary?.accepted_decisions,"Changes requested":deliveryQuality.summary?.changes_requested_decisions,"Acceptance-cycle observations":deliveryQuality.summary?.acceptance_cycle_observations,"Median acceptance cycle":deliveryQuality.summary?.median_acceptance_cycle_days===null||deliveryQuality.summary?.median_acceptance_cycle_days===undefined?'Insufficient data':`${deliveryQuality.summary.median_acceptance_cycle_days} days`,"Projects with sufficient sample":deliveryQuality.summary?.projects_with_sufficient_feedback_sample}).map(([k,v])=><section key={k} style={{border:'1px solid #ddd',borderRadius:10,padding:12}}><small>{k}</small><h3>{v??'—'}</h3></section>)}
- </section>
- <h3>Project feedback and quality</h3>
- <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}><thead><tr>{['Project','Decisions','Accepted','Changes requested','Rejected','Acceptance rate','Median cycle','Feedback sample','Client-requested revisions','Internal improvements','Approved scope changes','Unclassified revisions','Scope changes'].map(x=><th key={x} style={{textAlign:'left',padding:8,borderBottom:'1px solid #bbb'}}>{x}</th>)}</tr></thead><tbody>{(deliveryQuality.projects||[]).map((r:Row)=><tr key={r.project_id}>{[r.project,r.feedback_decisions,r.accepted,r.changes_requested,r.rejected,r.acceptance_rate_percent===null?'Below minimum sample':`${r.acceptance_rate_percent}%`,r.median_acceptance_cycle_days===null?'Not recorded':`${r.median_acceptance_cycle_days} days`,r.feedback_data_status,r.client_requested_revision_versions,r.internal_improvement_revision_versions,r.approved_scope_change_revision_versions,r.unclassified_revision_versions,`${r.scope_changes?.total||0} total · ${r.scope_changes?.accepted||0} accepted`].map((v:any,i:number)=><td key={i} style={{padding:8,borderBottom:'1px solid #eee'}}>{v}</td>)}</tr>)}</tbody></table></div>
- <h3>Deliverable-level feedback and revision links</h3>
- <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}><thead><tr>{['Project','Deliverable','Feedback decisions','Client change decisions','Revision versions','Client-requested revisions','Internal improvements','Approved scope changes','Other origin','Unclassified revisions','Acceptance cycle (days)'].map(x=><th key={x} style={{textAlign:'left',padding:8,borderBottom:'1px solid #bbb'}}>{x}</th>)}</tr></thead><tbody>{(deliveryQuality.deliverables||[]).map((r:Row)=><tr key={r.deliverable_id}>{[r.project,r.title,r.feedback_sample,r.client_change_decisions,r.revision_versions,r.client_requested_revision_versions,r.internal_improvement_revision_versions,r.approved_scope_change_revision_versions,r.other_origin_revision_versions,r.unclassified_revision_versions,(r.acceptance_cycle_days||[]).join(', ')||'Not recorded'].map((v:any,i:number)=><td key={i} style={{padding:8,borderBottom:'1px solid #eee'}}>{v}</td>)}</tr>)}</tbody></table></div>
- <small>{deliveryQuality.method||''}</small><ul>{(deliveryQuality.limitations||[]).map((v:string,i:number)=><li key={i}><small>{v}</small></li>)}</ul>
- <h2 style={{marginTop:28}}>Delivery audit integrity</h2>
- <p>Verifies per-project hash chains for recorded delivery workflow events. A valid chain means the stored event sequence matches its hashes; it does not independently prove client communications or prevent a database administrator from rewriting the entire chain.</p>
- <section style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10}}>
- {Object.entries({"Projects checked":auditIntegrity.summary?.projects_checked,"Valid project chains":auditIntegrity.summary?.valid_projects,"Projects with integrity issues":auditIntegrity.summary?.projects_with_integrity_issues,"Events checked":auditIntegrity.summary?.events_checked}).map(([k,v])=><section key={k} style={{border:'1px solid #ddd',borderRadius:10,padding:12}}><small>{k}</small><h3>{v??'—'}</h3></section>)}
- </section>
- <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}><thead><tr>{['Project ID','Events','Chain status','First event','Last event','Integrity issues','Head hash'].map(x=><th key={x} style={{textAlign:'left',padding:8,borderBottom:'1px solid #bbb'}}>{x}</th>)}</tr></thead><tbody>{(auditIntegrity.projects||[]).map((r:Row)=><tr key={r.project_id}>{[r.project_id,r.event_count,r.chain_status,r.first_event_at||'—',r.last_event_at||'—',r.issues?.length||0,r.head_hash||'—'].map((v:any,i:number)=><td key={i} style={{padding:8,borderBottom:'1px solid #eee'}}>{String(v)}</td>)}</tr>)}</tbody></table></div>
- <ul>{(auditIntegrity.limitations||[]).map((v:string,i:number)=><li key={i}><small>{v}</small></li>)}</ul>
- <h2 style={{marginTop:28}}>Revision evidence coverage</h2>
- <p>Checks whether revisions labelled client-requested or approved-scope-change link to matching internal feedback or approved scope-change records. Unclassified origins remain unknown and are excluded from the coverage denominator.</p>
- <section style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10}}>
- {Object.entries({"Revisions reviewed":evidenceCoverage.summary?.revisions_reviewed,"Evidence required":evidenceCoverage.summary?.evidence_required_revisions,"Matching evidence links":evidenceCoverage.summary?.matched_evidence_revisions,"Missing evidence":evidenceCoverage.summary?.missing_evidence_revisions,"Mismatched links":evidenceCoverage.summary?.mismatched_evidence_revisions,"Coverage":evidenceCoverage.summary?.evidence_coverage_percent===null||evidenceCoverage.summary?.evidence_coverage_percent===undefined?'No required sample':`${evidenceCoverage.summary.evidence_coverage_percent}%`}).map(([k,v])=><section key={k} style={{border:'1px solid #ddd',borderRadius:10,padding:12}}><small>{k}</small><h3>{v??'—'}</h3></section>)}
- </section>
- <h3>Evidence coverage by project</h3>
- <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}><thead><tr>{['Project','Required','Matched','Missing','Mismatched','Unclassified','Coverage'].map(x=><th key={x} style={{textAlign:'left',padding:8,borderBottom:'1px solid #bbb'}}>{x}</th>)}</tr></thead><tbody>{(evidenceCoverage.projects||[]).map((r:Row)=><tr key={r.project_id}>{[r.project,r.required,r.matched,r.missing,r.mismatched,r.unclassified,r.coverage_percent===null?'No required sample':`${r.coverage_percent}%`].map((v:any,i:number)=><td key={i} style={{padding:8,borderBottom:'1px solid #eee'}}>{v}</td>)}</tr>)}</tbody></table></div>
- <h3>Revision evidence checks</h3>
- <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}><thead><tr>{['Project','Deliverable','Version','Origin','Evidence status','Reason','Feedback event','Scope change'].map(x=><th key={x} style={{textAlign:'left',padding:8,borderBottom:'1px solid #bbb'}}>{x}</th>)}</tr></thead><tbody>{(evidenceCoverage.revisions||[]).map((r:Row)=><tr key={r.revision_id}>{[r.project,r.deliverable,r.version,r.revision_origin,r.evidence_status,r.reason,r.client_feedback_event_id||'—',r.scope_change_request_id||'—'].map((v:any,i:number)=><td key={i} style={{padding:8,borderBottom:'1px solid #eee'}}>{String(v).replaceAll('_',' ')}</td>)}</tr>)}</tbody></table></div>
- <small>{evidenceCoverage.method||''}</small><ul>{(evidenceCoverage.limitations||[]).map((v:string,i:number)=><li key={i}><small>{v}</small></li>)}</ul>
- <h2 style={{marginTop:28}}>Actual-versus-planned delivery intelligence</h2>
- <p>Compares task estimates and planned finish dates with task-linked time logs and recorded completion dates. Missing records remain unknown rather than being treated as zero.</p>
- <section style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10}}>
- {Object.entries({"Completed tasks":deliveryPerformance.summary?.completed_tasks,"Comparable completed tasks":deliveryPerformance.summary?.completed_tasks_with_comparable_actuals,"Median absolute effort error":deliveryPerformance.summary?.median_absolute_effort_error_percent===null||deliveryPerformance.summary?.median_absolute_effort_error_percent===undefined?'Insufficient data':`${deliveryPerformance.summary.median_absolute_effort_error_percent}%`,"Tasks missing time logs":deliveryPerformance.summary?.tasks_missing_time_logs,"Over-estimated":deliveryPerformance.summary?.over_estimated_tasks,"Under-estimated":deliveryPerformance.summary?.under_estimated_tasks}).map(([k,v])=><section key={k} style={{border:'1px solid #ddd',borderRadius:10,padding:12}}><small>{k}</small><h3>{v??'—'}</h3></section>)}
- </section>
- <div style={{overflowX:'auto',marginTop:12}}><table style={{width:'100%',borderCollapse:'collapse'}}><thead><tr>{['Project','Completed','Comparable sample','Estimated hours','Actual hours','Median effort variance','Median schedule variance','Data quality'].map(x=><th key={x} style={{textAlign:'left',padding:8,borderBottom:'1px solid #bbb'}}>{x}</th>)}</tr></thead><tbody>{(deliveryPerformance.projects||[]).map((r:Row)=><tr key={r.project_id}>{[r.project,r.completed_tasks,r.completed_tasks_comparable,r.estimated_hours_comparable,r.actual_hours_comparable,r.median_effort_variance_percent===null?'Insufficient sample':`${r.median_effort_variance_percent}%`,r.median_schedule_variance_days===null?'Unknown':`${r.median_schedule_variance_days} days`,r.data_quality].map((v:any,i:number)=><td key={i} style={{padding:8,borderBottom:'1px solid #eee'}}>{v??'—'}</td>)}</tr>)}</tbody></table></div>
- <div style={{overflowX:'auto',marginTop:12}}><table style={{width:'100%',borderCollapse:'collapse'}}><thead><tr>{['Task','Status','Estimate','Actual logged','Effort variance','Planned finish','Completed','Schedule variance'].map(x=><th key={x} style={{textAlign:'left',padding:8,borderBottom:'1px solid #bbb'}}>{x}</th>)}</tr></thead><tbody>{(deliveryPerformance.tasks||[]).map((r:Row)=><tr key={r.task_id}>{[r.title,r.status,r.estimated_hours===null?'Unknown':`${r.estimated_hours}h`,r.actual_logged_hours===null?'Not recorded':`${r.actual_logged_hours}h`,r.effort_variance_hours===null?'Unknown':`${r.effort_variance_hours>0?'+':''}${r.effort_variance_hours}h`,r.planned_finish_date||'—',r.completed_at?new Date(r.completed_at).toLocaleDateString():'Not recorded',r.schedule_variance_days===null?'Unknown':`${r.schedule_variance_days} days`].map((v:any,i:number)=><td key={i} style={{padding:8,borderBottom:'1px solid #eee'}}>{v}</td>)}</tr>)}</tbody></table></div>
- <ul>{(deliveryPerformance.limitations||[]).map((v:string,i:number)=><li key={i}><small>{v}</small></li>)}</ul>
- <h2>Opportunity conversion funnel</h2>
- <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(145px,1fr))',gap:10}}>
- {Object.entries({Opportunities:funnel.opportunities,With_proposals:funnel.opportunities_with_proposals,Application_records:funnel.application_records,Recorded_submissions:funnel.recorded_submissions,Wins:funnel.wins,Non_wins:funnel.non_wins}).map(([k,v])=><section key={k} style={{border:'1px solid #ddd',borderRadius:10,padding:14}}><small>{k.replaceAll('_',' ')}</small><h2>{v??'—'}</h2></section>)}
- </div>
- <p>Win rate: <b>{funnel.win_rate_percent===null||funnel.win_rate_percent===undefined?'Not enough decided outcomes':`${funnel.win_rate_percent}%`}</b> · Proposal coverage: {funnel.proposal_coverage_percent??'—'}%</p>
- <small>{funnel.note}</small>
- <h2 style={{marginTop:28}}>Attribute project revenue to an opportunity</h2>
- <section style={{display:'flex',gap:8,flexWrap:'wrap',border:'1px solid #ddd',padding:14,borderRadius:10}}>
- <select value={selectedProject} onChange={e=>setSelectedProject(e.target.value)}><option value="">Select project</option>{projectRecords.map(p=><option key={p.id} value={p.id}>{p.title} — {p.client_name}</option>)}</select>
- <select value={selectedOpportunity} onChange={e=>setSelectedOpportunity(e.target.value)}><option value="">No source / unlink</option>{opportunities.map(o=><option key={o.id} value={o.id}>{o.title} ({o.source})</option>)}</select>
- <button disabled={busy||!selectedProject} onClick={linkOrigin}>Save attribution</button>
- </section>
- <h2 style={{marginTop:28}}>Source performance</h2>
- <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}><thead><tr>{['Source','Opportunities','Applications','Recorded submissions','Wins','Losses','Unknown','Decided sample','Win rate','Paid revenue','Attributed costs','ROI by currency'].map(x=><th key={x} style={{textAlign:'left',padding:9,borderBottom:'1px solid #bbb'}}>{x}</th>)}</tr></thead><tbody>{sources.map(x=><tr key={x.source}>{[x.source,x.opportunities,x.application_records,x.recorded_submissions,x.wins,x.losses,x.unknown_or_undecided,x.decided_sample_size,x.win_rate_percent===null?'Insufficient sample':`${x.win_rate_percent}%`,JSON.stringify(x.paid_revenue_by_currency||{}),JSON.stringify(x.attributed_project_costs_by_currency||{}),JSON.stringify(x.roi_by_currency||{})].map((v,i)=><td key={i} style={{padding:9,borderBottom:'1px solid #eee'}}>{v}</td>)}</tr>)}</tbody></table></div>
- <h2 style={{marginTop:28}}>Source activity trends — 30 / 90 / 180 days</h2>
- <label htmlFor="trend-window">Comparison window: </label><select id="trend-window" value={trendWindow} onChange={e=>setTrendWindow(e.target.value)}><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="180">Last 180 days</option></select>
- <p><small>{sourceTrends.windows?.[trendWindow]?.start_date||'—'} to {sourceTrends.windows?.[trendWindow]?.end_date||'—'}</small></p>
- <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}><thead><tr>{['Source','New opportunities','Proposals created','Submissions recorded','Wins recorded','Losses recorded','Recorded win rate','Net receipts by currency'].map(x=><th key={x} style={{textAlign:'left',padding:9,borderBottom:'1px solid #bbb'}}>{x}</th>)}</tr></thead><tbody>{(sourceTrends.windows?.[trendWindow]?.sources||[]).map((x:Row)=><tr key={x.source}>{[x.source,x.opportunities_added,x.proposals_created,x.submitted_applications,x.wins_recorded,x.losses_recorded,x.recorded_win_rate_percent===null?'No decided outcomes':`${x.recorded_win_rate_percent}%`,JSON.stringify(x.net_recorded_receipts_by_currency||{})].map((v:any,i:number)=><td key={i} style={{padding:9,borderBottom:'1px solid #eee'}}>{v}</td>)}</tr>)}</tbody></table></div>
- <ul>{(sourceTrends.limitations||[]).map((v:string,i:number)=><li key={i}><small>{v}</small></li>)}</ul>
- <h2 style={{marginTop:28}}>Opportunity cohort conversion — 30 / 90 / 180 days</h2>
- <p>Groups opportunities by the date first discovered, then follows those same opportunities through proposals, submitted applications, recorded outcomes, projects and cash receipts. Recent cohorts may be immature.</p>
- <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}><thead><tr>{['Source','Cohort leads','With proposal','Proposal %','Submitted','Submission %','Decided','Wins','Win % of decided','Projects','Project %','Net cash by currency','Avg cohort age (days)'].map(x=><th key={x} style={{textAlign:'left',padding:9,borderBottom:'1px solid #bbb'}}>{x}</th>)}</tr></thead><tbody>{(sourceCohorts.windows?.[trendWindow]?.sources||[]).map((x:Row)=><tr key={x.source}>{[x.source,x.cohort_opportunities,x.with_proposal,x.proposal_conversion_percent===null?'—':`${x.proposal_conversion_percent}%`,x.submitted,x.submission_conversion_percent===null?'—':`${x.submission_conversion_percent}%`,x.decided_outcomes,x.wins,x.win_rate_of_decided_percent===null?'No decided outcomes':`${x.win_rate_of_decided_percent}%`,x.projects_created,x.project_conversion_percent===null?'—':`${x.project_conversion_percent}%`,JSON.stringify(x.net_recorded_cash_by_currency||{}),x.average_cohort_age_days??'—'].map((v:any,i:number)=><td key={i} style={{padding:9,borderBottom:'1px solid #eee'}}>{v}</td>)}</tr>)}</tbody></table></div>
- <small>{sourceCohorts.method||''}</small><ul>{(sourceCohorts.limitations||[]).map((v:string,i:number)=><li key={i}><small>{v}</small></li>)}</ul>
- <h2 style={{marginTop:28}}>Freelance growth recommendations</h2>
- <p>Evidence-based operational suggestions from your recorded opportunity cohorts. These are rule-based, not guaranteed predictions.</p>
- <div style={{display:'grid',gap:10}}>{(growth.recommendations||[]).map((r:Row,i:number)=><section key={`${r.source}-${r.priority}-${i}`} style={{border:'1px solid #ddd',borderRadius:10,padding:14}}>
- <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}><b>{r.title}</b><small>{r.source} · {r.priority} · {r.confidence} confidence</small></div>
- <p>{r.action}</p><small>Evidence: {JSON.stringify(r.evidence||{})}</small></section>)}</div>
- <small>{growth.method||''}</small><ul>{(growth.limitations||[]).map((v:string,i:number)=><li key={i}><small>{v}</small></li>)}</ul>
- <h2 style={{marginTop:28}}>Service-category performance and delivery speed</h2>
- <p>Categories use the opportunity's explicit industry when available; otherwise they are inferred from title, description and skills using transparent keyword rules. Time measures use recorded timestamps.</p>
- <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}><thead><tr>{['Service category','Leads','With proposal','Decided','Wins','Win rate','Median days to proposal','Submission','Win','Project','First receipt','Economics by currency'].map(x=><th key={x} style={{textAlign:'left',padding:9,borderBottom:'1px solid #bbb'}}>{x}</th>)}</tr></thead><tbody>{(serviceIntel.categories||[]).map((x:Row)=><tr key={x.service_category}>{[x.service_category,x.opportunities,x.with_proposal,x.decided_outcomes,x.wins,x.win_rate_percent===null?'No decided outcomes':`${x.win_rate_percent}%`,x.median_days_to_proposal??'—',x.median_days_to_submission??'—',x.median_days_to_win??'—',x.median_days_to_project??'—',x.median_days_to_first_receipt??'—',JSON.stringify(x.economics_by_currency||{})].map((v:any,i:number)=><td key={i} style={{padding:9,borderBottom:'1px solid #eee',verticalAlign:'top'}}>{v}</td>)}</tr>)}</tbody></table></div>
- <small>{serviceIntel.method||''}</small><ul>{(serviceIntel.limitations||[]).map((v:string,i:number)=><li key={i}><small>{v}</small></li>)}</ul>
- <h2 style={{marginTop:28}}>Portfolio-to-opportunity fit intelligence</h2>
- <p>Compares each saved opportunity with your profile skills and indexed portfolio text. Scores are advisory and missing evidence is shown as unknown—not silently treated as a mismatch.</p>
- <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10}}>
- {[['Opportunities',opportunityFit.summary?.total],['Scored',opportunityFit.summary?.scored],['High fit (75+)',opportunityFit.summary?.high_fit],['Average fit',opportunityFit.summary?.average_fit_score===null||opportunityFit.summary?.average_fit_score===undefined?'Insufficient data':`${opportunityFit.summary.average_fit_score}/100`]].map(([k,v])=><section key={String(k)} style={{border:'1px solid #ddd',borderRadius:10,padding:14}}><small>{k}</small><h2>{v??'—'}</h2></section>)}
- </div>
- <div style={{display:'grid',gap:12,marginTop:12}}>{(opportunityFit.opportunities||[]).map((x:Row)=><section key={x.opportunity_id} style={{border:'1px solid #ddd',borderRadius:10,padding:14}}>
- <div style={{display:'flex',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}><b>{x.title}</b><b>{x.fit_score===null?'Fit not scored':`${x.fit_score}/100`} · {x.fit_confidence} confidence</b></div>
- <p><small>{x.source} · {x.service_category} · Listing quality: {x.opportunity_quality_score===null?'Insufficient data':`${x.opportunity_quality_score}/100`} ({x.quality_data_coverage}% data coverage)</small></p>
- <p><b>Matched profile skills:</b> {(x.matched_profile_skills||[]).join(', ')||'None recorded'}<br/><b>Portfolio-supported skills:</b> {(x.portfolio_supported_skills||[]).join(', ')||'No matching portfolio text found'}<br/><b>Potential gaps:</b> {(x.potential_gaps||[]).join(', ')||'None identified from structured requirements'}</p>
- {(x.reasons||[]).map((r:string,i:number)=><small key={i} style={{display:'block'}}>• {r}</small>)}
- {(x.portfolio_evidence||[]).length>0&&<details style={{marginTop:8}}><summary>View portfolio evidence</summary>{x.portfolio_evidence.map((ev:Row)=><p key={ev.chunk_id}><b>{ev.document}</b> · relevance {ev.relevance}<br/><small>{ev.excerpt}</small></p>)}</details>}
- </section>)}</div>
- <small>{opportunityFit.method||''}</small><ul>{(opportunityFit.limitations||[]).map((v:string,i:number)=><li key={i}><small>{v}</small></li>)}</ul>
- <h2 style={{marginTop:28}}>Capacity-aware opportunity pursuit planner</h2>
- <p>Compares each opportunity's explicitly estimated effort and deadline with your weekly capacity target and recorded work on active projects. This is a planning estimate, not a calendar reservation or a promise that you can deliver.</p>
- <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(155px,1fr))',gap:10}}>
- {[['Weekly target',`${capacityPlan.weekly_capacity_target_hours??'—'}h`],['Observed active workload',`${capacityPlan.observed_active_project_hours_per_week??'—'}h/week`],['Estimated remaining capacity',`${capacityPlan.estimated_remaining_weekly_capacity_hours??'—'}h/week`],['Workload data coverage',`${capacityPlan.workload_data_coverage_percent??'—'}%`],['Active projects',capacityPlan.active_projects??'—']].map(([k,v])=><section key={String(k)} style={{border:'1px solid #ddd',borderRadius:10,padding:14}}><small>{k}</small><h2>{v}</h2></section>)}
- </div>
- {(capacityPlan.untracked_active_projects||[]).length>0&&<p role="note"><b>Untracked active projects:</b> {(capacityPlan.untracked_active_projects||[]).join(', ')}. Their workload is unknown, not zero.</p>}
- <div style={{display:'grid',gap:10,marginTop:12}}>{(capacityPlan.opportunities||[]).map((x:Row)=><section key={x.opportunity_id} style={{border:'1px solid #ddd',borderRadius:10,padding:14}}>
- <div style={{display:'flex',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}><b>{x.title}</b><b>{String(x.capacity_status||'unknown').replaceAll('_',' ')}</b></div>
- <p>Effort: {x.estimated_hours===null?'Not estimated':`${x.estimated_hours}h`} · Deadline: {x.deadline||'Not recorded'} · Available by deadline: {x.capacity_available_before_deadline_hours===null?'Unknown':`${x.capacity_available_before_deadline_hours}h`} · {x.confidence} confidence</p>
- {(x.reasons||[]).map((r:string,i:number)=><small key={i} style={{display:'block'}}>• {r}</small>)}
- </section>)}</div>
- <small>{capacityPlan.method||''}</small><ul>{(capacityPlan.limitations||[]).map((v:string,i:number)=><li key={i}><small>{v}</small></li>)}</ul>
- <h2 style={{marginTop:28}}>Forward workload commitments</h2>
- <p>Uses task-level estimated effort and planned dates to identify future weekly overloads. Add estimates and dates in Delivery → Project tasks. Work is distributed evenly across each task's planned date range for planning purposes.</p>
- <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10}}>{[['Scheduled tasks',commitmentPlan.scheduled_task_count],['Unscheduled tasks',commitmentPlan.unscheduled_task_count],['Missing effort',commitmentPlan.unknown_effort_task_count],['Schedule coverage',commitmentPlan.schedule_coverage_percent===undefined?'—':`${commitmentPlan.schedule_coverage_percent}%`]].map(([k,v])=><section key={String(k)} style={{border:'1px solid #ddd',borderRadius:10,padding:14}}><small>{k}</small><h2>{v??'—'}</h2></section>)}</div>
- <div style={{display:'grid',gap:10,marginTop:12}}>{(commitmentPlan.weeks||[]).map((w:Row)=><section key={w.week_start} style={{border:'1px solid #ddd',borderRadius:10,padding:14}}><div style={{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap'}}><b>{w.week_start} – {w.week_end}</b><b>{String(w.status||'unknown').replaceAll('_',' ')}</b></div><p>Planned {w.planned_hours}h / {commitmentPlan.weekly_capacity_hours}h capacity · Remaining {w.remaining_hours}h · Over capacity {w.over_capacity_hours}h</p>{(w.tasks||[]).map((t:Row)=><small key={t.task_id} style={{display:'block'}}>{t.project}: {t.title} — {t.allocated_hours}h</small>)}</section>)}</div>
- {(commitmentPlan.unscheduled_tasks||[]).length>0&&<p><b>Needs scheduling:</b> {(commitmentPlan.unscheduled_tasks||[]).map((t:Row)=>t.title).join(', ')}</p>}
- {(commitmentPlan.unknown_effort_tasks||[]).length>0&&<p><b>Missing effort estimates:</b> {(commitmentPlan.unknown_effort_tasks||[]).map((t:Row)=>t.title).join(', ')}</p>}
- {(commitmentPlan.overdue_tasks||[]).length>0&&<p role="alert"><b>Overdue tasks:</b> {(commitmentPlan.overdue_tasks||[]).map((t:Row)=>t.title).join(', ')}</p>}
- <small>{commitmentPlan.method||''}</small><ul>{(commitmentPlan.limitations||[]).map((v:string,i:number)=><li key={i}><small>{v}</small></li>)}</ul>
- <h2 style={{marginTop:28}}>Calendar-aware availability and deadline review</h2>
- <p>Record leave, holidays or personal commitments. These unavailable hours reduce the effective weekly capacity estimate; no external calendar is accessed.</p>
- <section style={{border:'1px solid #ddd',borderRadius:10,padding:14,display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(145px,1fr))',gap:10,alignItems:'end'}}>
- <label>Date<input type="date" value={blockDate} onChange={e=>setBlockDate(e.target.value)} style={{display:'block',width:'100%',padding:8}}/></label>
- <label>Unavailable hours<input type="number" min="0.25" max="24" step="0.25" value={blockHours} onChange={e=>setBlockHours(e.target.value)} style={{display:'block',width:'100%',padding:8}}/></label>
- <label>Type<select value={blockKind} onChange={e=>setBlockKind(e.target.value)} style={{display:'block',width:'100%',padding:8}}><option value="leave">Leave</option><option value="holiday">Holiday</option><option value="personal">Personal</option></select></label>
- <label>Note<input value={blockNote} onChange={e=>setBlockNote(e.target.value)} maxLength={300} placeholder="Optional" style={{display:'block',width:'100%',padding:8}}/></label>
- <button disabled={busy} onClick={addAvailabilityBlock} style={{padding:10}}>Add unavailable time</button></section>
- <div style={{display:'grid',gap:10,marginTop:12}}>{(calendarPlan.weeks||[]).map((w:Row)=><section key={w.week_start} style={{border:'1px solid #ddd',borderRadius:10,padding:14}}><b>{w.week_start} – {w.week_end} · {String(w.status).replaceAll('_',' ')}</b><p>Base capacity {w.weekly_capacity_hours}h · Unavailable {w.unavailable_hours}h · Effective {w.effective_capacity_hours}h · Planned {w.planned_hours}h · Overload {w.over_capacity_hours}h</p></section>)}</div>
- {(calendarPlan.availability_blocks||[]).length>0&&<p><b>Recorded unavailable time:</b> {(calendarPlan.availability_blocks||[]).map((b:Row)=>`${b.date}: ${b.hours}h ${b.kind}`).join(' · ')}</p>}
- {(calendarPlan.deadline_date_collisions||[]).length>0&&<div role="note"><b>Dates to review:</b>{(calendarPlan.deadline_date_collisions||[]).map((c:Row)=><p key={c.date}>{c.date}: {c.items.map((i:Row)=>`${i.type}: ${i.title}`).join(' · ')}</p>)}</div>}
- <small>{calendarPlan.method||''}</small><ul>{(calendarPlan.limitations||[]).map((v:string,i:number)=><li key={i}><small>{v}</small></li>)}</ul>
- <h2 style={{marginTop:28}}>Task dependencies and critical-path review</h2>
- <p>Define explicit finish-to-start task dependencies. The planner detects circular sequences and estimates the longest chain using known task hours. It does not reschedule tasks automatically.</p>
- <section style={{border:'1px solid #ddd',borderRadius:10,padding:14,display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))',gap:10,alignItems:'end'}}>
- <label>Predecessor task<select value={predecessorTask} onChange={e=>setPredecessorTask(e.target.value)} style={{display:'block',width:'100%',padding:8}}><option value="">Select task</option>{taskRows.map(t=><option key={t.id} value={t.id}>{t.title}</option>)}</select></label>
- <label>Successor task<select value={successorTask} onChange={e=>setSuccessorTask(e.target.value)} style={{display:'block',width:'100%',padding:8}}><option value="">Select task</option>{taskRows.filter(t=>!predecessorTask||t.project_id===taskRows.find(x=>x.id===predecessorTask)?.project_id).map(t=><option key={t.id} value={t.id}>{t.title}</option>)}</select></label>
- <button disabled={busy||!predecessorTask||!successorTask} onClick={addTaskDependency} style={{padding:10}}>Add dependency</button></section>
- <div style={{display:'grid',gap:10,marginTop:12}}>{(dependencyPlan.projects||[]).map((x:Row)=><section key={x.project_id} style={{border:'1px solid #ddd',borderRadius:10,padding:14}}><b>{x.project}</b><p>Dependencies: {x.dependency_count} · Critical path: {x.critical_path_hours===null?'Unavailable due to cycle':`${x.critical_path_hours} estimated hours`} · Status: {String(x.risk).replaceAll('_',' ')}</p>{x.has_cycle&&<p role="alert">Circular sequence detected. Review tasks: {(x.cycle_task_ids||[]).join(', ')}</p>}{(x.critical_path_task_ids||[]).length>0&&<p>Critical path: {(x.critical_path_task_ids||[]).map((id:string)=>x.tasks.find((t:Row)=>t.task_id===id)?.title||id).join(' → ')}</p>}{(x.unknown_effort_task_ids||[]).length>0&&<p>Missing effort estimates: {(x.unknown_effort_task_ids||[]).map((id:string)=>x.tasks.find((t:Row)=>t.task_id===id)?.title||id).join(', ')}</p>}{(x.schedule_conflicts||[]).map((c:Row,i:number)=><p key={i}>Schedule review: {c.predecessor} due {c.predecessor_due}, but {c.successor} starts {c.successor_start}</p>)}{(x.tasks||[]).map((t:Row)=><small key={t.task_id} style={{display:'block'}}>{t.title} · {t.estimated_hours===null?'effort unknown':`${t.estimated_hours}h`} · {t.predecessor_task_ids.length?`depends on ${t.predecessor_task_ids.length} task(s)`:'no predecessor'}{t.is_on_critical_path?' · critical path':''}</small>)}{(x.edges||[]).map((edge:Row)=><div key={edge.id} style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'center',marginTop:6}}><small>{x.tasks.find((t:Row)=>t.task_id===edge.predecessor_task_id)?.title||edge.predecessor_task_id} → {x.tasks.find((t:Row)=>t.task_id===edge.successor_task_id)?.title||edge.successor_task_id}</small><button disabled={busy} onClick={()=>removeTaskDependency(edge.id)} style={{padding:'4px 8px'}}>Remove link</button></div>)}</section>)}</div>
- <small>{dependencyPlan.method||''}</small><ul>{(dependencyPlan.limitations||[]).map((v:string,i:number)=><li key={i}><small>{v}</small></li>)}</ul>
- <h2 style={{marginTop:28}}>AI-assisted delivery schedule recommendations</h2>
- <p>Read-only schedule suggestions combine estimated effort, weekday capacity, recorded leave and explicit task dependencies. Nothing is changed until you manually update a task.</p>
- <section style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10}}>
- <div style={{border:'1px solid #ddd',borderRadius:10,padding:12}}><small>Weekly capacity</small><h3>{schedulePlan.weekly_capacity_hours??'—'}h</h3></div>
- <div style={{border:'1px solid #ddd',borderRadius:10,padding:12}}><small>Tasks recommended</small><h3>{schedulePlan.recommendations?.length??0}</h3></div>
- <div style={{border:'1px solid #ddd',borderRadius:10,padding:12}}><small>Projected late</small><h3>{schedulePlan.summary?.projected_late??0}</h3></div>
- <div style={{border:'1px solid #ddd',borderRadius:10,padding:12}}><small>Needs attention</small><h3>{(schedulePlan.summary?.missing_effort??0)+(schedulePlan.summary?.blocked_dependency_cycle??0)+(schedulePlan.summary?.outside_horizon??0)}</h3></div>
- </section>
- <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center',marginTop:12}}><button disabled={busy} onClick={createScheduleDraft}>Save recommendations as draft plan</button><small>Approval applies proposed start/finish dates only; contractual due dates are never overwritten.</small></div>
- {(scheduleVersions||[]).length>0&&<section style={{border:'1px solid #ddd',borderRadius:10,padding:12,marginTop:12}}><b>Schedule plan history</b>{scheduleVersions.map((v:Row)=><div key={v.id} style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'center',flexWrap:'wrap',borderTop:'1px solid #eee',padding:'8px 0'}}><span>v{v.version} · {v.status} · {v.recommendation_count} recommendations · {new Date(v.created_at).toLocaleString()}</span><span style={{display:'flex',gap:6}}>{v.status==='draft'&&<><button disabled={busy} onClick={()=>decideSchedulePlan(v.id,'approve')}>Approve</button><button disabled={busy} onClick={()=>decideSchedulePlan(v.id,'reject')}>Reject</button></>}{v.status==='approved'&&<button disabled={busy} onClick={()=>decideSchedulePlan(v.id,'rollback')}>Rollback</button>}</span></div>)}</section>}
- <div style={{overflowX:'auto',marginTop:10}}><table style={{width:'100%',borderCollapse:'collapse'}}><thead><tr>{['Project / task','Status','Suggested start','Suggested finish','Due date','Effort','Explanation'].map(x=><th key={x} style={{textAlign:'left',padding:8,borderBottom:'1px solid #bbb'}}>{x}</th>)}</tr></thead><tbody>{(schedulePlan.recommendations||[]).map((r:Row)=><tr key={r.task_id}><td style={{padding:8,borderBottom:'1px solid #eee'}}><b>{r.title}</b><small style={{display:'block'}}>{r.project}</small></td>{[String(r.status||'').replaceAll('_',' '),r.recommended_start||'—',r.recommended_finish||'—',r.due_date||'—',r.estimated_hours===null?'Unknown':`${r.estimated_hours}h`,r.reason].map((v:any,i:number)=><td key={i} style={{padding:8,borderBottom:'1px solid #eee'}}>{v}</td>)}</tr>)}</tbody></table></div>
- {(schedulePlan.milestone_impacts||[]).length>0&&<section role="alert" style={{border:'1px solid #c88',borderRadius:10,padding:12,marginTop:10}}><b>Milestones potentially at risk</b>{(schedulePlan.milestone_impacts||[]).map((m:Row)=><p key={m.milestone_id}>{m.project} · {m.milestone}: due {m.due_date}, projected project finish {m.projected_project_finish}</p>)}</section>}
- <small>{schedulePlan.method||''}</small><ul>{(schedulePlan.limitations||[]).map((v:string,i:number)=><li key={i}><small>{v}</small></li>)}</ul>
- <h2 style={{marginTop:28}}>Capacity and workload</h2>
- <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))',gap:10}}>
- {[['Weekly capacity',`${capacity.weekly_capacity_hours??'—'} hours`],['Logged hours',capacity.logged_hours],['Billable hours',capacity.billable_hours],['Utilization',capacity.logged_capacity_utilization_percent===null||capacity.logged_capacity_utilization_percent===undefined?'—':`${capacity.logged_capacity_utilization_percent}%`]].map(([k,v])=><section key={String(k)} style={{border:'1px solid #ddd',borderRadius:10,padding:14}}><small>{k}</small><h2>{v??'—'}</h2></section>)}
- </div><small>{capacity.note}</small>
- <h2 style={{marginTop:28}}>Project profitability</h2>
- <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}><thead><tr>{['Project','Client','Paid revenue','Budget','Logged hours','Estimated labor cost','Margin','Data quality'].map(x=><th key={x} style={{textAlign:'left',padding:9,borderBottom:'1px solid #bbb'}}>{x}</th>)}</tr></thead><tbody>{projects.map(x=><tr key={x.project_id}>{[x.project,x.client,money(x.paid_invoice_revenue,x.currency),money(x.project_budget,x.currency),x.logged_hours,money(x.estimated_billable_labor_cost,x.currency),money(x.margin_after_logged_labor,x.currency),x.profitability_status].map((v,i)=><td key={i} style={{padding:9,borderBottom:'1px solid #eee'}}>{v}</td>)}</tr>)}</tbody></table></div>
- <p><small>ROI uses only manually recorded project-linked costs and paid invoices, kept separate by currency. It is partial—not total profit or guaranteed source performance. Win rates require a minimum decided sample of five.</small></p>
- <h2 style={{marginTop:28}}>Proposal outcome intelligence</h2>
- <p>Compares your saved proposal drafts with manually recorded outcomes. Win rates are shown only after at least {proposalIntel.minimum_decided_sample??5} decided outcomes in a group.</p>
- <div style={{overflowX:'auto'}}><table style={{width:'100%',borderCollapse:'collapse'}}><thead><tr>{['Source','Proposals','Wins','Losses','Unknown / undecided','Decided sample','Win rate','Avg. basic score'].map(x=><th key={x} style={{textAlign:'left',padding:9,borderBottom:'1px solid #bbb'}}>{x}</th>)}</tr></thead><tbody>{(proposalIntel.sources||[]).map((x:Row)=><tr key={x.source}>{[x.source,x.proposals,x.wins,x.losses,x.unknown_or_undecided,x.decided_sample_size,x.win_rate_percent===null?'Insufficient sample':`${x.win_rate_percent}%`,x.average_basic_quality_score??'—'].map((v:any,i:number)=><td key={i} style={{padding:9,borderBottom:'1px solid #eee'}}>{v}</td>)}</tr>)}</tbody></table></div>
- <p><small>{proposalIntel.method||''}</small></p>
- <ul>{(proposalIntel.limitations||[]).map((v:string,i:number)=><li key={i}><small>{v}</small></li>)}</ul>
- <h2 style={{marginTop:28}}>90-day earnings outlook</h2>
- <p>As of {earnings.as_of||'—'} · Historical win sample: {earnings.empirical_win_rate_sample_size??0}</p>
- {Object.entries(earnings.by_currency||{}).map(([currency,data]:[string,any])=><section key={currency} style={{border:'1px solid #ddd',borderRadius:10,padding:14,marginBottom:10}}><h3>{currency}</h3>{Object.entries(data).map(([k,v])=><p key={k}>{k.replaceAll('_',' ')}: <b>{typeof v==='number'?money(v,currency):v===null?'Not enough data':String(v)}</b></p>)}</section>)}
- <small>{earnings.note}</small><p><small>{earnings.weighted_pipeline_policy}</small></p>
- </main>
+import { Fragment, useCallback, useEffect, useState, type ReactNode } from 'react';
+import { ApiError, api, useSessionToken } from '@/lib/api-client';
+import { formatRate, modeLabel, rupees, sampleNote, type Rate } from '@/lib/analytics-format';
+import { BarChart } from './bar-chart';
+
+/**
+ * Analytics (Master Plan 4.4, spec §13): three surfaces from Edge data —
+ * the freelancer's business, a client organisation's hiring and spend, and
+ * marketplace operations for staff. Every number is computed on the server
+ * from the viewer's own scope; definitions are shown with the numbers, rates
+ * show their sample, and test-mode money is labelled and never mixed with live.
+ */
+
+type Series = Array<{ period: string; total: number }>;
+type Band = { band: string; proposals: number; success: Rate };
+type Freelancer = {
+  proposals: { by_month: Array<{ period: string; sent: number; won: number }>; total: number; success_rate: Rate; shortlist_rate: Rate; pricing_performance: Band[]; by_source: { open_marketplace: { proposals: number; success: Rate }; invitations: { proposals: number; success: Rate } } };
+  earnings: { released_by_month: Record<string, Series> };
+  contracts: { count: number; average_value_minor: number | null; average_value_small_sample: boolean; repeat_client_rate: Rate; pipeline_minor: number; active: number };
+  delivery: { revision_rate: Rate };
+  external: { available: boolean; by_source: Array<{ source: string; found: number; applied: number; won: number }> };
+  definitions: Record<string, string>;
+};
+type Client = {
+  projects: { by_status: Record<string, number>; published: number };
+  hiring: { proposals_per_project: number | null; time_to_first_proposal_hours: number | null; time_to_first_proposal_sample: number; time_to_hire_days: number | null; time_to_hire_sample: number; hiring_conversion: Rate };
+  spend: { by_month: Record<string, Series>; by_category: Array<{ category_slug: string; by_mode: Record<string, number> }> };
+  delivery: { active_contracts: number; completed_contracts: number; delivery_days: number | null; delivery_sample: number; revision_rate: Rate; repeat_hire_rate: Rate; committed_not_released_minor: number };
+  definitions: Record<string, string>;
+};
+type Platform = {
+  acquisition: { registrations_by_week: Series };
+  activation: { active_freelancers_30d: number; active_clients_30d: number };
+  marketplace: { native_listings_published: number; native_listings_published_30d: number; external_opportunities_30d: number | null; project_to_hire: Rate; categories: Array<{ category_slug: string; published: number; proposals: number; contracts: number }> };
+  delivery: { completed_contracts_by_month: Series; dispute_rate: Rate };
+  finance: { collected_by_mode: Record<string, number>; platform_revenue_by_mode: Record<string, number>; refunded_by_mode: Record<string, number>; ai_cost_30d_usd: number; ai_cost_per_completed_contract_usd: number | null; completed_contracts_30d: number };
+  retention: { retention_30d: Rate };
+  definitions: Record<string, string>;
+};
+type Org = { id: string; name: string };
+type View = 'freelancer' | 'client' | 'platform';
+
+function Stat({ label, value, note, title }: { label: string; value: ReactNode; note?: string; title?: string }) {
+  return (
+    <div className="stat" title={title}>
+      <div className="v">{value}</div>
+      <div className="l">{label}</div>
+      {note && <div className="note">{note}</div>}
+    </div>
+  );
 }
 
-export default function Page() {
+function RateStat({ label, rate, definition }: { label: string; rate: Rate; definition?: string }) {
+  return <Stat label={label} value={formatRate(rate)} note={sampleNote(rate)} title={definition} />;
+}
+
+function ByMode({ values, empty }: { values: Record<string, number>; empty: string }) {
+  const modes = Object.keys(values);
+  if (!modes.length) return <span className="muted">{empty}</span>;
+  return <>{modes.map((m) => <div key={m}>{rupees(values[m])} <span className="muted small">{modeLabel(m)}</span></div>)}</>;
+}
+
+function MoneyCharts({ title, byMode }: { title: string; byMode: Record<string, Series> }) {
+  const modes = Object.keys(byMode);
+  if (!modes.length) return <p className="muted">{title}: nothing recorded in the last six months.</p>;
+  return <>{modes.map((m) => <BarChart key={m} title={`${title} — ${modeLabel(m)}`} points={byMode[m].map((p) => ({ period: p.period, value: p.total }))} format={rupees} />)}</>;
+}
+
+function Definitions({ items }: { items: Record<string, string> }) {
   return (
-    <LegacyGate title={"Analytics"} summary={"Funnel, capacity, profitability and source performance reports."} alternatives={[{ href: "/workspace", label: "Business workspace", note: "contracts, deliveries, earnings and goals" }, { href: "/earnings", label: "Earnings", note: "released payments and payouts" }, { href: "/agent", label: "Action plan", note: "what needs attention" }]}>
-      <AnalyticsPage />
-    </LegacyGate>
+    <details>
+      <summary>How these numbers are defined</summary>
+      <dl className="kv">{Object.entries(items).map(([k, v]) => <Fragment key={k}><dt>{k.replace(/_/g, ' ')}</dt><dd>{v}</dd></Fragment>)}</dl>
+    </details>
+  );
+}
+
+function FreelancerView({ data }: { data: Freelancer }) {
+  const d = data.definitions;
+  return (
+    <>
+      <div className="stat-grid">
+        <Stat label="Native proposals sent" value={data.proposals.total} title={d.proposals_sent} />
+        <RateStat label="Proposal success rate" rate={data.proposals.success_rate} definition={d.proposal_success_rate} />
+        <RateStat label="Shortlisted or better" rate={data.proposals.shortlist_rate} definition={d.shortlist_rate} />
+        <Stat label="Average contract value" value={rupees(data.contracts.average_value_minor)} note={data.contracts.average_value_small_sample && data.contracts.count ? `Based on ${data.contracts.count} contract(s).` : ''} title={d.average_contract_value} />
+        <RateStat label="Repeat clients" rate={data.contracts.repeat_client_rate} definition={d.repeat_client_rate} />
+        <RateStat label="Deliveries sent back for revision" rate={data.delivery.revision_rate} definition={d.revision_rate} />
+        <Stat label={`Agreed, not yet paid (${data.contracts.active} active)`} value={rupees(data.contracts.pipeline_minor)} note="Not guaranteed income." title={d.pipeline_value} />
+      </div>
+      <BarChart title="Proposals sent" points={data.proposals.by_month.map((p) => ({ period: p.period, value: p.sent }))} format={(v) => String(v)} />
+      <BarChart title="Proposals that led to an offer" points={data.proposals.by_month.map((p) => ({ period: p.period, value: p.won }))} format={(v) => String(v)} />
+      <MoneyCharts title="Earnings released to you" byMode={data.earnings.released_by_month} />
+
+      <h3>Pricing performance</h3>
+      <p className="muted small">{d.pricing_performance}</p>
+      <table>
+        <thead><tr><th scope="col">Your price vs the client budget</th><th scope="col">Proposals</th><th scope="col">Success rate</th></tr></thead>
+        <tbody>{data.proposals.pricing_performance.map((b) => <tr key={b.band}><td>{{ below: 'Below the range', within: 'Within the range', above: 'Above the range', no_budget: 'No budget stated' }[b.band] ?? b.band}</td><td>{b.proposals}</td><td>{formatRate(b.success)}{b.success.small_sample && b.success.value !== null ? ' · small sample' : ''}</td></tr>)}</tbody>
+      </table>
+
+      <h3>Where your work comes from</h3>
+      <table>
+        <thead><tr><th scope="col">Source</th><th scope="col">Proposals or jobs</th><th scope="col">Result</th></tr></thead>
+        <tbody>
+          <tr><td>Marketplace (open projects)</td><td>{data.proposals.by_source.open_marketplace.proposals}</td><td>{formatRate(data.proposals.by_source.open_marketplace.success)} success</td></tr>
+          <tr><td>Client invitations</td><td>{data.proposals.by_source.invitations.proposals}</td><td>{formatRate(data.proposals.by_source.invitations.success)} success</td></tr>
+          {data.external.by_source.map((s) => <tr key={s.source}><td>External · {s.source}</td><td>{s.found} found · {s.applied} applied</td><td>{s.won} won (recorded by you)</td></tr>)}
+        </tbody>
+      </table>
+      {!data.external.available && <p className="muted small">External job sources are not connected in this deployment.</p>}
+      <p className="muted small">{d.external_pipeline}</p>
+      <Definitions items={d} />
+    </>
+  );
+}
+
+function ClientView({ data }: { data: Client }) {
+  const d = data.definitions;
+  const statuses = Object.entries(data.projects.by_status);
+  return (
+    <>
+      <div className="stat-grid">
+        <Stat label="Projects published" value={data.projects.published} title={d.projects} />
+        <Stat label="Proposals per project" value={data.hiring.proposals_per_project ?? '—'} title={d.proposals_per_project} />
+        <Stat label="Hours to first proposal (median)" value={data.hiring.time_to_first_proposal_hours ?? '—'} note={data.hiring.time_to_first_proposal_sample > 0 && data.hiring.time_to_first_proposal_sample < 5 ? `Small sample (${data.hiring.time_to_first_proposal_sample}).` : ''} title={d.time_to_first_proposal_hours} />
+        <Stat label="Days to hire (median)" value={data.hiring.time_to_hire_days ?? '—'} note={data.hiring.time_to_hire_sample > 0 && data.hiring.time_to_hire_sample < 5 ? `Small sample (${data.hiring.time_to_hire_sample}).` : ''} title={d.time_to_hire_days} />
+        <RateStat label="Projects that led to a hire" rate={data.hiring.hiring_conversion} definition={d.hiring_conversion} />
+        <Stat label="Days to complete a contract (median)" value={data.delivery.delivery_days ?? '—'} note={data.delivery.delivery_sample > 0 && data.delivery.delivery_sample < 5 ? `Small sample (${data.delivery.delivery_sample}).` : ''} title={d.delivery_days} />
+        <RateStat label="Deliveries sent back for revision" rate={data.delivery.revision_rate} definition={d.revision_rate} />
+        <RateStat label="Freelancers hired again" rate={data.delivery.repeat_hire_rate} definition={d.repeat_hire_rate} />
+        <Stat label={`Committed, not yet released (${data.delivery.active_contracts} active)`} value={rupees(data.delivery.committed_not_released_minor)} title={d.committed_not_released} />
+      </div>
+      {statuses.length > 0 && <p className="muted">Projects by status: {statuses.map(([s, v]) => `${s.replace('_', ' ')} ${v}`).join(' · ')}</p>}
+      <MoneyCharts title="Spend funded" byMode={data.spend.by_month} />
+      {data.spend.by_category.length > 0 && (
+        <table>
+          <thead><tr><th scope="col">Category</th><th scope="col">Spend funded (all time)</th></tr></thead>
+          <tbody>{data.spend.by_category.map((c) => <tr key={c.category_slug}><td>{c.category_slug.replace(/_/g, ' ')}</td><td><ByMode values={c.by_mode} empty="—" /></td></tr>)}</tbody>
+        </table>
+      )}
+      <Definitions items={d} />
+    </>
+  );
+}
+
+function PlatformView({ data }: { data: Platform }) {
+  const d = data.definitions;
+  return (
+    <>
+      <div className="stat-grid">
+        <Stat label="Active freelancers (30 days)" value={data.activation.active_freelancers_30d} title={d.active_freelancers_30d} />
+        <Stat label="Active client organisations (30 days)" value={data.activation.active_clients_30d} title={d.active_clients_30d} />
+        <Stat label="Native projects published" value={data.marketplace.native_listings_published} note={`${data.marketplace.native_listings_published_30d} in the last 30 days`} title={d.native_listings_published} />
+        <Stat label="External jobs collected (30 days)" value={data.marketplace.external_opportunities_30d ?? 'Not connected'} title={d.external_opportunities_30d} />
+        <RateStat label="Project to hire" rate={data.marketplace.project_to_hire} definition={d.project_to_hire} />
+        <RateStat label="Dispute rate" rate={data.delivery.dispute_rate} definition={d.dispute_rate} />
+        <RateStat label="30-day retention" rate={data.retention.retention_30d} definition={d.retention_30d} />
+        <Stat label="Collected" value={<ByMode values={data.finance.collected_by_mode} empty="Nothing collected" />} title={d.collected_value} />
+        <Stat label="Platform fee revenue" value={<ByMode values={data.finance.platform_revenue_by_mode} empty="No fees yet" />} title={d.platform_revenue} />
+        <Stat label="Refunded" value={<ByMode values={data.finance.refunded_by_mode} empty="No refunds" />} />
+        <Stat label="AI cost (30 days)" value={`$${data.finance.ai_cost_30d_usd.toFixed(2)}`} note={data.finance.ai_cost_per_completed_contract_usd === null ? 'No contracts completed in 30 days.' : `$${data.finance.ai_cost_per_completed_contract_usd.toFixed(2)} per completed contract`} title={d.ai_cost_per_completed_contract} />
+      </div>
+      <BarChart title="Registrations per week" points={data.acquisition.registrations_by_week.map((p) => ({ period: p.period, value: p.total }))} format={(v) => String(v)} />
+      <BarChart title="Contracts completed (north-star metric)" points={data.delivery.completed_contracts_by_month.map((p) => ({ period: p.period, value: p.total }))} format={(v) => String(v)} />
+      <h3>Category health</h3>
+      <table>
+        <thead><tr><th scope="col">Category</th><th scope="col">Published</th><th scope="col">Proposals</th><th scope="col">Contracts</th></tr></thead>
+        <tbody>{data.marketplace.categories.map((c) => <tr key={c.category_slug}><td>{c.category_slug.replace(/_/g, ' ')}</td><td>{c.published}</td><td>{c.proposals}</td><td>{c.contracts}</td></tr>)}</tbody>
+      </table>
+      <Definitions items={d} />
+    </>
+  );
+}
+
+export default function AnalyticsPage() {
+  const [token] = useSessionToken();
+  const [view, setView] = useState<View>('freelancer');
+  const [orgs, setOrgs] = useState<Org[]>([]);
+  const [orgId, setOrgId] = useState('');
+  const [staff, setStaff] = useState(false);
+  const [freelancer, setFreelancer] = useState<Freelancer | null>(null);
+  const [client, setClient] = useState<Client | null>(null);
+  const [platform, setPlatform] = useState<Platform | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!token) return;
+    api<{ roles: string[]; organizations: Org[] }>('/api/v1/me/identity')
+      .then((i) => {
+        const list = Array.isArray(i?.organizations) ? i.organizations : [];
+        setOrgs(list);
+        if (list[0]) setOrgId(list[0].id);
+        const roles = Array.isArray(i?.roles) ? i.roles : [];
+        setStaff(roles.includes('admin') || roles.includes('finance'));
+      })
+      .catch(() => setOrgs([]));
+  }, [token]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      if (view === 'freelancer') { const f = await api<Freelancer>('/api/v1/analytics/freelancer'); setFreelancer(f && f.proposals && f.contracts ? f : null); }
+      if (view === 'client' && orgId) { const c = await api<Client>(`/api/v1/analytics/client?organization_id=${encodeURIComponent(orgId)}`); setClient(c && c.hiring && c.delivery ? c : null); }
+      if (view === 'platform') { const p = await api<Platform>('/api/v1/admin/analytics'); setPlatform(p && p.marketplace && p.finance ? p : null); }
+    } catch (e) {
+      setError(e instanceof ApiError && e.status === 404 ? 'You do not have access to these numbers.' : e instanceof Error ? e.message : 'Could not load analytics.');
+    } finally {
+      setLoading(false);
+    }
+  }, [view, orgId]);
+
+  useEffect(() => { if (token) void load(); }, [token, load]);
+
+  if (!token) return <main className="shell"><div className="card"><h2>Analytics</h2><p className="muted">Sign in first to see your numbers.</p><a className="btn" href="/">Go to sign in</a></div></main>;
+
+  const tabs: Array<{ key: View; label: string }> = [
+    { key: 'freelancer', label: 'My freelance business' },
+    ...(orgs.length ? [{ key: 'client' as View, label: 'Hiring and spend' }] : []),
+    ...(staff ? [{ key: 'platform' as View, label: 'Marketplace operations' }] : []),
+  ];
+
+  return (
+    <main className="shell">
+      <div className="row between"><h2>Analytics</h2><a className="link" href="/analytics/planning">Planning tools</a></div>
+      <p className="muted">Computed from your records on this platform. Small samples are marked; test-mode payments are labelled and never added to real money.</p>
+      <div className="tabs" role="tablist" aria-label="Analytics views">
+        {tabs.map((t) => <button key={t.key} type="button" role="tab" aria-selected={view === t.key} onClick={() => setView(t.key)}>{t.label}</button>)}
+      </div>
+      {view === 'client' && orgs.length > 1 && (
+        <div className="field"><label htmlFor="an-org">Client account</label><select id="an-org" value={orgId} onChange={(e) => setOrgId(e.target.value)}>{orgs.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</select></div>
+      )}
+      {error && <p className="error" role="alert">{error}</p>}
+      {loading && <p className="muted">Loading…</p>}
+      <section role="tabpanel" aria-label={tabs.find((t) => t.key === view)?.label}>
+        {view === 'freelancer' && freelancer && <FreelancerView data={freelancer} />}
+        {view === 'client' && client && <ClientView data={client} />}
+        {view === 'platform' && platform && <PlatformView data={platform} />}
+      </section>
+    </main>
   );
 }

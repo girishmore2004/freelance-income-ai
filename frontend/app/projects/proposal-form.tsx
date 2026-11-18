@@ -165,7 +165,7 @@ export function ProposalForm({ listingId, budgetModel, existing, onDone, onCance
       <p className="muted small">AI drafts use only facts on your profile. You edit, check and approve the exact text; nothing is sent automatically.</p>
       <div aria-live="polite">{notice && <p className="success">{notice}</p>}</div>
       <div className="field">
-        <label htmlFor={`cover-${id}`}>Introduction: how you would do the work (50–5,000 characters)</label>
+        <label htmlFor={`cover-${id}`}>How you would do the work: your introduction (50–5,000 characters)</label>
         <textarea id={`cover-${id}`} rows={6} maxLength={5000} value={form.cover} onChange={(e) => update('cover', e.target.value)} aria-invalid={Boolean(errors.cover_letter)} />
         {err('cover_letter')}
       </div>

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ApiError, api, useSessionToken } from '@/lib/api-client';
 import { formatBudget } from '@/lib/listing-format';
 import { TrustCases } from './trust-cases';
+import { AuditLogPanel, HealthPanel, UsersPanel } from './staff-tools';
 
 /**
  * Staff admin (moderator/admin). Moderation queue for held listings, user
@@ -84,7 +85,7 @@ export default function AdminPage() {
 
   return (
     <main className="shell">
-      <div className="row between"><h2>Admin</h2><span className="row"><a className="link" href="/finance">Finance</a><a className="link" href="/ai-agents">AI agents</a></span></div>
+      <div className="row between"><h2>Admin</h2><span className="row"><a className="link" href="/analytics">Analytics</a><a className="link" href="/finance">Finance</a><a className="link" href="/ai-agents">AI agents</a></span></div>
       <div aria-live="polite">{notice && <p className="success">{notice}</p>}{error && <p className="error" role="alert">{error}</p>}</div>
 
       {overview && (
@@ -149,6 +150,10 @@ export default function AdminPage() {
           </ul>
         </section>
       )}
+
+      {overview && <UsersPanel />}
+      {overview?.is_admin && <AuditLogPanel />}
+      {overview?.is_admin && <HealthPanel />}
     </main>
   );
 }

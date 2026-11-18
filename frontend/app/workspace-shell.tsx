@@ -20,13 +20,13 @@ type NavGroup = { label: string; items: NavItem[] };
 const NO_FRAME = new Set(['/how-it-works', '/pricing', '/safety', '/help', '/join']);
 
 const FREELANCER: NavGroup[] = [
-  { label: 'Home', items: [{ href: '/workspace', label: 'Overview' }, { href: '/agent', label: 'Next actions' }] },
+  { label: 'Home', items: [{ href: '/workspace', label: 'Overview' }, { href: '/agent', label: 'Next actions' }, { href: '/analytics', label: 'Analytics' }] },
   { label: 'Find work', items: [{ href: '/projects', label: 'Find work' }, { href: '/', label: 'Proposals and applications' }] },
   { label: 'Work', items: [{ href: '/contracts', label: 'Offers and contracts' }, { href: '/earnings', label: 'Earnings and payouts' }] },
   { label: 'AI', items: [{ href: '/ai-agents', label: 'AI agent centre' }, { href: '/coach', label: 'Business coach' }] },
 ];
 const CLIENT: NavGroup[] = [
-  { label: 'Home', items: [{ href: '/workspace', label: 'Overview' }, { href: '/agent', label: 'Next actions' }] },
+  { label: 'Home', items: [{ href: '/workspace', label: 'Overview' }, { href: '/agent', label: 'Next actions' }, { href: '/analytics', label: 'Analytics' }] },
   { label: 'Hiring', items: [{ href: '/client/projects', label: 'Projects and proposals' }, { href: '/freelancers', label: 'Find freelancers' }] },
   { label: 'Work', items: [{ href: '/contracts', label: 'Contracts and deliveries' }] },
   { label: 'AI', items: [{ href: '/ai-agents', label: 'AI agent centre' }] },

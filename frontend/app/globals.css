@@ -208,3 +208,18 @@ ul{padding-left:20px}
 .tabs [role=tab]{border:0;background:none;padding:8px 12px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;font:inherit}
 .tabs [role=tab][aria-selected=true]{color:var(--accent2);border-bottom-color:var(--accent);font-weight:600}
 @media (max-width:640px){.kv{grid-template-columns:1fr}.kv dt{margin-top:6px}}
+
+/* Analytics charts (U6): one hue, recessive axis, tooltip on hover/focus */
+.chart{margin:0 0 16px}
+.chart-plot{position:relative}
+.chart svg{width:100%;height:auto;display:block}
+.chart-bar{fill:var(--accent)}
+.chart-bar.on{fill:var(--accent2)}
+.chart-axis{stroke:var(--line2);stroke-width:1}
+.chart-tick{fill:var(--faint);font-size:11px}
+.chart-tip{position:absolute;top:0;transform:translateX(-50%);background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-sm);box-shadow:var(--shadow);padding:4px 8px;font-size:12.5px;white-space:nowrap;pointer-events:none}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin:8px 0 16px}
+.stat{border:1px solid var(--line);border-radius:var(--radius);padding:12px;background:var(--surface)}
+.stat .v{font-size:22px;font-weight:600;color:var(--text)}
+.stat .l{color:var(--muted);font-size:13px}
+.stat .note{color:var(--warn);font-size:12px;margin-top:4px}
