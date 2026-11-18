@@ -144,3 +144,15 @@ describe("filters", () => {
     expect(parseDate("2026-11-14T09:30:00")?.getUTCHours()).toBe(9);
   });
 });
+
+describe("link safety", () => {
+  it("keeps only absolute http(s) links from feeds and users", async () => {
+    const { safeHttpUrl } = await import("./core-routes");
+    expect(safeHttpUrl("https://remotive.com/jobs/1")).toBe("https://remotive.com/jobs/1");
+    expect(safeHttpUrl("javascript:alert(1)")).toBe("");
+    expect(safeHttpUrl(" JaVaScRiPt:alert(1)")).toBe("");
+    expect(safeHttpUrl("data:text/html,<script>alert(1)</script>")).toBe("");
+    expect(safeHttpUrl("/relative/path")).toBe("");
+    expect(safeHttpUrl(42)).toBe("");
+  });
+});

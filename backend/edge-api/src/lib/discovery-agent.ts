@@ -5,8 +5,7 @@ import {
   jsonList,
   loadProfile,
   scoreProfile,
-  sha256Hex
-} from "./core-routes";
+  sha256Hex, safeHttpUrl } from "./core-routes";
 import type { Row, Sql } from "./core-routes";
 import { scoreOpportunity } from "./scoring";
 import { fetchJson, normalizeType, parseDate, stripHtml } from "./source-utils";
@@ -305,7 +304,7 @@ export async function runDiscovery(
         duplicate_count, source_origins, created_at
       ) VALUES (
         ${crypto.randomUUID()}, ${userId}, ${job.source}, ${job.external_id}, ${job.title.slice(0, 300)},
-        ${job.company.slice(0, 200)}, ${job.description}, ${job.url.slice(0, 1200)},
+        ${job.company.slice(0, 200)}, ${job.description}, ${safeHttpUrl(job.url)},
         ${job.budget_min ?? null}, ${job.budget_max ?? null}, ${job.currency || "USD"}, ${JSON.stringify(required)}, '', ${job.job_type || "unknown"},
         ${job.industry.slice(0, 100)}, NULL, ${job.competition ?? "unknown"}, NULL, NULL, NULL, 'new',
         ${score}, ${JSON.stringify(breakdown)}, ${print}, now(), now(), ${job.published_at},

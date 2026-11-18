@@ -1,5 +1,5 @@
 import type { Env } from "../types";
-import { body, database, iso, requireUser, text } from "./core-routes";
+import { body, database, iso, requireUser, safeHttpUrl, text } from "./core-routes";
 import type { Row } from "./core-routes";
 import {
   DAILY_APPLICATION_CAP,
@@ -152,7 +152,7 @@ export async function handleApplyRoute(request: Request, env: Env, requestId: st
           opp.source === "freelancer"
             ? "Freelancer.com is not connected (FREELANCER_TOKEN missing)."
             : "This lead has no contact email or Gmail is not connected. Apply on the original page.";
-        return success({ channel: "manual", url: opp.source_url, reason, proposal: proposal.content }, "Manual apply needed", 200, requestId);
+        return success({ channel: "manual", url: safeHttpUrl(opp.source_url), reason, proposal: proposal.content }, "Manual apply needed", 200, requestId);
       }
 
       // 2. Reserve the send. The partial unique index uq_applications_live_proposal
@@ -225,7 +225,7 @@ export async function handleApplyRoute(request: Request, env: Env, requestId: st
           opportunity_id: a.opportunity_id,
           title: a.title,
           client_name: a.client_name,
-          source_url: a.source_url,
+          source_url: safeHttpUrl(a.source_url),
           channel: a.channel,
           status: a.status,
           recipient: a.recipient,

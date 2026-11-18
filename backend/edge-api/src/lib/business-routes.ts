@@ -1,7 +1,7 @@
 import type { Env } from "../types";
 import type { AuthenticatedSession } from "./session-service";
 import { authenticateRequest } from "./auth-context";
-import { body, database } from "./core-routes";
+import { body, database, safeHttpUrl } from "./core-routes";
 import type { Queryable, Sql } from "./core-routes";
 import { failure, success } from "./response";
 import { reserveAiCall, settleAiCall } from "./ai-governor";
@@ -526,7 +526,7 @@ async function overview(sql: Queryable, userId: string, today: string) {
     },
     goals,
     apply_next: {
-      external: (topExternal ?? []).map((o) => ({ id: o.id, title: o.title, source: o.source, match_score: Number(o.match_score), source_url: o.source_url })),
+      external: (topExternal ?? []).map((o) => ({ id: o.id, title: o.title, source: o.source, match_score: Number(o.match_score), source_url: safeHttpUrl(o.source_url) })),
       invitations: (invitedNative ?? []).map((l) => ({ listing_id: l.id, title: l.title }))
     },
     deadlines,

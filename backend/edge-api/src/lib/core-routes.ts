@@ -68,6 +68,23 @@ export function text(value: unknown, max: number, fallback = ""): string {
   return typeof value === "string" ? value.slice(0, max) : fallback;
 }
 
+/**
+ * Only absolute http(s) URLs may be stored or returned as links. Job feeds and
+ * users supply these values; a `javascript:` or `data:` URL rendered as a link
+ * would run script in the app (React 18 does not block it).
+ */
+export function safeHttpUrl(value: unknown, max = 1200): string {
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > max) return "";
+  try {
+    const url = new URL(trimmed);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : "";
+  } catch {
+    return "";
+  }
+}
+
 export async function sha256Hex(value: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -147,7 +164,7 @@ export function oppOut(o: Row) {
     title: o.title,
     client_name: o.client_name,
     description: o.description,
-    source_url: o.source_url,
+    source_url: safeHttpUrl(o.source_url),
     budget_min: num(o.budget_min),
     budget_max: num(o.budget_max),
     currency: o.currency,
@@ -546,7 +563,7 @@ export async function handleCoreRoute(
       }
 
       const source = text(b.source, 80, "manual") || "manual";
-      const sourceUrl = text(b.source_url, 1200);
+      const sourceUrl = safeHttpUrl(text(b.source_url, 1200));
       const externalId =
         text(b.external_id, 255) || sourceUrl.slice(0, 255) || (await sha256Hex(title + description));
 
