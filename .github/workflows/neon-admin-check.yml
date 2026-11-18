@@ -110,14 +110,22 @@ jobs:
                       sys.exit("This database has no alembic_version table; it has never been migrated.")
                   cur.execute("SELECT version_num FROM alembic_version")
                   print("Migration revision:", [r[0] for r in cur.fetchall()])
-                  cur.execute("SELECT key, enabled FROM feature_flags ORDER BY key")
-                  print("Feature flags:")
-                  for key, enabled in cur.fetchall():
-                      print(f"  {key} = {'ON' if enabled else 'off'}")
+                  cur.execute("SELECT to_regclass('public.feature_flags') IS NOT NULL")
+                  if cur.fetchone()[0]:
+                      cur.execute("SELECT key, enabled FROM feature_flags ORDER BY key")
+                      print("Feature flags:")
+                      for key, enabled in cur.fetchall():
+                          print(f"  {key} = {'ON' if enabled else 'off'}")
+                  else:
+                      print("Feature flags: table not created yet (needs migration 0049)")
                   cur.execute("SELECT count(*) FROM users")
                   print("Accounts:", cur.fetchone()[0])
-                  cur.execute("SELECT role, count(*) FROM user_roles WHERE status = 'active' GROUP BY role ORDER BY role")
-                  print("Active roles:", ", ".join(f"{r}={n}" for r, n in cur.fetchall()) or "none")
+                  cur.execute("SELECT to_regclass('public.user_roles') IS NOT NULL")
+                  if cur.fetchone()[0]:
+                      cur.execute("SELECT role, count(*) FROM user_roles WHERE status = 'active' GROUP BY role ORDER BY role")
+                      print("Active roles:", ", ".join(f"{r}={n}" for r, n in cur.fetchall()) or "none")
+                  else:
+                      print("Active roles: table not created yet (needs migration 0050)")
 
                   email = os.environ.get("STAFF_EMAIL", "").strip().lower()
                   if email:
