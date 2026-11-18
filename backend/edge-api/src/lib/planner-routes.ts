@@ -8,6 +8,7 @@ import { FLAGS, isEnabled } from "./flags";
 import { publicListingOut } from "./listings";
 import type { ListingRow, VersionRow } from "./listings";
 import { screenText } from "./listings";
+import { tableExists } from "./external-pipeline";
 
 /**
  * Freelancer planning (U7; PRODUCT_EXPERIENCE_SPEC §3–4):
@@ -32,7 +33,7 @@ export interface PlannerRouteDeps {
 const defaultDeps: PlannerRouteDeps = { database, authenticate: authenticateRequest, now: () => new Date() };
 const MAX_SAVED = 200;
 
-export type CalendarType = "milestone_due" | "saved_closes" | "saved_deadline" | "listing_closes" | "listing_deadline";
+export type CalendarType = "milestone_due" | "saved_closes" | "saved_deadline" | "listing_closes" | "listing_deadline" | "follow_up" | "interview";
 
 export interface CalendarEvent {
   date: string;
@@ -195,6 +196,22 @@ export async function handlePlannerRoute(request: Request, env: Env, requestId: 
         if (inWindow(closes)) events.push({ date: closes, type: "listing_closes", title: p.title, detail: "Your project stops taking proposals", href: "/client/projects", overdue: false, side: "client" });
         const deadline = dayOf(p.deadline);
         if (inWindow(deadline)) events.push({ date: deadline, type: "listing_deadline", title: p.title, detail: "Your project's deadline", href: "/client/projects", overdue: deadline < today, side: "client" });
+      }
+      if (await tableExists(sql, "opportunity_events")) {
+        const followUps = await sql<Array<{ kind: "follow_up" | "interview"; note: string; due_date: string | Date; opportunity_id: string; title: string }>>`
+          SELECT e.kind, e.note, e.due_date, e.opportunity_id, o.title
+          FROM opportunity_events e JOIN opportunities o ON o.id = e.opportunity_id
+          WHERE e.user_id = ${userId} AND e.kind IN ('follow_up', 'interview') AND e.done_at IS NULL
+            AND e.due_date IS NOT NULL AND e.due_date <= ${window.to}
+          LIMIT 200
+        `;
+        for (const f of followUps) {
+          const d = dayOf(f.due_date);
+          if (!d) continue;
+          const overdue = d < today;
+          if (d < window.from && !overdue) continue;
+          events.push({ date: d, type: f.kind, title: f.title, detail: f.note.slice(0, 140), href: `/opportunities?id=${encodeURIComponent(f.opportunity_id)}`, overdue, side: "freelancer" });
+        }
       }
       return success({ from: window.from, to: window.to, today, events: sortEvents(events) }, "Calendar", 200, requestId);
     }

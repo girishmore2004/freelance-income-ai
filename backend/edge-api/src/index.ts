@@ -8,6 +8,8 @@ import { handleTeamRoute } from "./lib/team-routes";
 import { handleBusinessRoute } from "./lib/business-routes";
 import { handleAnalyticsRoute } from "./lib/analytics-routes";
 import { handlePlannerRoute } from "./lib/planner-routes";
+import { handleOpportunityRoute } from "./lib/opportunity-routes";
+import { handleOpsRoute } from "./lib/ops-routes";
 import { handleSupportRoute } from "./lib/support-routes";
 import { handleListingRoute } from "./lib/listing-routes";
 import { handleMatchRoute, runScheduledListingExpiry } from "./lib/match-routes";
@@ -379,6 +381,18 @@ async function routeRequest(
   const analyticsResponse = await handleAnalyticsRoute(request, env, requestId);
   if (analyticsResponse) {
     return analyticsResponse;
+  }
+
+  // Staff operations: finance exceptions, reconciliation, failed jobs (U8).
+  const opsResponse = await handleOpsRoute(request, env, requestId);
+  if (opsResponse) {
+    return opsResponse;
+  }
+
+  // External opportunity timeline, follow-ups and interviews (U8).
+  const opportunityResponse = await handleOpportunityRoute(request, env, requestId);
+  if (opportunityResponse) {
+    return opportunityResponse;
   }
 
   // Saved projects, calendar (U7) and support tickets.

@@ -1,7 +1,18 @@
 import type { Env } from "../types";
 import type { Sql } from "./core-routes";
 import { FLAGS, isEnabled } from "./flags";
-import { AGENT_FOR_OPERATION, agentEnabled } from "./agents";
+import { AGENT_FOR_OPERATION, OPERATION_POLICY, agentEnabled, agentPolicyRow, policyDecision } from "./agents";
+import type { Queryable } from "./core-routes";
+import { loadRoles } from "./identity";
+
+/** Active roles of the caller; null when roles cannot be read (pre-0050 database). */
+async function userRoles(sql: Queryable, userId: string): Promise<string[] | null> {
+  try {
+    return await loadRoles(sql, userId);
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Every Edge AI model call goes through here first (Master Plan 3.13; finding:
@@ -9,7 +20,9 @@ import { AGENT_FOR_OPERATION, agentEnabled } from "./agents";
  *
  * Checks, in order (any failure => caller uses its deterministic fallback):
  *   1. Flag `ai.generation` (and FEATURE_FLAGS_OFF kill switch), then the
- *      registry switch of the agent that owns the operation (agent_definitions).
+ *      operation policy (agents.ts OPERATION_POLICY): the owning agent must be
+ *      switched on, built (live or partial), allowed the tool and an autonomy
+ *      ceiling at least the call's level; the caller must hold the role.
  *   2. Per-user daily and monthly call quotas, counted across BOTH services
  *      from `ai_usage_events`. Limits come from the user's plan (`user_plans` →
  *      `plans`, migration 0057; no row = the `free` plan) and fall back to the
@@ -111,7 +124,12 @@ export async function reserveAiCall(env: Env, sql: Sql, call: AiCallRequest): Pr
     if (!(await isEnabled(env, sql, FLAGS.aiGeneration, true))) {
       return { allowed: false, reason: "disabled", message: "AI generation is switched off by the platform." };
     }
-    if (!(await agentEnabled(sql, AGENT_FOR_OPERATION[call.operation]))) {
+    const policy = OPERATION_POLICY[call.operation];
+    if (policy) {
+      const [agent, roles] = await Promise.all([agentPolicyRow(sql, policy.agent), userRoles(sql, call.userId)]);
+      const verdict = policyDecision(policy, agent, roles);
+      if (!verdict.allowed) return { allowed: false, reason: "disabled", message: verdict.message };
+    } else if (!(await agentEnabled(sql, AGENT_FOR_OPERATION[call.operation]))) {
       return { allowed: false, reason: "disabled", message: "This AI agent is switched off by the platform. A template was used instead." };
     }
 

@@ -106,7 +106,7 @@ describe("coach", () => {
     const w = world((text) => {
       if (text.startsWith("SELECT * FROM profiles")) return [{ id: "P1", headline: "Web developer", skills: "React" }];
       if (text.startsWith("SELECT enabled FROM feature_flags")) return [{ enabled: true }];
-      if (text.startsWith("SELECT enabled FROM agent_definitions")) return [{ enabled: true }];
+      if (text.startsWith("SELECT enabled, status") || text.startsWith("SELECT enabled FROM agent_definitions")) return [{ enabled: true }];
       if (text.includes("AS user_day")) return [{ user_day: "0", user_month: "0", global_day_micros: "0" }];
       return [];
     });
@@ -124,7 +124,7 @@ describe("coach", () => {
   it("falls back honestly when the governor declines", async () => {
     const w = world((text) => {
       if (text.startsWith("SELECT * FROM profiles")) return [{ id: "P1", headline: "Web developer" }];
-      if (text.startsWith("SELECT enabled FROM agent_definitions")) return [{ enabled: false }];
+      if (text.startsWith("SELECT enabled, status") || text.startsWith("SELECT enabled FROM agent_definitions")) return [{ enabled: false }];
       return [];
     });
     let called = false;

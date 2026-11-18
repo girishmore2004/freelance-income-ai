@@ -28,6 +28,82 @@ export const AGENT_FOR_OPERATION: Record<string, string> = {
   business_coach: "F11"
 };
 
+/**
+ * Governance policy per AI operation (Master Plan §8 agent standard): the
+ * owning agent, the role the caller must hold, the registry tool the call
+ * uses, and the autonomy level the call needs. The governor refuses the call
+ * when the agent is off, not built, lacks the tool, or its ceiling is lower.
+ */
+export interface OperationPolicy {
+  agent: string;
+  role: "freelancer" | "client" | "any";
+  tool: string;
+  autonomy: "A0" | "A1" | "A2" | "A3";
+}
+
+export const OPERATION_POLICY: Record<string, OperationPolicy> = {
+  proposal_draft: { agent: "F4", role: "freelancer", tool: "draft", autonomy: "A2" },
+  reply_analysis: { agent: "F9", role: "freelancer", tool: "draft", autonomy: "A2" },
+  brief_builder: { agent: "C1", role: "client", tool: "draft", autonomy: "A2" },
+  business_coach: { agent: "F11", role: "any", tool: "analytics", autonomy: "A1" }
+};
+
+export interface AgentPolicyRow {
+  enabled: boolean;
+  status: string;
+  autonomy_ceiling: string;
+  tools_json: unknown;
+}
+
+const LEVEL: Record<string, number> = { A0: 0, A1: 1, A2: 2, A3: 3 };
+
+/**
+ * Decides whether an AI call may run. `agent` null = registry not migrated
+ * (allowed, as before 0058); `roles` null = roles unavailable, and an empty
+ * list = a legacy account from before roles existed (treated as freelancer).
+ */
+export function policyDecision(policy: OperationPolicy | undefined, agent: AgentPolicyRow | null, roles: string[] | null): { allowed: true } | { allowed: false; message: string } {
+  if (!policy) return { allowed: true };
+  if (agent) {
+    if (!agent.enabled) return { allowed: false, message: "This AI agent is switched off by the platform. A template was used instead." };
+    // Older registries (or partial rows) without status/ceiling/tools: only the switch applies.
+    if (typeof agent.status !== "string") return policyRoles(policy, roles);
+    if (agent.status === "planned" || agent.status === "blocked") return { allowed: false, message: "This AI agent is not available yet. A template was used instead." };
+    if ((LEVEL[policy.autonomy] ?? 9) > (LEVEL[agent.autonomy_ceiling] ?? -1)) {
+      return { allowed: false, message: "This AI action needs more autonomy than the agent is allowed. A template was used instead." };
+    }
+    let tools: string[] = [];
+    try {
+      const raw = typeof agent.tools_json === "string" ? JSON.parse(agent.tools_json) : agent.tools_json;
+      tools = Array.isArray(raw) ? raw.map((t) => String(t).split(":")[0]) : [];
+    } catch {
+      tools = [];
+    }
+    if (!tools.includes(policy.tool)) return { allowed: false, message: "This AI agent is not allowed to use that tool. A template was used instead." };
+  }
+  return policyRoles(policy, roles);
+}
+
+function policyRoles(policy: OperationPolicy, roles: string[] | null): { allowed: true } | { allowed: false; message: string } {
+  if (roles !== null && policy.role !== "any") {
+    const effective = roles.length ? roles : ["freelancer"];
+    if (!effective.includes(policy.role)) {
+      return { allowed: false, message: `Turn on the ${policy.role} role to use this AI agent. A template was used instead.` };
+    }
+  }
+  return { allowed: true };
+}
+
+/** Registry row for an agent; null if the registry table or row is missing. */
+export async function agentPolicyRow(sql: Queryable, code: string): Promise<AgentPolicyRow | null> {
+  try {
+    const rows = await sql<AgentPolicyRow[]>`SELECT enabled, status, autonomy_ceiling, tools_json FROM agent_definitions WHERE code = ${code} LIMIT 1`;
+    return rows[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** True unless the agent is registered and switched off. Missing table (pre-0058) = enabled. */
 export async function agentEnabled(sql: Queryable, code: string | undefined): Promise<boolean> {
   if (!code) return true;

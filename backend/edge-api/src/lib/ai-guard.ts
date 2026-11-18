@@ -22,7 +22,7 @@
  * The labelled regression set is ai-eval/guard-cases.json.
  */
 
-export type GuardCode = "invented_price" | "unknown_link" | "contact_leak" | "commitment" | "injection_echo" | "explicit_timeline";
+export type GuardCode = "invented_price" | "unknown_link" | "contact_leak" | "commitment" | "injection_echo" | "explicit_timeline" | "unsupported_claim" | "unsupported_skill";
 
 export interface GuardIssue {
   code: GuardCode;
@@ -35,6 +35,36 @@ export interface GuardPolicy {
   price: number | null;
   /** Links the user supplied (portfolio); their hosts may appear in output. */
   allowedLinks: string[];
+  /** Grounding (optional): skills on the user's profile and skills the job asks for. */
+  profileSkills?: string[];
+  jobSkills?: string[];
+}
+
+/** Experience claims a model must not make: nothing on the profile can back them. */
+export const CLAIM_PATTERNS: RegExp[] = [
+  /\b\d{1,2}\+?\s*(?:years?|yrs?)\s+(?:of\s+)?(?:experience|exp)\b/i,
+  /\b(?:over|more than)\s+\d{1,4}\s+(?:clients|projects|customers)\b/i,
+  /\b(?:top[- ]rated|#\s?1|number one|world[- ]class|award[- ]winning|certified)\b/i,
+  /\b(?:worked|work)\s+(?:with|for)\s+(?:google|amazon|microsoft|apple|meta|facebook|netflix|fortune\s+500)\b/i
+];
+
+/** Skills from the job that the text names but the profile does not list. */
+export function unsupportedSkills(text: string, jobSkills: string[], profileSkills: string[]): string[] {
+  const have = new Set(profileSkills.map((s) => s.trim().toLowerCase()));
+  const lower = text.toLowerCase();
+  return jobSkills.filter((skill) => {
+    const s = skill.trim().toLowerCase();
+    if (!s || have.has(s)) return false;
+    const escaped = s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, "i").test(lower);
+  });
+}
+
+/** Removes contact details (emails, phone numbers) from third-party text before a model sees it (privacy). */
+export function redactContactDetails(text: string): string {
+  return String(text ?? "")
+    .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, "[email removed]")
+    .replace(/(?:\+?\d[\s-]?){10,13}/g, "[phone removed]");
 }
 
 export interface GuardResult {
@@ -59,6 +89,8 @@ export function sanitizeUntrusted(text: string, maxChars = MAX_FENCED_CHARS): st
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
     .replace(/[​-‏‪-‮⁠-⁤﻿]/g, "")
     .replace(/<\s*\/?\s*untrusted[^>]*>/gi, "[removed markup]")
+    .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, "[email removed]")
+    .replace(/(?:\+?\d[\s-]?){10,13}/g, "[phone removed]")
     .slice(0, maxChars);
 }
 
@@ -168,6 +200,17 @@ export function reviewGeneratedText(text: string, policy: GuardPolicy): GuardRes
     issues.push({ code: "contact_leak", severity: "block", evidence: match[0] });
   }
 
+  for (const pattern of CLAIM_PATTERNS) {
+    const match = output.match(pattern);
+    if (match) issues.push({ code: "unsupported_claim", severity: "block", evidence: match[0] });
+  }
+
+  if (policy.jobSkills && policy.profileSkills) {
+    for (const skill of unsupportedSkills(output, policy.jobSkills, policy.profileSkills)) {
+      issues.push({ code: "unsupported_skill", severity: "warn", evidence: skill });
+    }
+  }
+
   for (const pattern of TIMELINE_PATTERNS) {
     const match = output.match(pattern);
     if (match) issues.push({ code: "explicit_timeline", severity: "warn", evidence: match[0] });
@@ -185,7 +228,9 @@ export function describeBlock(result: GuardResult): string {
     contact_leak: "it contained an email address",
     commitment: "it made a guarantee or commitment on your behalf",
     injection_echo: "the job text appeared to manipulate the AI",
-    explicit_timeline: "it stated a timeline"
+    explicit_timeline: "it stated a timeline",
+    unsupported_claim: "it claimed experience your profile does not show",
+    unsupported_skill: "it named a skill that is not on your profile"
   };
   return `The AI draft was withheld by a safety check (${codes.map((code) => reasons[code]).join("; ")}). A template was used instead.`;
 }

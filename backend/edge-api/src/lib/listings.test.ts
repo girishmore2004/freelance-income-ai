@@ -125,6 +125,8 @@ describe("Brief Builder (C1)", () => {
     createFakeSql((text) => {
       if (text.startsWith("SELECT enabled FROM feature_flags")) return [{ enabled: true }];
       if (text.startsWith("SELECT count(*) FILTER")) return [{ user_day: "0", user_month: "0", global_day_micros: "0" }];
+      // The Brief Builder (C1) is a client agent: the governor checks the caller holds the client role.
+      if (text.startsWith("SELECT role, status FROM user_roles")) return [{ role: "client", status: "active" }];
       return [];
     });
   const notes = "We sell handmade candles and need a small website with a shop. We already have pages written.";

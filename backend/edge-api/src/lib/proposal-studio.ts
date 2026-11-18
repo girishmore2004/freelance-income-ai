@@ -1,7 +1,7 @@
 import { screenText } from "./listings";
 import { sha256Hex } from "./core-routes";
 import { coverage, keywords } from "./assistants";
-import { reviewGeneratedText } from "./ai-guard";
+import { CLAIM_PATTERNS, reviewGeneratedText, unsupportedSkills } from "./ai-guard";
 
 /**
  * Proposal Studio (Master Plan p.48, PRODUCT_EXPERIENCE_SPEC §5), deterministic part.
@@ -219,13 +219,7 @@ export interface CheckProfile {
   portfolio_links: string[];
 }
 
-/** Experience claims that need evidence the platform cannot see in the profile. */
-const CLAIM_PATTERNS: RegExp[] = [
-  /\b\d{1,2}\+?\s*(?:years?|yrs?)\s+(?:of\s+)?(?:experience|exp)\b/i,
-  /\b(?:over|more than)\s+\d{1,4}\s+(?:clients|projects|customers)\b/i,
-  /\b(?:top[- ]rated|#\s?1|number one|world[- ]class|award[- ]winning|certified)\b/i,
-  /\b(?:worked|work)\s+(?:with|for)\s+(?:google|amazon|microsoft|apple|meta|facebook|netflix|fortune\s+500)\b/i
-];
+
 
 const rupees = (minor: number) => `₹${Math.round(minor / 100).toLocaleString("en-IN")}`;
 
@@ -233,17 +227,6 @@ function daysBetween(fromIso: string, toIso: string): number {
   return Math.floor((Date.parse(`${toIso}T00:00:00Z`) - Date.parse(`${fromIso}T00:00:00Z`)) / 86_400_000);
 }
 
-/** Skills named in the proposal that the brief asks for but the profile does not list. */
-function unsupportedSkills(body: string, listingSkills: string[], profileSkills: string[]): string[] {
-  const have = new Set(profileSkills.map((s) => s.trim().toLowerCase()));
-  const lower = body.toLowerCase();
-  return listingSkills.filter((skill) => {
-    const s = skill.trim().toLowerCase();
-    if (!s || have.has(s)) return false;
-    const escaped = s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, "i").test(lower);
-  });
-}
 
 /**
  * Deterministic proposal review. Every finding is a suggestion for the

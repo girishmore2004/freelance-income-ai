@@ -6,6 +6,7 @@ import { scoreOpportunity } from "./scoring";
 import { reserveAiCall, settleAiCall } from "./ai-governor";
 import { describeBlock, fenceInstruction, fenceUntrusted, newFenceId, reviewGeneratedText } from "./ai-guard";
 import type { ScoreOpportunity, ScoreProfile } from "./scoring";
+import { recordOpportunityEvent, recordProposalVersion } from "./external-pipeline";
 
 export type Sql = ReturnType<typeof postgres>;
 /**
@@ -252,6 +253,45 @@ export interface AiGovernance {
   userId: string;
 }
 
+/**
+ * Deterministic proposal used when AI is off, over budget or its draft was
+ * blocked. Built only from confirmed facts: skills shared with the job, the
+ * user's own portfolio links and price. Requested skills the profile lacks
+ * become questions, never claims. It goes through the same review and
+ * hash-bound approval as an AI draft.
+ */
+export function safeProposalTemplate(f: {
+  title: string; name: string; headline: string; profileSkills: string[]; jobSkills: string[]; portfolio: string[]; price: number | null; currency: string;
+}): string {
+  const have = new Set(f.profileSkills.map((s) => s.toLowerCase()));
+  const shared = f.jobSkills.filter((s) => have.has(s.toLowerCase())).slice(0, 6);
+  const missing = f.jobSkills.filter((s) => !have.has(s.toLowerCase())).slice(0, 3);
+  const skills = shared.length ? shared : f.profileSkills.slice(0, 4);
+  const lines = [
+    "Hello,",
+    "",
+    `I read your post "${f.title.slice(0, 160)}".${f.headline ? ` I work as ${f.headline.slice(0, 120)}.` : ""}`,
+    skills.length ? `Relevant skills on my profile: ${skills.join(", ")}.` : "",
+    "",
+    "How I would approach it:",
+    "1. Confirm the scope, deliverables and acceptance criteria with you in writing.",
+    "2. Agree milestones so you can review progress early.",
+    "3. Build and test each milestone against the agreed criteria before delivery.",
+    "",
+    f.portfolio.length ? `Examples of my work: ${f.portfolio.slice(0, 2).join(" , ")}` : "",
+    f.price !== null ? `My proposed price: ${f.price} ${f.currency}, subject to confirming the scope.` : "I will confirm a price once the scope is clear.",
+    "",
+    "Questions before I commit:",
+    ...missing.map((m) => `- How important is ${m} for this project, and is there existing work in it?`),
+    "- What does successful delivery look like for you?",
+    "- Are there existing systems, accounts or documents I should know about?",
+    "",
+    "Regards,",
+    f.name || "Your name"
+  ];
+  return lines.filter((l, i, all) => !(l === "" && all[i - 1] === "")).join("\n").trim();
+}
+
 export async function draftProposal(
   env: Env,
   profile: Row,
@@ -317,8 +357,14 @@ export async function draftProposal(
       await settleAiCall(env, governance.sql, decision.eventId, system.length + prompt.length, generated?.length ?? 0);
       if (generated && generated.length >= 30) {
         // Deterministic review before anyone sees the draft (ai-guard.ts).
-        const review = reviewGeneratedText(generated, { price, allowedLinks: facts.portfolio_links });
-        if (!review.blocked) return { content: generated, mode: "model" };
+        const jobSkills = jsonList(opp.required_skills);
+        const review = reviewGeneratedText(generated, { price, allowedLinks: facts.portfolio_links, profileSkills: skills, jobSkills });
+        if (!review.blocked) {
+          const unsupported = review.issues.filter((i) => i.code === "unsupported_skill").map((i) => i.evidence);
+          return unsupported.length
+            ? { content: generated, mode: "model", ai_note: `Check before approving: the draft mentions ${unsupported.join(", ")}, which is not on your profile.` }
+            : { content: generated, mode: "model" };
+        }
         aiNote = describeBlock(review);
         console.warn(JSON.stringify({ event: "ai.output_blocked", operation: "proposal_draft", codes: review.issues.map((issue) => issue.code) }));
       }
@@ -332,17 +378,16 @@ export async function draftProposal(
     }
   }
 
-  const skillText = skills.slice(0, 6).join(", ") || "software development";
-
-  const content =
-    `Hello,\n\nI reviewed your project: ${opp.title}. ` +
-    `Based on my stated profile in ${skillText}, I can assess and implement a solution for the requirements.\n\n` +
-    "My proposed approach is to confirm the scope, agree on milestones, implement the agreed deliverables, " +
-    "and test the result against acceptance criteria.\n\n" +
-    "A few questions: What inputs and integrations are required? What does successful delivery look like? " +
-    "Are there existing systems or documentation?\n\n" +
-    "I would be happy to discuss the scope and timeline before confirming a commitment.\n\n" +
-    `Regards,\n${profile.full_name || "Your name"}`;
+  const content = safeProposalTemplate({
+    title: String(opp.title ?? "your project"),
+    name: String(profile.full_name || ""),
+    headline: String(profile.headline || ""),
+    profileSkills: skills,
+    jobSkills: jsonList(opp.required_skills),
+    portfolio: facts.portfolio_links,
+    price,
+    currency: String(opp.currency || "INR")
+  });
 
   return { content, mode: "safe_template", ...(aiNote ? { ai_note: aiNote } : {}) };
 }
@@ -661,7 +706,9 @@ export async function handleCoreRoute(
                 ${`Generated ${mode} proposal for opportunity ${found[0].id}`}, now())
       `;
 
-      await sql`UPDATE opportunities SET status = 'drafted' WHERE id = ${found[0].id} AND user_id = ${userId} AND status = 'new'`;
+      await recordProposalVersion(sql, { proposalId: id, userId, version: 1, content, price, currency, source: mode });
+      const moved = await sql`UPDATE opportunities SET status = 'drafted' WHERE id = ${found[0].id} AND user_id = ${userId} AND status = 'new' RETURNING id`;
+      if (moved[0]) await recordOpportunityEvent(sql, { opportunityId: String(found[0].id), userId, kind: "status", from: "new", to: "drafted", note: mode === "model" ? "AI draft created" : "Template draft created" });
 
       const saved = await sql`SELECT * FROM proposals WHERE id = ${id} LIMIT 1`;
       return success(
@@ -694,6 +741,7 @@ export async function handleCoreRoute(
           SET content = ${content}, proposed_price = ${price}, version = version + 1, status = 'draft'
           WHERE id = ${proposal.id}
         `;
+        await recordProposalVersion(tx, { proposalId: String(proposal.id), userId, version: Number(proposal.version ?? 1) + 1, content, price, currency: String(proposal.currency || "INR"), source: "edited" });
         await tx`
           UPDATE approvals
           SET decision = 'superseded',
@@ -793,10 +841,14 @@ export async function handleCoreRoute(
         `;
         await tx`UPDATE proposals SET status = ${decision} WHERE id = ${proposal.id}`;
         if (decision === "approved") {
+          const before = (await tx`SELECT status FROM opportunities WHERE id = ${proposal.opportunity_id} AND user_id = ${userId} FOR UPDATE`)[0];
           await tx`
             UPDATE opportunities SET status = 'ready'
             WHERE id = ${proposal.opportunity_id} AND user_id = ${userId} AND status IN ('new', 'drafted')
           `;
+          if (before && ["new", "drafted"].includes(String(before.status))) {
+            await recordOpportunityEvent(tx, { opportunityId: String(proposal.opportunity_id), userId, kind: "status", from: String(before.status), to: "ready", note: `Proposal version ${proposal.version ?? 1} approved` });
+          }
         }
         return {
           kind: "ok" as const,

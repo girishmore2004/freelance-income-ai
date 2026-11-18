@@ -15,17 +15,8 @@ import {
   runDiscovery
 } from "./discovery-agent";
 import { failure, success } from "./response";
+import { checkTransition, recordOpportunityEvent } from "./external-pipeline";
 
-const OPPORTUNITY_STATUSES = new Set([
-  "new",
-  "drafted",
-  "ready",
-  "applied",
-  "replied",
-  "won",
-  "lost",
-  "skipped"
-]);
 
 const TASK_STATUSES = new Set(["todo", "in_progress", "done"]);
 const INVOICE_STATUSES = new Set(["unpaid", "paid", "cancelled"]);
@@ -145,10 +136,7 @@ export async function handleWorkflowRoute(
     if (statusMatch && method === "POST") {
       const b = await body(request);
       const status = typeof b?.status === "string" ? b.status : "";
-
-      if (!OPPORTUNITY_STATUSES.has(status)) {
-        return failure("INVALID_STATUS", `Status must be one of: ${[...OPPORTUNITY_STATUSES].join(", ")}`, 422, requestId);
-      }
+      const note = typeof b?.note === "string" ? b.note.trim().slice(0, 2000) : "";
 
       const result = await sql.begin(async (tx) => {
         const rows = await tx`
@@ -156,8 +144,33 @@ export async function handleWorkflowRoute(
         `;
         const opp = rows[0];
         if (!opp) return null;
+        const from = String(opp.status || "new");
+        const check = checkTransition(from, status);
+        if (!check.ok) return { refused: check };
+
+        // Marking as applied records the submission and needs an approved proposal.
+        let applicationId: string | null = null;
+        if (status === "applied") {
+          const approved = await tx`
+            SELECT id FROM proposals WHERE opportunity_id = ${opp.id} AND user_id = ${userId} AND status = 'approved'
+            ORDER BY created_at DESC LIMIT 1
+          `;
+          if (!approved[0]) {
+            return { refused: { ok: false as const, code: "NOT_APPROVED" as const, message: "Approve the exact proposal text before recording a submission." } };
+          }
+          applicationId = crypto.randomUUID();
+          const channel = typeof b?.channel === "string" && ["external_site", "email", "other"].includes(b.channel) ? b.channel : "manual";
+          const reference = typeof b?.reference === "string" ? b.reference.trim().slice(0, 255) : "";
+          await tx`
+            INSERT INTO applications (id, user_id, opportunity_id, proposal_id, channel, status, recipient, external_ref, extra, sent_at, created_at)
+            VALUES (${applicationId}, ${userId}, ${opp.id}, ${approved[0].id}, ${channel}, 'sent', '', ${reference}, ${JSON.stringify({ recorded_by: "freelancer" })}, now(), now())
+          `;
+          await tx`UPDATE proposals SET status = 'sent' WHERE id = ${approved[0].id} AND user_id = ${userId}`;
+          await recordOpportunityEvent(tx, { opportunityId: String(opp.id), userId, kind: "submission", note: note || `Applied via ${channel === "manual" ? "the original site" : channel.replace("_", " ")}`, applicationId });
+        }
 
         await tx`UPDATE opportunities SET status = ${status} WHERE id = ${opp.id}`;
+        await recordOpportunityEvent(tx, { opportunityId: String(opp.id), userId, kind: "status", from, to: status, note });
 
         let project: Row | null = null;
 
@@ -209,6 +222,10 @@ export async function handleWorkflowRoute(
       });
 
       if (!result) return failure("NOT_FOUND", "Opportunity not found", 404, requestId);
+      if ("refused" in result) {
+        const r = result.refused as { code: string; message: string };
+        return failure(r.code, r.message, r.code === "INVALID_STATUS" ? 422 : 409, requestId);
+      }
 
       return success(
         {

@@ -15,6 +15,7 @@ import {
   syncReplies
 } from "./apply-agent";
 import { failure, success } from "./response";
+import { recordOpportunityEvent } from "./external-pipeline";
 
 function messageOut(m: Row) {
   return {
@@ -201,6 +202,8 @@ export async function handleApplyRoute(request: Request, env: Env, requestId: st
       `;
       await sql`UPDATE proposals SET status = 'sent' WHERE id = ${proposal.id} AND user_id = ${userId}`;
       await sql`UPDATE opportunities SET status = 'applied' WHERE id = ${opp.id} AND user_id = ${userId}`;
+      await recordOpportunityEvent(sql, { opportunityId: String(opp.id), userId, kind: "submission", note: `Sent via ${channel}${recipient ? ` to ${recipient}` : ""} by the apply agent after your approval`, applicationId });
+      await recordOpportunityEvent(sql, { opportunityId: String(opp.id), userId, kind: "status", from: String(opp.status || "ready"), to: "applied" });
       await sql`
         INSERT INTO agent_runs (id, user_id, agent_name, status, summary, created_at)
         VALUES (${crypto.randomUUID()}, ${userId}, 'apply_agent', 'completed',

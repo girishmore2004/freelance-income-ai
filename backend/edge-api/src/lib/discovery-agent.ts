@@ -11,6 +11,7 @@ import { scoreOpportunity } from "./scoring";
 import { fetchJson, normalizeType, parseDate, stripHtml } from "./source-utils";
 import type { NormalizedJob } from "./source-utils";
 import { fromFreelancer, fromHackerNews, fromHimalayas, fromReddit, fromRemoteOk } from "./project-sources";
+import { recordOpportunityEvent, recordProposalVersion } from "./external-pipeline";
 
 export { parseDate };
 export type { NormalizedJob };
@@ -354,11 +355,14 @@ export async function draftForTopMatches(
   for (const opp of candidates) {
     const { content, mode } = await draftProposal(env, profile, opp, null, { sql, userId });
 
+    const proposalId = crypto.randomUUID();
     await sql`
       INSERT INTO proposals (id, user_id, opportunity_id, version, content, proposed_price, currency, status, created_at)
-      VALUES (${crypto.randomUUID()}, ${userId}, ${opp.id}, 1, ${content}, NULL, ${opp.currency || "USD"}, 'draft', now())
+      VALUES (${proposalId}, ${userId}, ${opp.id}, 1, ${content}, NULL, ${opp.currency || "USD"}, 'draft', now())
     `;
+    await recordProposalVersion(sql, { proposalId, userId, version: 1, content, price: null, currency: String(opp.currency || "USD"), source: mode });
     await sql`UPDATE opportunities SET status = 'drafted' WHERE id = ${opp.id}`;
+    await recordOpportunityEvent(sql, { opportunityId: String(opp.id), userId, kind: "status", from: String(opp.status || "new"), to: "drafted", note: "Drafted by the discovery agent for your review" });
     await sql`
       INSERT INTO agent_runs (id, user_id, agent_name, status, summary, created_at)
       VALUES (${crypto.randomUUID()}, ${userId}, 'proposal_agent', 'completed',
