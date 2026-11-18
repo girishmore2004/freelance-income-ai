@@ -95,6 +95,25 @@ def _assert_no_duplicates(table: str, columns: list[str], where: str = "") -> No
         )
 
 
+def _ensure_id(table: str) -> None:
+    """Hand-made tables may lack an ``id`` (production's integrations used PRIMARY KEY (user_id, provider)).
+
+    Adds ``id`` and fills existing rows with new UUIDs. If the table already has a
+    primary key, that key is kept and ``id`` gets a unique index instead.
+    """
+    if "id" in _columns(table):
+        return
+    op.add_column(table, sa.Column("id", sa.String(36), nullable=True))
+    if _is_postgres():
+        op.execute(f"UPDATE {table} SET id = gen_random_uuid()::text WHERE id IS NULL")
+        op.execute(f"ALTER TABLE {table} ALTER COLUMN id SET NOT NULL")
+    pk = _inspector().get_pk_constraint(table) or {}
+    if pk.get("constrained_columns"):
+        _ensure_index(table, f"uq_{table}_id", ["id"], unique=True)
+    elif _is_postgres():
+        op.execute(f"ALTER TABLE {table} ADD PRIMARY KEY (id)")
+
+
 def _now_default():
     return sa.text("now()") if _is_postgres() else sa.text("CURRENT_TIMESTAMP")
 
@@ -120,6 +139,7 @@ def _integrations() -> None:
             sa.UniqueConstraint("user_id", "provider", name="uq_integrations_user_provider"),
         )
     else:
+        _ensure_id(table)
         _ensure_column(table, sa.Column("email", sa.String(320), nullable=False, server_default=""))
         _ensure_column(table, sa.Column("refresh_token", sa.Text(), nullable=False, server_default=""))
         _ensure_column(table, sa.Column("access_token", sa.Text(), nullable=False, server_default=""))
@@ -166,7 +186,12 @@ def _applications() -> None:
             sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=_now_default()),
         )
     else:
+        _ensure_id(table)
         _ensure_column(table, sa.Column("proposal_id", sa.String(36), nullable=True))
+        # Hand-made tables declared proposal_id NOT NULL; the model allows NULL (an
+        # application may outlive a deleted proposal). Loosening keeps every row valid.
+        if _is_postgres():
+            op.execute("ALTER TABLE applications ALTER COLUMN proposal_id DROP NOT NULL")
         _ensure_column(table, sa.Column("channel", sa.String(30), nullable=False, server_default="manual"))
         _ensure_column(table, sa.Column("status", sa.String(30), nullable=False, server_default="sent"))
         _ensure_column(table, sa.Column("recipient", sa.String(320), nullable=False, server_default=""))
@@ -227,6 +252,7 @@ def _application_messages() -> None:
             sa.UniqueConstraint("user_id", "external_id", name="uq_application_messages_user_external"),
         )
     else:
+        _ensure_id(table)
         _ensure_column(table, sa.Column("sender", sa.String(300), nullable=False, server_default=""))
         _ensure_column(table, sa.Column("subject", sa.String(300), nullable=False, server_default=""))
         _ensure_column(table, sa.Column("body", sa.Text(), nullable=False, server_default=""))
