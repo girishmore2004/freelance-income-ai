@@ -19,6 +19,7 @@ import { handleStatementRoute } from "./lib/statement-routes";
 import { handleProfileRoute } from "./lib/profile-routes";
 import { handleServiceRoute } from "./lib/service-routes";
 import { autoApproveTimesheets, handleTimesheetRoute } from "./lib/timesheet-routes";
+import { handleAgentToolRoute } from "./lib/agent-tools-routes";
 import { handleOpsRoute } from "./lib/ops-routes";
 import { handleSupportRoute } from "./lib/support-routes";
 import { handleListingRoute } from "./lib/listing-routes";
@@ -412,7 +413,7 @@ async function routeRequest(
   }
 
   // Project reference files, verification queues and source management (U10).
-  for (const handler of [handleListingFileRoute, handleVerificationRoute, handleSourceRoute, handleTaskRoute, handleGrowthRoute, handleStatementRoute, handleProfileRoute, handleServiceRoute, handleTimesheetRoute]) {
+  for (const handler of [handleListingFileRoute, handleVerificationRoute, handleSourceRoute, handleTaskRoute, handleGrowthRoute, handleStatementRoute, handleProfileRoute, handleServiceRoute, handleTimesheetRoute, handleAgentToolRoute]) {
     const response = await handler(request, env, requestId);
     if (response) {
       return response;
