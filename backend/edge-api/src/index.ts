@@ -6,6 +6,7 @@ import { handleAccountRoute } from "./lib/account-routes";
 import { handleIdentityRoute } from "./lib/identity-routes";
 import { handleTeamRoute } from "./lib/team-routes";
 import { handleBusinessRoute } from "./lib/business-routes";
+import { handleAnalyticsRoute } from "./lib/analytics-routes";
 import { handleListingRoute } from "./lib/listing-routes";
 import { handleMatchRoute, runScheduledListingExpiry } from "./lib/match-routes";
 import { handleHiringRoute } from "./lib/hiring-routes";
@@ -369,6 +370,13 @@ async function routeRequest(
 
   if (businessResponse) {
     return businessResponse;
+  }
+
+  // Analytics (freelancer, client, platform) and staff user management,
+  // audit log and system health (U6). GET only.
+  const analyticsResponse = await handleAnalyticsRoute(request, env, requestId);
+  if (analyticsResponse) {
+    return analyticsResponse;
   }
 
   const teamResponse = await handleTeamRoute(
