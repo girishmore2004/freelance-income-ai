@@ -1,9 +1,10 @@
 # Test Status
 
-## U22 — side separation fix (local, 2026-11-18)
+## U22 — side separation fix (GitHub CI verified, 2026-11-18)
 - Edge: vitest **415 passed** (identity: a staff-only or admin + client account keeps or regains the freelancer side; a switched-off freelancer row stays off). Typecheck clean; bundle builds.
 - PostgreSQL (real functions): owner-like account (admin + client rows) → roles admin, client → Freelancer switch → admin, client, freelancer; moderator-only account → roles freelancer, moderator, and `/me` wrote the freelancer row once (second call wrote nothing).
-- Frontend: typecheck clean (app + e2e); unit **45 passed** (`mode.test.mts`: older freelancer tools belong to the freelancer side, calendar and analytics shared). New Playwright journeys in `e2e/mode.spec.ts`: the owner's admin + client account sees Freelancer, turns it on in one click, the calendar from the freelancer sidebar shows only freelancer dates; a freelancer-only account on a client page sees the client menu and a "Turn on" offer, never the freelancer menu. CI result to follow.
+- Frontend: typecheck clean (app + e2e); unit **45 passed** (`mode.test.mts`: older freelancer tools belong to the freelancer side, calendar and analytics shared). New Playwright journeys in `e2e/mode.spec.ts`: the owner's admin + client account sees Freelancer, turns it on in one click, the calendar from the freelancer sidebar shows only freelancer dates; a freelancer-only account on a client page sees the client menu and a "Turn on" offer, never the freelancer menu.
+- GitHub CI: `main` @ 9729ba4 pytest **589 passed**; Playwright **89 passed** (bearer), **90 passed** (cookie), including both new journeys. Edge @ 34dc9ed: Edge API CI success.
 
 ## U20 + U21 — GitHub CI (verified, 2026-11-18)
 `main` @ 68cfb66: pytest **589 passed** (Alembic upgrade to 0077 on PostgreSQL in CI); Playwright **87 passed** (bearer), **88 passed** (cookie). Edge @ ccbb5fc: Edge API CI success, vitest **414 passed** (new `agent-tools.test.ts`; `notify.test.ts` adds notification sides). The previous push (d86bd06) failed one test, `e2e/agents.spec.ts`: platform agents moved to the Admin view on purpose (one side at a time, decision of 2026-11-18), so the test now checks that the freelancer view hides P2 and the admin view shows it with "Switch off".
