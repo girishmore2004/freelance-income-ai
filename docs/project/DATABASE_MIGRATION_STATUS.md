@@ -1,6 +1,6 @@
 # Database Migration Status
 
-Chain head: **`0068_saved_listings_support`** (68 revisions, single head — verified by `tests/test_system_diagnostics_v542.py`). Neon staging was last migrated to 0046 (per workflow pin).
+Chain head: **`0069_external_pipeline`** (69 revisions, single head — verified by `tests/test_system_diagnostics_v542.py`). Neon staging was last migrated to 0046 (per workflow pin).
 
 | Revision | Change | Type | Downgrade |
 |---|---|---|---|
@@ -8,6 +8,7 @@ Chain head: **`0068_saved_listings_support`** (68 revisions, single head — ver
 | 0048_queue_job_reliability | `background_jobs`: `idempotency_key` (unique), `attempts`, `payload_json`, `source`, `dead_lettered_at`; index `(status, created_at)` | Additive | Drops added columns/indexes |
 | 0051_native_project_listings | `project_categories` (8 seeded from the Master Plan; only `website_development` enabled), `project_listings` (status/visibility/moderation check constraints, indexes for org lists and the marketplace), `project_listing_versions` (immutable, unique per listing+version, money in minor units, budget range check) | Additive + seed | Drops the three tables |
 | 0066_business_coach_partial | Data only: agent F11 `planned` → `partial` with runtime name `business_coach` | Data | Restores `planned` |
+| 0069_external_pipeline | `proposal_versions` (unique proposal+version, source check, backfilled from current proposals as `legacy`) and `opportunity_events` (kind check, application SET NULL, indexes by opportunity and by user+due date) | Additive + backfill | Drops both tables |
 | 0068_saved_listings_support | `saved_listings` (unique user+listing, both CASCADE, note ≤ 300) and `support_tickets` (topic/status checks, user SET NULL, indexes by status and by user) | Additive | Drops both tables |
 | 0067_proposal_studio | `listing_proposals` + `sections_json`, `current_version` (default 1), `content_hash`, `revision_requested_at`, `revision_note`; new `listing_proposal_versions` (unique proposal/version, version ≥ 1, price > 0); existing proposals backfilled as version 1 | Additive | Drops the table and the five columns |
 | 0065_contract_files | `contract_files` (party/status/size checks, unique R2 key, indexes by contract and delivery; `submission_id` SET NULL, contract CASCADE) | Additive | Drops the table (remove the R2 objects by hand) |
@@ -30,7 +31,7 @@ Chain head: **`0068_saved_listings_support`** (68 revisions, single head — ver
 ## Safe deployment order
 1. **Back up** Neon (create a branch named `pre-0047-2026-11` from `main` in Neon → Branches). Branch creation is instant and is the rollback point.
 2. Optional dry run: run the migration workflow against the backup branch first.
-3. Run GitHub Action **"Stage 3C Neon migrations"** in `freelance-income-ai` (type the confirmation text). It expects `0068_saved_listings_support`.
+3. Run GitHub Action **"Stage 3C Neon migrations"** in `freelance-income-ai` (type the confirmation text). It expects `0069_external_pipeline`.
 4. Deploy the Edge API (5.73.0 needs 0047–0068; saving projects and support tickets fail until 0068 runs, the calendar works without it; before 0067 the short proposal form still works and Studio sections return `MIGRATION_PENDING` before `marketplace.client_side` is switched on; AI keeps working on Worker limits if 0057 is not applied yet).
 5. Deploy the frontend.
 
@@ -42,7 +43,7 @@ If 0047 stops with "existing rows contain duplicates", nothing was committed: in
 
 ## Verification queries (Neon SQL Editor)
 ```sql
-SELECT version_num FROM alembic_version;                       -- 0068_saved_listings_support
+SELECT version_num FROM alembic_version;                       -- 0069_external_pipeline
 SELECT count(*) FROM listing_proposal_versions;                 -- equals count(*) FROM listing_proposals right after the run
 SELECT slug, enabled FROM project_categories ORDER BY sort_order; -- only website_development = true
 SELECT role, count(*) FROM user_roles GROUP BY role;            -- freelancer = number of users
