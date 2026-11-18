@@ -41,8 +41,19 @@ export interface RoleState {
  */
 export async function loadRoles(sql: Queryable, userId: string): Promise<string[]> {
   const rows = await sql<RoleState[]>`SELECT role, status FROM user_roles WHERE user_id = ${userId}`;
-  if (!rows.length) return ["freelancer"];
-  return rows.filter((row) => row.status === "active").map((row) => row.role).sort();
+  return activeRoles(rows);
+}
+
+/**
+ * Active roles from the role rows. An account with no freelancer or client row
+ * at all is a freelancer account, even when a staff role (admin, moderator…)
+ * was granted to it: a staff grant must not take away the built-in side. Pure.
+ */
+export function activeRoles(rows: RoleState[]): string[] {
+  const active = rows.filter((row) => row.status === "active").map((row) => row.role);
+  const hasPublicRow = rows.some((row) => isPublicRole(row.role));
+  if (!hasPublicRow && !active.includes("freelancer")) active.push("freelancer");
+  return [...new Set(active)].sort();
 }
 
 export type RoleChange =
@@ -81,9 +92,9 @@ export async function deactivateRole(sql: Queryable, userId: string, role: strin
   return { ok: true, roles: await loadRoles(sql, userId) };
 }
 
-/** Writes the implicit freelancer role for legacy accounts before changing roles. */
-async function materializeLegacyRole(sql: Queryable, userId: string): Promise<void> {
-  const any = await sql`SELECT 1 FROM user_roles WHERE user_id = ${userId} LIMIT 1`;
+/** Writes the implicit freelancer role (accounts with no freelancer or client row) before changing roles. */
+export async function materializeLegacyRole(sql: Queryable, userId: string): Promise<void> {
+  const any = await sql`SELECT 1 FROM user_roles WHERE user_id = ${userId} AND role IN ('freelancer', 'client') LIMIT 1`;
   if (any.length) return;
   await sql`
     INSERT INTO user_roles (id, user_id, role, status, granted_by, created_at, updated_at)

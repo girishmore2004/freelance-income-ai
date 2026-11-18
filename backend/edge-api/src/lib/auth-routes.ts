@@ -4,7 +4,7 @@ import type { Env } from "../types";
 import { revokeAccessSession } from "./session-service";
 import { authenticateRequest } from "./auth-context";
 import { failure, success } from "./response";
-import { loadRoles } from "./identity";
+import { loadRoles, materializeLegacyRole } from "./identity";
 
 function database(env: Env) {
   const connectionString = env.HYPERDRIVE?.connectionString;
@@ -59,6 +59,8 @@ export async function handleAuthRoute(
     const sql = database(env);
     let roles: string[];
     try {
+      // An account with no freelancer/client row (legacy, or only a staff role granted) gets its built-in freelancer row once.
+      await materializeLegacyRole(sql, user.id).catch(() => undefined);
       roles = await loadRoles(sql, user.id);
     } finally {
       await sql.end({ timeout: 5 });

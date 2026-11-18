@@ -26,9 +26,9 @@ function world(opts: { roles?: { role: string; status: string }[]; flag?: boolea
     if (text.startsWith("SELECT enabled FROM feature_flags")) return [{ enabled: opts.flag ?? false }];
     if (text.startsWith("SELECT role, status FROM user_roles WHERE user_id = $ AND role")) return roles.filter((r) => r.role === values[1]);
     if (text.startsWith("SELECT role, status FROM user_roles")) return roles;
-    if (text.startsWith("SELECT 1 FROM user_roles")) return roles.length ? [{ "?column?": 1 }] : [];
+    if (text.startsWith("SELECT 1 FROM user_roles")) return roles.some((r) => r.role === "freelancer" || r.role === "client") ? [{ "?column?": 1 }] : [];
     if (text.startsWith("INSERT INTO user_roles")) {
-      const role = String(values[2]);
+      const role = text.includes("'freelancer', 'active'") ? "freelancer" : String(values[2]);
       const existing = roles.find((r) => r.role === role);
       if (existing) {
         if (existing.status === "inactive") existing.status = "active";
@@ -59,6 +59,15 @@ const env = {} as Env;
 describe("roles", () => {
   it("treats legacy accounts without role rows as freelancers", async () => {
     expect(await loadRoles(world({ roles: [] }).sql, "u1")).toEqual(["freelancer"]);
+  });
+
+  it("keeps the built-in freelancer side when only a staff role was granted", async () => {
+    // The owner's account: admin granted by the workflow, no freelancer/client row yet.
+    expect(await loadRoles(world({ roles: [{ role: "admin", status: "active" }] }).sql, "u1")).toEqual(["admin", "freelancer"]);
+    const owner = world({ roles: [{ role: "admin", status: "active" }] });
+    expect(await activateRole(owner.sql, "u1", "client")).toEqual({ ok: true, roles: ["admin", "client", "freelancer"] });
+    // A freelancer row that was switched off stays off.
+    expect(await loadRoles(world({ roles: [{ role: "admin", status: "active" }, { role: "freelancer", status: "inactive" }, { role: "client", status: "active" }] }).sql, "u1")).toEqual(["admin", "client"]);
   });
 
   it("activates the client role idempotently and keeps both roles", async () => {
