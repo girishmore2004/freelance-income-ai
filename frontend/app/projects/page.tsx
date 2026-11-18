@@ -58,7 +58,10 @@ export default function ProjectsPage() {
 
   useEffect(() => {
     if (!token) return;
-    void fetchPage(null, false, '', '');
+    // The top-bar search opens /projects?q=…
+    const initial = typeof window === 'undefined' ? '' : (new URLSearchParams(window.location.search).get('q') ?? '').slice(0, 100);
+    if (initial) setQuery(initial);
+    void fetchPage(null, false, '', initial);
     api<Category[]>('/api/v1/project-categories').then(setCategories).catch(() => setCategories([]));
   }, [token, fetchPage]);
 

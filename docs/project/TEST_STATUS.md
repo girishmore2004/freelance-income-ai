@@ -1,5 +1,12 @@
 # Test Status
 
+## U1 experience: design system, workspace shell, public homepage — 2026-11-18 IST (release 5.66.0)
+- Edge API: **294 passed, 0 failed** (`public.test.ts` +2: `/public/home` returns real categories closed while the marketplace is off, live agents and counts, read-only; degrades to empty data before migrations). Against PostgreSQL: 1 open category, 10 live or partly built agents, real counts.
+- Frontend: typecheck 0 errors; unit tests **13/13** (new `command-route.test.mts`: command words route to pages, questions go to the coach pre-filled). New `e2e/experience.spec.ts` (2 journeys: homepage with real data and only non-zero counts; shell with role-aware navigation, mode switch, AI usage, notifications, profile menu and command routing). Existing specs checked for selector collisions with the shell (desktop viewport; no shared label or role names).
+
+## Legacy pages — GitHub CI (fix verified)
+`main` @ 4a3483c: pytest 565 passed; Playwright 52 passed (bearer), 53 passed (cookie). Edge @ fcc6dc6: Edge API CI and Full CI success (292/292).
+
 ## Legacy pages — GitHub CI
 `main` @ cc9d422: pytest 565 passed; **frontend production build failed** (so Playwright could not start): in `app/clients/page.tsx` the gate import was inserted above `'use client'` (that file began with a blank line). TypeScript accepts this; Next.js does not. Fixed, and a new unit test `lib/client-directive.test.mts` checks every file under `app/` — it fails on the broken file and passes on the fix (frontend unit tests now 12/12). Re-verified with the next push.
 

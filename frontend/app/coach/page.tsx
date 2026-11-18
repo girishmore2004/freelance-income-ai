@@ -25,6 +25,12 @@ export default function CoachPage() {
 
   useEffect(() => { if (token) void load(); }, [token, load]);
 
+  // A question typed in the AI command bar arrives as ?ask=… and is pre-filled, never sent automatically.
+  useEffect(() => {
+    const ask = new URLSearchParams(window.location.search).get('ask');
+    if (ask) setQuestion(ask.slice(0, 2000));
+  }, []);
+
   async function ask(event: FormEvent) {
     event.preventDefault();
     if (!question.trim() || busy) return;

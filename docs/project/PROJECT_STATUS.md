@@ -1,6 +1,6 @@
 # Project Status — Freelance Income AI
 
-As of 2026-11-18: Edge API **5.65.0** (branch `cloudflare-edge-api-phase1`), frontend **5.65.0** (`main`), migration head **`0066_business_coach_partial`**. Every batch passed GitHub CI (Python, Alembic on PostgreSQL, frontend build, Playwright in bearer and cookie modes, Edge typecheck/vitest/dry-run) before the next one started. Cloudflare deploys each push automatically.
+As of 2026-11-18: Edge API **5.66.0** (branch `cloudflare-edge-api-phase1`), frontend **5.66.0** (`main`), migration head **`0066_business_coach_partial`**. Every batch passed GitHub CI (Python, Alembic on PostgreSQL, frontend build, Playwright in bearer and cookie modes, Edge typecheck/vitest/dry-run) before the next one started. Cloudflare deploys each push automatically.
 
 ## Where the project really stands
 - **Marketplace loop: built and CI-verified, switched OFF.** Post a brief (AI Brief Builder) → screening and moderation → matching with explanations → invitations → proposals → comparison → offer → two-party contract (versions, change orders) → funding (test mode) → delivery workspace (submissions, revisions, acceptance checklist, messages, activity log) → approval releases funds → completion → two-way reviews; cancellation by agreement with refunds; disputes decided by staff. All behind `marketplace.client_side` (OFF).
@@ -10,6 +10,8 @@ As of 2026-11-18: Edge API **5.65.0** (branch `cloudflare-edge-api-phase1`), fro
 - **Agents:** 28 catalogue agents in a governed registry with honest status — live: F2, F4, C1, C2, C3, C5, C6; partly: F1, F9, P1, P8; blocked: F10, P2, P6; the rest planned. Per-agent kill switch enforced by the AI governor. Dispute and suspension decisions are human-only (Master Plan 3.5).
 - **Trust/admin:** reports, moderation queue, append-only moderation log, overview, flags, disputes with evidence packs, account suspension with appeals, in-app notifications, team invitations and roles, contract files (R2; needs the bucket). Not built: policy documents and account deletion (legal, D-1).
 - **Legacy pages (K-01):** `/security`, `/workspace`, `/agent` and `/coach` work on Edge (the last three ported and extended with marketplace data, including the F11 Business Coach). Eight Python-only tools show a clear notice with working alternatives until decision D-11.
+
+- **Experience (PRODUCT_EXPERIENCE_SPEC, plan in UI_EXPERIENCE_PLAN.md):** U1 done — light design system, one workspace shell with role-aware navigation and top bar, public homepage. U2–U6 planned.
 
 ## Repository and architecture map
 
