@@ -1,5 +1,10 @@
 # Test Status
 
+## U5 + U6 — GitHub CI (verified, 2026-11-18)
+`main` @ 06265c8: pytest **567 passed**; Playwright **59 passed** (bearer), **60 passed** (cookie). Edge @ d06f1f5: Edge API CI and Full CI success, vitest **332 passed** (31 files). Frontend unit (node --test): **26 passed**.
+- First U5 push failed 2 Playwright tests (proposal label changed case); fixed in 06265c8, not by editing the tests.
+- Real PostgreSQL runs (local): Proposal Studio (draft, check, invalid evidence 422, approval mismatch 409, submit v1, revision request, edit → v2 with request cleared, identical save → no new version, history, outsider 404, comparison with sections, notifications) and every analytics/staff endpoint with role checks.
+
 ## U4 + security — GitHub CI (verified)
 `main` @ 5692a95 and e70714d: pytest 565 passed; Playwright 56 passed (bearer), 57 passed (cookie). Edge @ f0f51e1 and 0906cc4: Edge API CI and Full CI success (300/300).
 

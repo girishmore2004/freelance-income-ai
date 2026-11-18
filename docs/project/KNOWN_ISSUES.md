@@ -31,7 +31,9 @@
 | K-28 | Info | Resolved in 5.62.0: account suspension with appeals (ADR-007). | — |
 | K-29 | Low | A suspended client's already-published listings stay visible (they cannot hire or act while suspended). | Pause the organisation's listings on suspension once team ownership (invitations) exists. |
 | K-31 | Info | Resolved 2026-11-18: the scheduled "Upwork API cache retention" (hourly) and "Scheduled Upwork saved searches" (every 15 min) workflows failed on every run because `PRODUCTION_DATABASE_URL` and the Upwork secrets are not set. They now skip with a notice while the Upwork integration is not configured, and still fail if it is only partly configured. When you enable Upwork, add `PRODUCTION_DATABASE_URL`, `OAUTH_ENCRYPTION_KEY` and the `UPWORK_*` repository secrets. | — |
-| K-30 | Low | Staff suspend by user ID (shown on user reports); there is no user search on `/admin` yet. | Add a staff user lookup. |
+| K-30 | Info | Resolved 5.72.0: staff user search and history on `/admin` (suspension still by user ID in Trust and safety). | — |
+| K-34 | Info | Before migration 0067 runs, proposals use the short form only (Studio sections answer `MIGRATION_PENDING`); version history is empty. | Run the Neon migration workflow. |
+| K-35 | Low | Analytics are computed per request (aggregate SQL over the caller's scope). Fine at launch size; large organisations will need cached daily aggregates. | Add a reporting table refreshed by the cron. |
 | K-22 | Info | Invitations are in-app only (no email yet); freelancers see them on `/projects`. | Notifications in Phase 3 with Resend (D-15). |
 | K-20 | Low | Listing screen is keyword-based (e.g. it can miss obfuscated contact details and may flag legitimate mentions of "WhatsApp integration"). Flags only hold for review; they never reject. | Tune from moderation outcomes; P1 agent later. |
 | K-10 | Info | `password-service.test.ts` could not run offline (needs `bcryptjs`). | CI covers it. |
