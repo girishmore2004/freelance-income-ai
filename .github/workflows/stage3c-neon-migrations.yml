@@ -218,13 +218,36 @@ jobs:
 
                           revisions = [row[0] for row in cur.fetchall()]
 
-                          if revisions != [
-                              os.environ["EXPECTED_ALEMBIC_REVISION"]
-                          ]:
+                          # The database may be at the expected head or at any EARLIER
+                          # revision of this repository's own chain (an upgrade).
+                          # Unknown revisions, several rows, or a revision that is not an
+                          # ancestor of the expected head are refused.
+                          import pathlib
+                          import re
+                          parents = {}
+                          for f in pathlib.Path("backend/alembic/versions").glob("*.py"):
+                              text = f.read_text()
+                              rev = re.search(r'^revision\s*=\s*["\']([^"\']+)["\']', text, re.M)
+                              down = re.search(r'^down_revision\s*=\s*["\']([^"\']+)["\']', text, re.M)
+                              if rev:
+                                  parents[rev.group(1)] = down.group(1) if down else None
+                          chain = []
+                          cursor = os.environ["EXPECTED_ALEMBIC_REVISION"]
+                          while cursor and cursor not in chain:
+                              chain.append(cursor)
+                              cursor = parents.get(cursor)
+
+                          if len(revisions) != 1 or revisions[0] not in chain:
                               sys.exit(
-                                  "Database is not in the expected migration state. "
-                                  "Refusing to migrate."
+                                  "Database is not in the expected migration state "
+                                  f"(found {revisions}; it must be "
+                                  f"{os.environ['EXPECTED_ALEMBIC_REVISION']} or an earlier "
+                                  "revision of this repository's chain). Refusing to migrate."
                               )
+
+                          pending = chain.index(revisions[0])
+                          print(f"Current revision: {revisions[0]}")
+                          print(f"Migrations to apply: {pending}")
 
                       elif table_count != 0:
                           sys.exit(
@@ -240,7 +263,7 @@ jobs:
                       if not has_alembic_version:
                           print("Database is empty and ready for initial migration.")
                       else:
-                          print("Database is already at the expected revision.")
+                          print("Database is at the expected revision or an earlier one in the chain; upgrading.")
 
           except SystemExit:
               raise

@@ -33,6 +33,7 @@ Baseline: 2026-11-18, release 5.65.0 (all CI green). The spec (founder addendum 
 | U4 | AI Agent Centre: overview (agents available, my runs, failures, AI calls today, drafts waiting), per-agent usage, tools, history and an "Open" link to where each built agent works; command bar routing (U1) | DONE (code, 5.69.0); free-form tasks per agent pending (each agent acts inside its page) |
 | U5 | Posting wizard; Proposal Studio sections and version history; contract workspace tabs | DONE (code, 5.71.0); reference files on listings pending (files live in the contract workspace) |
 | U8 | External application record (analysis, versions, approval, submission, follow-ups, interviews, outcome); finance exceptions; failed jobs | DONE (code, 5.74.0) |
+| U16 | Ask about an agent from its card | DONE (code, 5.82.0) |
 | U12 | Saved searches and alerts, profile checklist, invitation fix | DONE (code, 5.78.0) |
 | U13 | Take-home and all-in cost while pricing; monthly statements and CSV | DONE (code, 5.79.0) |
 | U14 | Publish-to-shortlist, weekly progress, Hire again, suspended clients paused | DONE (code, 5.80.0) |
