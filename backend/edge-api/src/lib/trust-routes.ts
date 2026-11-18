@@ -1,4 +1,5 @@
 import type { Env } from "../types";
+import { alertSavedSearches } from "./growth-routes";
 import { notifyUsers, organizationManagers } from "./notify";
 import type { AuthenticatedSession } from "./session-service";
 import { authenticateRequest } from "./auth-context";
@@ -193,6 +194,7 @@ export async function handleTrustRoute(request: Request, env: Env, requestId: st
         return true;
       });
       if (!done) return failure("NOT_IN_REVIEW", "This listing is not waiting for review.", 409, requestId);
+      if (decision === "approve") await alertSavedSearches(sql, listingDecision[1]);
       const decided = (await sql<{ organization_id: string }[]>`SELECT organization_id FROM project_listings WHERE id = ${listingDecision[1]} LIMIT 1`)[0];
       if (decided) {
         await notifyUsers(sql, await organizationManagers(sql, decided.organization_id), {

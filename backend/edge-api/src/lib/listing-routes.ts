@@ -1,5 +1,6 @@
 import type { Env } from "../types";
 import type { AuthenticatedSession } from "./session-service";
+import { alertSavedSearches } from "./growth-routes";
 import { authenticateRequest } from "./auth-context";
 import { body, database } from "./core-routes";
 import type { Queryable, Sql } from "./core-routes";
@@ -454,6 +455,8 @@ export async function handleListingRoute(
       if (result.code === "INCOMPLETE") {
         return failure("INCOMPLETE_BRIEF", "Complete the brief before submitting.", 422, requestId, [{ gaps: result.gaps }]);
       }
+      // U12: tell freelancers whose saved search matches a newly published public project.
+      if (result.code === "OK" && action === "submit") await alertSavedSearches(sql, listingId);
       const message =
         result.code === "IN_REVIEW"
           ? "Submitted. A moderator will review this listing before it is published."

@@ -275,6 +275,7 @@ export async function handleMatchRoute(
     if (meInvitations) {
       const rows = await sql<(Omit<InvitationRow, "created_at"> & JoinedListingRow & { invitation_created_at: Date; v_created_at: Date; client_name: string })[]>`
         SELECT i.id, i.listing_id, i.freelancer_user_id, i.invited_by, i.message, i.match_score, i.status, i.created_at AS invitation_created_at, i.responded_at,
+               (SELECT pp.id FROM listing_proposals pp WHERE pp.listing_id = i.listing_id AND pp.freelancer_user_id = i.freelancer_user_id AND pp.status <> 'withdrawn' LIMIT 1) AS my_proposal_id,
                l.id AS l_id, l.organization_id AS l_organization_id, l.category_slug AS l_category_slug, l.status AS l_status,
                l.visibility AS l_visibility, l.moderation_status AS l_moderation_status, l.moderation_notes AS l_moderation_notes,
                l.current_version AS l_current_version, l.published_at AS l_published_at, l.closes_at AS l_closes_at,
@@ -297,6 +298,8 @@ export async function handleMatchRoute(
         return {
           ...invitationOut({ ...row, created_at: row.invitation_created_at }),
           listing_status: listing.status,
+          // K-24: once the freelancer has proposed, the invitation points to that proposal instead of offering a second one.
+          my_proposal_id: (row as { my_proposal_id?: string | null }).my_proposal_id ?? null,
           project: publicListingOut(listing, version, row.client_name ?? "", row.client_verified_at ?? null)
         };
       });

@@ -14,6 +14,7 @@ import { handleListingFileRoute } from "./lib/listing-file-routes";
 import { handleVerificationRoute } from "./lib/verification-routes";
 import { handleSourceRoute } from "./lib/source-routes";
 import { handleTaskRoute } from "./lib/task-routes";
+import { handleGrowthRoute } from "./lib/growth-routes";
 import { handleOpsRoute } from "./lib/ops-routes";
 import { handleSupportRoute } from "./lib/support-routes";
 import { handleListingRoute } from "./lib/listing-routes";
@@ -407,7 +408,7 @@ async function routeRequest(
   }
 
   // Project reference files, verification queues and source management (U10).
-  for (const handler of [handleListingFileRoute, handleVerificationRoute, handleSourceRoute, handleTaskRoute]) {
+  for (const handler of [handleListingFileRoute, handleVerificationRoute, handleSourceRoute, handleTaskRoute, handleGrowthRoute]) {
     const response = await handler(request, env, requestId);
     if (response) {
       return response;
