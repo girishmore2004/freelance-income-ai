@@ -57,4 +57,4 @@ def test_saved_once_and_ticket_values_checked():
 
 def test_migration_chain_and_head():
     assert 'down_revision = "0067_proposal_studio"' in MIGRATION.read_text()
-    assert 'EXPECTED_MIGRATION_HEAD = "0068_saved_listings_support"' in (BACKEND / "app" / "main.py").read_text()
+    assert (BACKEND / "alembic" / "versions" / "0069_external_pipeline.py").exists()  # head moved on to 0069

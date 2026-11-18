@@ -4,6 +4,7 @@ import { ApiError, api, useSessionToken } from '@/lib/api-client';
 import { formatMinor } from '@/lib/listing-format';
 import { AdminPlanTools } from './admin-plan-tools';
 import { AdminPayments } from './admin-payments';
+import { FinanceExceptions } from './exceptions';
 
 /**
  * Staff finance page (finance/admin roles only): fee schedules and the
@@ -105,6 +106,7 @@ export default function FinancePage() {
         </form>
       </section>
 
+      <FinanceExceptions />
       <AdminPayments />
 
       <AdminPlanTools />

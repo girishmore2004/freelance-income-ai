@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from sqlalchemy import String, Text, DateTime, Date, Float, Integer, BigInteger, ForeignKey, Boolean, UniqueConstraint, Index, CheckConstraint, func, text as sql_text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import JSON
@@ -1385,6 +1385,46 @@ class ListingProposalVersion(Base):
     sections_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
+
+class ProposalVersion(Base):
+    """One text of an external proposal (migration 0069): model draft, safe template or edit."""
+    __tablename__ = "proposal_versions"
+    __table_args__ = (
+        UniqueConstraint("proposal_id", "version", name="uq_proposal_version"),
+        CheckConstraint("source IN ('model', 'safe_template', 'edited', 'legacy')", name="ck_proposal_versions_source"),
+        CheckConstraint("version >= 1", name="ck_proposal_versions_version"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    proposal_id: Mapped[str] = mapped_column(ForeignKey("proposals.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    proposed_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    currency: Mapped[str] = mapped_column(String(8), nullable=False, default="INR", server_default="INR")
+    source: Mapped[str] = mapped_column(String(20), nullable=False, default="edited", server_default="edited")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
+
+class OpportunityEvent(Base):
+    """History of an external opportunity (migration 0069): status changes, submissions, follow-ups, interviews, notes."""
+    __tablename__ = "opportunity_events"
+    __table_args__ = (
+        CheckConstraint("kind IN ('status', 'submission', 'follow_up', 'interview', 'note')", name="ck_opportunity_events_kind"),
+        Index("ix_opportunity_events_opportunity", "opportunity_id", "created_at"),
+        Index("ix_opportunity_events_due", "user_id", "due_date"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uid)
+    opportunity_id: Mapped[str] = mapped_column(ForeignKey("opportunities.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    from_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    to_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    note: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    done_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    application_id: Mapped[str | None] = mapped_column(ForeignKey("applications.id", ondelete="SET NULL"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
 
 

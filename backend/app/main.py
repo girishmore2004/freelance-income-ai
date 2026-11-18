@@ -88,7 +88,7 @@ from fastapi import UploadFile, File
 from fastapi.responses import Response, RedirectResponse
 # Head of the Alembic chain this code expects. Update with every new migration;
 # tests/test_system_diagnostics_v542.py verifies it matches backend/alembic/versions.
-EXPECTED_MIGRATION_HEAD = "0068_saved_listings_support"
+EXPECTED_MIGRATION_HEAD = "0069_external_pipeline"
 
 app=FastAPI(title=settings.app_name, version="5.45.0", description="Human-approved freelance opportunity assistant")
 app.include_router(automation_router)

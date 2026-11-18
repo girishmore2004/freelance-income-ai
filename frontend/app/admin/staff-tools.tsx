@@ -268,3 +268,59 @@ export function SupportPanel() {
     </section>
   );
 }
+
+type Job = { id: string; job_type: string; status: string; attempts: number; error_code: string | null; error_message: string | null; created_at: string; retryable: boolean };
+
+export function JobsPanel() {
+  const [items, setItems] = useState<Job[] | null>(null);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(async () => {
+    try {
+      const r = await api<Job[]>('/api/v1/admin/jobs');
+      setItems(Array.isArray(r) ? r : []);
+    } catch (e) {
+      setError(messageOf(e));
+    }
+  }, []);
+  useEffect(() => { void load(); }, [load]);
+
+  async function retry(j: Job) {
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const r = await api<{ message?: string }>(`/api/v1/admin/jobs/${j.id}/retry`, 'POST', {});
+      setNotice(r?.message ?? 'Queued again');
+      await load();
+    } catch (e) {
+      setError(messageOf(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="card" aria-labelledby="jobs-heading">
+      <h3 id="jobs-heading">Background jobs needing attention</h3>
+      <p className="muted small">Jobs retry automatically up to five times; after that they are dead-lettered here.</p>
+      <div aria-live="polite">{notice && <p className="success">{notice}</p>}{error && <p className="error" role="alert">{error}</p>}</div>
+      {items && items.length === 0 && <p className="empty">No failed, retrying or dead jobs.</p>}
+      {items && items.length > 0 && (
+        <table>
+          <thead><tr><th scope="col">Job</th><th scope="col">Status</th><th scope="col">Attempts</th><th scope="col">Error</th><th scope="col"><span className="sr-only">Action</span></th></tr></thead>
+          <tbody>{items.map((j) => (
+            <tr key={j.id}>
+              <td>{j.job_type}<div className="muted small">{when(j.created_at)}</div></td>
+              <td>{j.status}</td>
+              <td>{j.attempts}</td>
+              <td>{j.error_code || '—'}{j.error_message ? `: ${j.error_message.slice(0, 120)}` : ''}</td>
+              <td>{['failed', 'dead'].includes(j.status) && j.retryable && <button className="btn" type="button" disabled={busy} onClick={() => void retry(j)}>Retry</button>}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      )}
+    </section>
+  );
+}

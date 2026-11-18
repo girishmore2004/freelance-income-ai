@@ -20,7 +20,7 @@ const SOURCES: Record<string, string> = {
   freelancer: 'Freelancer.com', hackernews: 'Hacker News', reddit: 'Reddit r/forhire', remotive: 'Remotive', jobicy: 'Jobicy',
   remoteok: 'RemoteOK', himalayas: 'Himalayas', manual: 'Added by you',
 };
-const STATUS: Record<string, string> = { new: 'New', drafted: 'Draft ready', ready: 'Approved', applied: 'Applied', replied: 'Replied', won: 'Won', lost: 'Lost', skipped: 'Skipped' };
+const STATUS: Record<string, string> = { new: 'New', drafted: 'Draft ready', ready: 'Approved', applied: 'Applied', replied: 'Replied', interview: 'Interview', offer: 'Offer', won: 'Won', lost: 'Lost', withdrawn: 'Withdrawn', skipped: 'Skipped' };
 
 export const sourceName = (s: string) => SOURCES[s] ?? s;
 
@@ -83,7 +83,7 @@ export function ExternalOpportunities({ query }: { query: string }) {
 
   const q = query.trim().toLowerCase();
   const visible = (items ?? [])
-    .filter((o) => !['skipped', 'lost'].includes(o.status))
+    .filter((o) => !['skipped', 'lost', 'withdrawn'].includes(o.status))
     .filter((o) => !q || `${o.title} ${o.description} ${o.client_name}`.toLowerCase().includes(q))
     .sort((a, b) => b.match_score - a.match_score);
 
@@ -133,6 +133,7 @@ export function ExternalOpportunities({ query }: { query: string }) {
             <p>{o.description.slice(0, 350)}{o.description.length > 350 ? '…' : ''}</p>
             {(n.eligibility_warnings ?? []).length > 0 && <p className="error">Check first: {n.eligibility_warnings!.join('; ')}</p>}
             <div className="row">
+              <a className="btn" href={`/opportunities?id=${encodeURIComponent(o.id)}`}>Analyse and track</a>
               {safeHref(o.source_url) !== '#' && <a className="btn" href={safeHref(o.source_url)} target="_blank" rel="noopener noreferrer nofollow">Open original post ↗</a>}
               {o.status === 'new' && (
                 <button className="btn primary" type="button" disabled={busy} onClick={() => void run(async () => {
