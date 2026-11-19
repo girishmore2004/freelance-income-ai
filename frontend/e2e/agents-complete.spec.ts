@@ -78,7 +78,7 @@ test('a freelancer reviews the profile, sees capacity, gets a reply starter and 
 
   await page.goto('/notifications');
   const settings = page.getByRole('region', { name: 'Notification settings' });
-  await expect(settings.getByText('Always on')).toBeVisible();
+  await expect(settings.getByText('Always on', { exact: true })).toBeVisible();
   await settings.getByRole('checkbox', { name: 'Proposals, invitations and offers' }).click();
   await expect(settings.getByRole('checkbox', { name: 'Proposals, invitations and offers' })).not.toBeChecked();
   expect(captured.find((c) => c.method === 'PUT' && c.path === '/api/v1/me/notification-settings')?.body).toEqual({ groups: { proposals: false } });
