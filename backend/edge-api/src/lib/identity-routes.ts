@@ -7,6 +7,7 @@ import { failure, success } from "./response";
 import { FLAGS, isEnabled } from "./flags";
 import {
   MAX_ORGANIZATIONS_PER_USER,
+  ensureClientAccount,
   activateRole,
   canManageOrganization,
   deactivateRole,
@@ -73,11 +74,16 @@ export async function handleIdentityRoute(
   try {
     // ---------------- roles ----------------
     if (path === "/api/v1/me/identity") {
-      const [roles, organizations, clientSideEnabled] = await Promise.all([
+      const [roles, first, clientSideEnabled] = await Promise.all([
         loadRoles(sql, userId),
         listOrganizations(sql, userId),
         isEnabled(env, sql, FLAGS.clientMarketplace, false)
       ]);
+      // The client side never starts with "create a client account first": one is made for them.
+      // A parallel request may have created it while this one waited, so list again after either outcome.
+      const needs = roles.includes("client") && clientSideEnabled && first.length === 0;
+      if (needs) await ensureClientAccount(sql, userId);
+      const organizations = needs ? await listOrganizations(sql, userId) : first;
       return success(
         { user_id: userId, roles, organizations: organizations.map(organizationOut), client_side_enabled: clientSideEnabled },
         "Identity",
@@ -97,6 +103,7 @@ export async function handleIdentityRoute(
       }
       const result = await activateRole(sql, userId, role);
       if (!result.ok) return failure(result.code, result.message, result.code === "ROLE_SUSPENDED" ? 403 : 422, requestId);
+      if (role === "client") await ensureClientAccount(sql, userId);
       return success({ roles: result.roles }, `The ${role} role is active.`, 200, requestId);
     }
 

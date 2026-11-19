@@ -1,4 +1,4 @@
-import type { Queryable } from "./core-routes";
+import type { Queryable, Sql } from "./core-routes";
 
 /**
  * Identity rules (Master Plan Part A "User account model", migration 0050).
@@ -255,4 +255,48 @@ export async function organizationForMember(sql: Queryable, userId: string, orga
 
 export function canManageOrganization(membershipRole: string): boolean {
   return membershipRole === "owner" || membershipRole === "admin";
+}
+
+/* ------------------------------------------------------------------ */
+/* Automatic client account                                            */
+/* ------------------------------------------------------------------ */
+
+/** Name for an automatic individual client account: the person's name, else their email name. Pure; exported for tests. */
+export function defaultClientName(fullName: string | null | undefined, email: string | null | undefined): string {
+  const name = (fullName ?? "").replace(/\s+/g, " ").trim().slice(0, 160);
+  if (name.length >= 2) return name;
+  const local = (email ?? "").split("@")[0].replace(/[._+-]+/g, " ").replace(/\s+/g, " ").trim();
+  const pretty = local.split(" ").filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(" ").slice(0, 160);
+  return pretty.length >= 2 ? pretty : "My client account";
+}
+
+/**
+ * Someone with the client side always has somewhere for their projects: when they belong to no
+ * client account, an individual one is created with them as owner (country IN, D-7; every detail
+ * editable on the Client profile page). Serialised per person with an advisory lock so parallel
+ * requests create one account. Returns true when an account was created.
+ */
+export async function ensureClientAccount(sql: Sql, userId: string): Promise<boolean> {
+  return sql.begin(async (tx) => {
+    await tx`SELECT pg_advisory_xact_lock(hashtext(${`client-account:${userId}`}))`;
+    const member = await tx`SELECT 1 FROM organization_memberships WHERE user_id = ${userId} AND status = 'active' LIMIT 1`;
+    if (member.length) return false;
+    const who = await tx<{ full_name: string | null; email: string | null }[]>`
+      SELECT p.full_name, u.email FROM users u LEFT JOIN profiles p ON p.user_id = u.id WHERE u.id = ${userId} LIMIT 1
+    `;
+    if (!who.length) return false;
+    const id = crypto.randomUUID();
+    await tx`
+      INSERT INTO organizations
+        (id, name, kind, industry, website, country, preferred_language, billing_name, billing_email,
+         billing_address, tax_id, status, created_by, created_at, updated_at)
+      VALUES
+        (${id}, ${defaultClientName(who[0].full_name, who[0].email)}, 'individual', '', '', 'IN', 'en', '', '', '', '', 'active', ${userId}, now(), now())
+    `;
+    await tx`
+      INSERT INTO organization_memberships (id, organization_id, user_id, role, status, created_at)
+      VALUES (${crypto.randomUUID()}, ${id}, ${userId}, 'owner', 'active', now())
+    `;
+    return true;
+  });
 }

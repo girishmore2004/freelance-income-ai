@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Env, RateLimiterBinding } from "../types";
-import { activateRole, deactivateRole, loadRoles, organizationOut, validateOrganization } from "./identity";
+import { activateRole, deactivateRole, defaultClientName, loadRoles, organizationOut, validateOrganization } from "./identity";
 import type { OrganizationRow } from "./identity";
 import { handleIdentityRoute } from "./identity-routes";
 import type { IdentityRouteDeps } from "./identity-routes";
@@ -108,6 +108,43 @@ describe("organisation validation", () => {
   it("shows billing details to owners and admins only", () => {
     expect(organizationOut(ORG)).toHaveProperty("billing");
     expect(organizationOut({ ...ORG, membership_role: "member" })).not.toHaveProperty("billing");
+  });
+});
+
+describe("automatic client account", () => {
+  it("names it after the person, else their email name", () => {
+    expect(defaultClientName("  Priya   Sharma ", "p@x.test")).toBe("Priya Sharma");
+    expect(defaultClientName("", "rahul.verma+jobs@x.test")).toBe("Rahul Verma Jobs");
+    expect(defaultClientName(null, "a@x.test")).toBe("My client account");
+  });
+
+  it("is created when someone with the client side has none, and never twice", async () => {
+    let member = false;
+    const fake = createFakeSql((text) => {
+      if (text.startsWith("SELECT enabled FROM feature_flags")) return [{ enabled: true }];
+      if (text.startsWith("SELECT role, status FROM user_roles")) return [{ role: "client", status: "active" }];
+      if (text.startsWith("SELECT 1 FROM organization_memberships")) return member ? [{ "?column?": 1 }] : [];
+      if (text.startsWith("SELECT p.full_name, u.email")) return [{ full_name: "Priya Sharma", email: "p@x.test" }];
+      if (text.startsWith("INSERT INTO organization_memberships")) { member = true; return []; }
+      if (text.includes("FROM organization_memberships m JOIN organizations o")) return member ? [{ ...ORG, name: "Priya Sharma", kind: "individual" }] : [];
+      return [];
+    });
+    const first = await readJson((await handleIdentityRoute(jsonRequest("GET", "/api/v1/me/identity"), env, "r", deps(fake as ReturnType<typeof world>)))!);
+    expect(first.data.organizations.map((o: { name: string }) => o.name)).toEqual(["Priya Sharma"]);
+    expect(fake.queries.some((q) => q.text.startsWith("SELECT pg_advisory_xact_lock"))).toBe(true);
+    const inserts = () => fake.queries.filter((q) => q.text.startsWith("INSERT INTO organizations")).length;
+    expect(inserts()).toBe(1);
+    await handleIdentityRoute(jsonRequest("GET", "/api/v1/me/identity"), env, "r", deps(fake as ReturnType<typeof world>));
+    expect(inserts()).toBe(1);
+  });
+
+  it("is not created for a freelancer-only account or while hiring is closed", async () => {
+    const freelancer = world({ flag: true });
+    await handleIdentityRoute(jsonRequest("GET", "/api/v1/me/identity"), env, "r", deps(freelancer));
+    expect(freelancer.queries.some((q) => q.text.startsWith("INSERT INTO organizations"))).toBe(false);
+    const closed = world({ flag: false, roles: [{ role: "client", status: "active" }] });
+    await handleIdentityRoute(jsonRequest("GET", "/api/v1/me/identity"), env, "r", deps(closed));
+    expect(closed.queries.some((q) => q.text.startsWith("INSERT INTO organizations"))).toBe(false);
   });
 });
 
