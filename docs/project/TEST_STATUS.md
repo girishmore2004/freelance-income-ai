@@ -1,5 +1,12 @@
 # Test Status
 
+## U26 — one portal at a time (GitHub CI verified, 2026-11-19, release 5.93.0)
+- Edge: vitest **436 passed** (new: top items per side so one side cannot crowd out the other; the action-plan fixture carries a side). Typecheck clean; bundle builds. Edge API CI success @ 4659c54.
+- PostgreSQL: action plans for 19 local accounts carried a side on every action (13 actions: invitations, drafts and disputes as freelancer; deliveries, proposals and disputes as client); an open dispute appeared as Freelancer for one party and Client for the other. Sign-up through the real Worker: Find work → [freelancer], Hire → [client], Both → [client, freelancer], no choice → [freelancer], unknown choice 422.
+- Frontend: typecheck clean (app + e2e); unit **49 passed** across all 18 files (new: items follow their side, Ask AI per portal, one sidebar link lit). CI previously ran only 5 of the 18 unit-test files; it now runs all of them.
+- e2e: new Client-portal journey (dashboard, next actions, analytics without Planning tools, AI agents without freelancer drafts, account with client accounts and client-side blocks; the same pages on the Freelancer side) and a sign-up choices journey (Freelancer only, Client only, both). Changed on purpose: the U22 owner test now expects only Client and Admin until Freelancer is turned on from Account (D-24); the team test opens Account on the Client side; the experience test expects "earnings" on the Client side to open the client's spend.
+- GitHub CI: `main` @ eef41a3 pytest **596 passed**; Playwright **97 passed** (bearer), **98 passed** (cookie). On the way, CI caught one real defect of mine (a page saving its side gave the account that role, so a freelancer-only account lost the "Turn on hiring" offer; fixed) and two test mistakes of mine (the Client side re-seeded on every load; a name that also appeared in a button).
+
 ## U25 — portals, notifications and speed (GitHub CI verified, 2026-11-19)
 - Frontend: typecheck clean (app + e2e), unit **46 passed** (new: the Admin workspace keeps staff on Notifications, Account, Security and Contact, and never leaks into the Freelancer or Client side).
 - New e2e in `mode.spec.ts`: from `/admin` the bell (1 unread = staff and account notices only) opens Notifications with Admin still pressed, the admin menu, only the staff notice listed, "Back" to `/admin`, no full page reload and at most 2 account requests; choosing Client afterwards makes account pages follow Client again.
