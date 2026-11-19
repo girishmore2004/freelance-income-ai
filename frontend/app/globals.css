@@ -291,6 +291,17 @@ html[data-theme=dark][data-side=admin]{--accent:#cbd5e1;--accent2:#e2e8f0;--acce
   html:not([data-theme=light])[data-side=admin]{--accent:#cbd5e1;--accent2:#e2e8f0;--accent-soft:#1e2536;--accent-line:#3a4660;--btn:#475569;--btn-hover:#64748b}
 }
 @media(max-width:960px){.ws-role button{padding:6px 10px;font-size:12.5px}}
-@media(max-width:520px){.ws-cmd{display:none}}
+.side-tools{display:none}
+@media(max-width:640px){
+  .ws-cmd,.ws-top form{display:none}
+  .side-tools{display:grid;gap:8px;margin:0 4px 10px}
+  .side-tools input{width:100%;padding:8px 12px;border-radius:var(--radius-sm);border:1px solid var(--line2);background:var(--surface2);min-height:40px}
+}
+@media(max-width:520px){
+  .ws-top{gap:6px;padding:0 8px}
+  .ws-role{padding:2px}
+  .ws-role button{padding:6px 8px;font-size:12px;min-height:34px}
+  .ws-top .icon-btn{width:34px;height:34px}
+}
 .grid>.card,.grid>article,.grid>li{margin-top:0}
 .next-step{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:12px 14px;margin:10px 0;border:1px solid var(--accent-line);background:var(--accent-soft);border-radius:var(--radius-sm)}

@@ -1,8 +1,13 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { api, useSessionToken } from '@/lib/api-client';
 import { routeCommand } from '@/lib/command-route';
-import { HOME, modeForPath, readMode, saveMode, type Mode } from '@/lib/mode';
+import {
+  ACCOUNT_PAGES, HOME, isAdminPath, modeForPath, publishWorkspace, readAdminSticky, readMode, saveAdminSticky, saveMode, workspaceFor,
+  type Mode, type Workspace
+} from '@/lib/mode';
 import { ThemeToggle } from './theme-toggle';
 
 /**
@@ -49,7 +54,27 @@ const ADMIN: NavGroup[] = [
   { label: 'AI', items: [{ href: '/ai-agents?view=admin', label: 'AI agents on/off' }] },
 ];
 const STAFF_ROLES = ['admin', 'finance', 'moderator'];
-type Workspace = Mode | 'admin';
+const ROLES_HINT = 'fia_roles_hint';
+
+/** Last roles seen in this browser: only to draw the right menu at once; the server still checks every request. */
+function rolesHint(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(ROLES_HINT) || '[]');
+    return Array.isArray(v) ? v.filter((r): r is string => typeof r === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Inside the app, moving between pages keeps the frame (no full reload, no
+ * re-fetching the account, no flicker). Links with a query string still load
+ * the page fully, because those pages read their view from the address once.
+ */
+function NavLink({ href, className, children, onClick, current, role }: { href: string; className?: string; children: ReactNode; onClick?: () => void; current?: boolean; role?: string }) {
+  if (href.includes('?')) return <a className={className} href={href} onClick={onClick} aria-current={current ? 'page' : undefined} role={role}>{children}</a>;
+  return <Link className={className} href={href} onClick={onClick} aria-current={current ? 'page' : undefined} role={role}>{children}</Link>;
+}
 
 /** Which sides the account has switched on (no freelancer or client role at all = the built-in freelancer side). */
 function sidesOf(roles: string[]): Record<Mode, boolean> {
@@ -59,12 +84,6 @@ function sidesOf(roles: string[]): Record<Mode, boolean> {
 const SIDE_NAME: Record<Mode, string> = { freelancer: 'Freelancer', client: 'Client (hiring)' };
 const WORKSPACE_LABEL: Record<Workspace, string> = { freelancer: 'Freelancer workspace', client: 'Hiring workspace', admin: 'Admin workspace' };
 
-/** Staff pages form the Admin workspace. */
-function isAdminPath(path: string, search: string): boolean {
-  const view = new URLSearchParams(search).get('view');
-  return path === '/admin' || path.startsWith('/admin/') || path === '/finance' || path.startsWith('/finance/') || (path === '/analytics' && view === 'platform') || (path === '/ai-agents' && view === 'admin');
-}
-
 function isActive(path: string, href: string): boolean {
   if (href === '/') return path === '/';
   return path === href || path.startsWith(`${href}/`);
@@ -72,15 +91,20 @@ function isActive(path: string, href: string): boolean {
 
 export function AppFrame({ children }: { children: ReactNode }) {
   const [token, setToken] = useSessionToken();
-  const [path, setPath] = useState<string | null>(null);
-  useEffect(() => { setPath(window.location.pathname.replace(/\/+$/, '') || '/'); }, []);
-  if (!token || path === null || NO_FRAME.has(path)) return <>{children}</>;
+  const pathname = usePathname();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  const path = (pathname || '/').replace(/\/+$/, '') || '/';
+  if (!token || !mounted || NO_FRAME.has(path)) return <>{children}</>;
   return <WorkspaceShell path={path} onSignedOut={() => setToken('')}>{children}</WorkspaceShell>;
 }
 
 function WorkspaceShell({ path, onSignedOut, children }: { path: string; onSignedOut: () => void; children: ReactNode }) {
   const [me, setMe] = useState<Me | null>(null);
-  const [mode, setMode] = useState<Mode>('freelancer');
+  const [hintRoles] = useState<string[]>(() => rolesHint());
+  const [mode, setMode] = useState<Mode>(() => readMode() ?? 'freelancer');
+  const [query, setQuery] = useState(() => window.location.search);
+  const [adminSticky, setAdminSticky] = useState(() => readAdminSticky());
   const [unread, setUnread] = useState(0);
   const [usage, setUsage] = useState<{ today: number; daily: number } | null>(null);
   const [bySide, setBySide] = useState<{ freelancer: number; client: number; both: number } | null>(null);
@@ -92,39 +116,55 @@ function WorkspaceShell({ path, onSignedOut, children }: { path: string; onSigne
   const [roleError, setRoleError] = useState('');
   const profileRef = useRef<HTMLDivElement>(null);
 
-  const load = useCallback(async () => {
-    const [user, count, plan] = await Promise.all([
-      api<Me>('/api/v1/me').catch(() => null),
-      api<{ unread: number; by_side?: { freelancer: number; client: number; both: number } }>('/api/v1/notifications/unread-count').catch(() => null),
-      api<{ usage: { today: number }; limits: { daily: number } }>('/api/v1/me/plan').catch(() => null),
-    ]);
-    if (user && typeof user.id === 'string') {
-      const roles = Array.isArray(user.roles) ? user.roles : [];
-      setMe({ id: user.id, email: String(user.email ?? ''), roles });
-      const has = sidesOf(roles);
-      // A page that belongs to one side always shows that side (never the other side's menu
-      // around it); a shared page keeps the last choice, or the side the account has.
-      const pageMode = modeForPath(path, window.location.search);
-      const saved = readMode();
-      const fallback: Mode = has.freelancer ? 'freelancer' : 'client';
-      if (path === '/' && pageMode === 'freelancer' && !has.freelancer && has.client) {
-        // A hiring-only account signing in on the home page goes to its own dashboard.
-        saveMode('client');
-        window.location.replace(HOME.client);
-        return;
+  // The account and AI usage once per visit; the frame stays mounted while moving between pages.
+  useEffect(() => {
+    void (async () => {
+      const [user, plan] = await Promise.all([
+        api<Me>('/api/v1/me').catch(() => null),
+        api<{ usage: { today: number }; limits: { daily: number } }>('/api/v1/me/plan').catch(() => null),
+      ]);
+      if (user && typeof user.id === 'string') {
+        const roles = Array.isArray(user.roles) ? user.roles : [];
+        setMe({ id: user.id, email: String(user.email ?? ''), roles });
+        try { localStorage.setItem(ROLES_HINT, JSON.stringify(roles)); } catch { /* hint only */ }
       }
-      const next: Mode = pageMode ?? (saved && has[saved] ? saved : fallback);
-      setMode(next);
-      if (next !== saved) saveMode(next);
-    }
+      if (plan && plan.usage && plan.limits && typeof plan.usage.today === 'number') setUsage({ today: plan.usage.today, daily: plan.limits.daily });
+    })();
+  }, []);
+
+  // The unread count refreshes on every page, so the bell stays current after reading notifications.
+  const loadUnread = useCallback(async () => {
+    const count = await api<{ unread: number; by_side?: { freelancer: number; client: number; both: number } }>('/api/v1/notifications/unread-count').catch(() => null);
     if (count && typeof count.unread === 'number') {
       setUnread(count.unread);
       setBySide(count.by_side && typeof count.by_side.freelancer === 'number' ? count.by_side : null);
     }
-    if (plan && plan.usage && plan.limits && typeof plan.usage.today === 'number') setUsage({ today: plan.usage.today, daily: plan.limits.daily });
-  }, [path]);
+  }, []);
+  useEffect(() => { void loadUnread(); }, [path, loadUnread]);
 
-  useEffect(() => { void load(); }, [load]);
+  // Each page: read its query, remember whether the person is in Admin, and pick the side.
+  useEffect(() => {
+    const q = window.location.search;
+    setQuery(q);
+    if (isAdminPath(path, q)) { saveAdminSticky(true); setAdminSticky(true); }
+    else if (!ACCOUNT_PAGES.includes(path)) { saveAdminSticky(false); setAdminSticky(false); }
+    if (!me) return;
+    const has = sidesOf(me.roles);
+    // A page that belongs to one side always shows that side (never the other side's menu
+    // around it); a shared page keeps the last choice, or the side the account has.
+    const pageMode = modeForPath(path, q);
+    const saved = readMode();
+    const fallback: Mode = has.freelancer ? 'freelancer' : 'client';
+    if (path === '/' && pageMode === 'freelancer' && !has.freelancer && has.client) {
+      // A hiring-only account signing in on the home page goes to its own dashboard.
+      saveMode('client');
+      window.location.replace(HOME.client);
+      return;
+    }
+    const next: Mode = pageMode ?? (saved && has[saved] ? saved : fallback);
+    setMode(next);
+    if (next !== saved) saveMode(next);
+  }, [path, me]);
 
   useEffect(() => {
     if (!profileOpen) return;
@@ -139,19 +179,20 @@ function WorkspaceShell({ path, onSignedOut, children }: { path: string; onSigne
     };
   }, [profileOpen]);
 
-  const roles = me?.roles ?? [];
+  const roles = me?.roles ?? hintRoles;
   const has = sidesOf(roles);
   const staff = roles.some((r) => STAFF_ROLES.includes(r));
-  const search0 = typeof window === 'undefined' ? '' : window.location.search;
-  const workspace: Workspace = staff && isAdminPath(path, search0) ? 'admin' : mode;
+  const workspace: Workspace = workspaceFor(path, query, staff, adminSticky, mode);
   const groups = useMemo(() => [...(workspace === 'admin' ? ADMIN : workspace === 'client' ? CLIENT : FREELANCER), ACCOUNT], [workspace]);
   // Each side has its own colour (globals.css: html[data-side]).
   useEffect(() => {
     document.documentElement.setAttribute('data-side', workspace);
+    publishWorkspace(workspace);
     return () => document.documentElement.removeAttribute('data-side');
   }, [workspace]);
   // The bell counts the active side plus account-wide notifications; the other side shows a dot on its switch.
-  const sideUnread = bySide ? (workspace === 'admin' ? unread : bySide[workspace] + bySide.both) : unread;
+  // Admin shows the account-wide and staff notices only (they belong to neither side).
+  const sideUnread = bySide ? (workspace === 'admin' ? bySide.both : bySide[workspace] + bySide.both) : unread;
   const otherUnread = (s: Mode) => (bySide && s !== workspace ? bySide[s] : 0);
   const initials = (me?.email ?? '?').slice(0, 2).toUpperCase();
 
@@ -180,6 +221,8 @@ function WorkspaceShell({ path, onSignedOut, children }: { path: string; onSigne
     if (next === mode && workspace !== 'admin') return;
     // A side that is not on yet is switched on first (the account gets that role).
     if (me && !has[next] && !(await turnOn(next))) return;
+    saveAdminSticky(false);
+    setAdminSticky(false);
     setMode(next);
     saveMode(next);
     if (workspace === 'admin') {
@@ -219,16 +262,27 @@ function WorkspaceShell({ path, onSignedOut, children }: { path: string; onSigne
       <a className="skip" href="#ws-content">Skip to content</a>
       <div className={`scrim${drawer ? ' show' : ''}`} onClick={() => setDrawer(false)} aria-hidden="true" />
       <aside className={`ws-side${drawer ? ' open' : ''}`} aria-label="Workspace navigation">
-        <a className="side-brand" href="/workspace"><span className="logo" aria-hidden="true">F</span><div><div className="brand-name">Freelance Income AI</div><div className="brand-sub">{WORKSPACE_LABEL[workspace]}</div></div></a>
+        <Link className="side-brand" href="/workspace"><span className="logo" aria-hidden="true">F</span><div><div className="brand-name">Freelance Income AI</div><div className="brand-sub">{WORKSPACE_LABEL[workspace]}</div></div></Link>
+        {/* On phones the top bar has no room for search and the AI command; they live here instead. */}
+        <div className="side-tools">
+          <form role="search" onSubmit={(e) => { setDrawer(false); submitSearch(e); }}>
+            <label htmlFor="ws-search-m" className="sr-only">Global search</label>
+            <input id="ws-search-m" type="search" value={search} onChange={(e) => setSearch(e.target.value)} maxLength={100} placeholder={workspace === 'client' ? 'Search freelancers and skills' : 'Search projects and skills'} />
+          </form>
+          <form onSubmit={(e) => { setDrawer(false); submitCommand(e); }}>
+            <label htmlFor="ws-cmd-m" className="sr-only">AI command</label>
+            <input id="ws-cmd-m" list="ws-cmd-examples" value={command} onChange={(e) => setCommand(e.target.value)} maxLength={500} placeholder="Ask AI or jump to…" />
+          </form>
+        </div>
         {groups.map((g) => (
           <nav key={g.label} aria-label={g.label}>
             <div className="nav-label">{g.label}</div>
             <div className="nav">
               {g.items.map((i) => (
-                <a key={i.href + i.label} className="nav-item" href={i.href} aria-current={isActive(path, i.href) ? 'page' : undefined} onClick={() => setDrawer(false)}>
+                <NavLink key={i.href + i.label} className="nav-item" href={i.href} current={isActive(path, i.href)} onClick={() => setDrawer(false)}>
                   <span className="nav-text">{i.label}</span>
                   {i.href === '/notifications' && sideUnread > 0 && <span className="count" aria-label={`${sideUnread} unread`}>{sideUnread > 99 ? '99+' : sideUnread}</span>}
-                </a>
+                </NavLink>
               ))}
             </div>
           </nav>
@@ -267,17 +321,17 @@ function WorkspaceShell({ path, onSignedOut, children }: { path: string; onSigne
           <span className="spacer" />
           {usage && <span className="ws-usage" title="AI drafts used today and your daily limit">AI today {usage.today}/{usage.daily}</span>}
           <ThemeToggle />
-          <a className="icon-btn" href="/notifications" aria-label={sideUnread ? `Notifications, ${sideUnread} unread` : 'Notifications'}>
+          <Link className="icon-btn" href="/notifications" aria-label={sideUnread ? `Notifications, ${sideUnread} unread` : 'Notifications'}>
             <svg className="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0" /></svg>
             {sideUnread > 0 && <span className="dot">{sideUnread > 9 ? '9+' : sideUnread}</span>}
-          </a>
+          </Link>
           <div className="rel" ref={profileRef}>
             <button type="button" className="avatar" style={{ border: 0, cursor: 'pointer' }} aria-haspopup="menu" aria-expanded={profileOpen} aria-label="Profile menu" onClick={() => setProfileOpen((v) => !v)}>{initials}</button>
             {profileOpen && (
               <div className="menu-pop" role="menu">
                 <p className="muted small" style={{ padding: '6px 10px', margin: 0 }}>{me?.email}</p>
-                <a role="menuitem" href="/account">Account and team</a>
-                <a role="menuitem" href="/security">Security</a>
+                <Link role="menuitem" href="/account" onClick={() => setProfileOpen(false)}>Account and team</Link>
+                <Link role="menuitem" href="/security" onClick={() => setProfileOpen(false)}>Security</Link>
                 <button role="menuitem" type="button" onClick={() => void signOut()}>Sign out</button>
               </div>
             )}

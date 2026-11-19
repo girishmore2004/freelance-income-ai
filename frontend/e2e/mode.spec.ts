@@ -143,3 +143,53 @@ test('a freelancer page never shows the client menu: a side that is off is offer
   await expect(sidebar.getByRole('link', { name: 'Find work' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Turn on the Client (hiring) side' })).toBeVisible();
 });
+
+test('from the Admin portal the bell and Notifications stay in Admin, and sidebar links open without a full page reload', async ({ page }) => {
+  await signIn(page);
+  let meCalls = 0;
+  await page.route('**/api/v1/**', async (route: Route) => {
+    const path = new URL(route.request().url()).pathname.replace(/\/+$/, '');
+    const reply = (body: string) => route.fulfill({ status: 200, contentType: 'application/json', body });
+    if (path === '/api/v1/me') { meCalls += 1; return reply(ok({ id: 'a1', roles: ['freelancer', 'client', 'admin'] })); }
+    if (path === '/api/v1/notifications/unread-count') return reply(ok({ unread: 3, by_side: { freelancer: 1, client: 1, both: 1 } }));
+    if (path === '/api/v1/notifications') {
+      return reply(ok([
+        { id: 'n1', title: 'Listing waiting for review', message: 'Staff notice', kind: 'moderation', link: '', read: false, created_at: '2026-11-19T00:00:00Z', side: null },
+        { id: 'n2', title: 'New proposal on Logo', message: 'Client notice', kind: 'proposal', link: '', read: false, created_at: '2026-11-19T00:00:00Z', side: 'client' },
+        { id: 'n3', title: 'Invoice paid', message: 'Freelancer notice', kind: 'payment', link: '', read: false, created_at: '2026-11-19T00:00:00Z', side: 'freelancer' },
+      ]));
+    }
+    return reply(JSON.stringify([]));
+  });
+
+  await page.goto('/admin');
+  const switcher = page.getByRole('group', { name: 'Workspace' });
+  const sidebar = page.getByRole('complementary', { name: 'Workspace navigation' });
+  await expect(switcher.getByRole('button', { name: 'Admin' })).toHaveAttribute('aria-pressed', 'true');
+  await page.evaluate(() => { (window as unknown as { __stay: boolean }).__stay = true; });
+
+  // The bell in the Admin portal counts staff and account notices only, and opens Notifications in Admin.
+  await page.getByRole('link', { name: 'Notifications, 1 unread' }).click();
+  await expect(page).toHaveURL(/\/notifications$/);
+  await expect(switcher.getByRole('button', { name: 'Admin' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(switcher.getByRole('button', { name: 'Freelancer' })).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator('html')).toHaveAttribute('data-side', 'admin');
+  await expect(sidebar.getByRole('link', { name: 'Disputes' })).toBeVisible();
+  await expect(sidebar.getByRole('link', { name: 'Find work' })).toHaveCount(0);
+  await expect(page.getByText('Listing waiting for review')).toBeVisible();
+  await expect(page.getByText('New proposal on Logo')).toHaveCount(0);
+  await expect(page.getByText('Invoice paid')).toHaveCount(0);
+  await expect(page.getByRole('link', { name: /Back to/ })).toHaveAttribute('href', '/admin');
+
+  // Moving between pages kept the same page alive (no full reload) and asked for the account once.
+  expect(await page.evaluate(() => (window as unknown as { __stay?: boolean }).__stay)).toBe(true);
+  expect(meCalls).toBeLessThanOrEqual(2);
+
+  // Choosing a side from the switch leaves Admin, and the account pages follow that side again.
+  await switcher.getByRole('button', { name: 'Client' }).click();
+  await expect(switcher.getByRole('button', { name: 'Client' })).toHaveAttribute('aria-pressed', 'true');
+  await page.goto('/notifications');
+  await expect(switcher.getByRole('button', { name: 'Client' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByText('New proposal on Logo')).toBeVisible();
+  await expect(page.getByText('Invoice paid')).toHaveCount(0);
+});

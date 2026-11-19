@@ -1,4 +1,5 @@
 'use client';
+import { BackToWorkspace } from '../back-to-workspace';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ApiError, api, useSessionToken } from '@/lib/api-client';
 import { PlanCard } from './plan-card';
@@ -167,7 +168,7 @@ export default function AccountPage() {
     <main className="shell">
       <div className="row between">
         <h2>Account &amp; roles</h2>
-        <a className="link" href="/workspace">← Back to workspace</a>
+        <BackToWorkspace />
       </div>
 
       <div aria-live="polite">

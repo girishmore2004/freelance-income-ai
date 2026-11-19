@@ -1,6 +1,6 @@
 {
   "name": "freelance-income-ai",
-  "version": "5.91.0",
+  "version": "5.92.0",
   "private": true,
   "scripts": {
     "dev": "next dev -H 0.0.0.0",

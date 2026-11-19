@@ -37,16 +37,22 @@ export function sideOfHref(href: string | null | undefined): Mode | null {
 /** Where a side starts after switching from a page of the other side. */
 export const HOME: Record<Mode, string> = { freelancer: '/workspace', client: '/workspace' };
 
+/** The side as last seen on this page, so pages opened inside the app start on the right side (no flicker). */
+let knownMode: Mode | undefined;
+
 export function readMode(): Mode | null {
   try {
     const v = localStorage.getItem(KEY);
-    return v === 'client' || v === 'freelancer' ? v : null;
+    const m = v === 'client' || v === 'freelancer' ? v : null;
+    if (m) knownMode = m;
+    return m;
   } catch {
     return null;
   }
 }
 
 export function saveMode(mode: Mode): void {
+  knownMode = mode;
   try {
     localStorage.setItem(KEY, mode);
   } catch {
@@ -61,7 +67,7 @@ export function saveMode(mode: Mode): void {
 
 /** The active side for pages both sides use; follows the sidebar switch live. */
 export function useMode(): Mode {
-  const [mode, setMode] = useState<Mode>('freelancer');
+  const [mode, setMode] = useState<Mode>(() => knownMode ?? 'freelancer');
   useEffect(() => {
     setMode(readMode() ?? 'freelancer');
     const onChange = (e: Event) => {
@@ -72,4 +78,79 @@ export function useMode(): Mode {
     return () => window.removeEventListener(MODE_EVENT, onChange);
   }, []);
   return mode;
+}
+
+/* ------------------------------------------------------------------ */
+/* Workspace: the two sides plus the staff-only Admin workspace        */
+/* ------------------------------------------------------------------ */
+
+export type Workspace = Mode | 'admin';
+export const WORKSPACE_EVENT = 'fia-workspace';
+const ADMIN_KEY = 'fia_admin_ws';
+
+/** Account pages every workspace links to; opened from Admin they stay in Admin. */
+export const ACCOUNT_PAGES = ['/notifications', '/account', '/security', '/contact'];
+
+/** Staff pages that always form the Admin workspace. Pure. */
+export function isAdminPath(pathname: string, search = ''): boolean {
+  const path = pathname.replace(/\/+$/, '') || '/';
+  const view = new URLSearchParams(search).get('view');
+  return path === '/admin' || path.startsWith('/admin/') || path === '/finance' || path.startsWith('/finance/') || (path === '/analytics' && view === 'platform') || (path === '/ai-agents' && view === 'admin');
+}
+
+/**
+ * Which workspace a page shows. Pure.
+ * - Staff pages are Admin.
+ * - Account pages (notifications, account, security, help) stay in Admin when the person came from Admin.
+ * - A page of one side shows that side; other shared pages follow the chosen side.
+ */
+export function workspaceFor(pathname: string, search: string, staff: boolean, adminSticky: boolean, mode: Mode): Workspace {
+  const path = pathname.replace(/\/+$/, '') || '/';
+  if (staff && isAdminPath(path, search)) return 'admin';
+  if (staff && adminSticky && ACCOUNT_PAGES.includes(path)) return 'admin';
+  return modeForPath(path, search) ?? mode;
+}
+
+export function readAdminSticky(): boolean {
+  try {
+    return localStorage.getItem(ADMIN_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function saveAdminSticky(on: boolean): void {
+  try {
+    if (on) localStorage.setItem(ADMIN_KEY, '1');
+    else localStorage.removeItem(ADMIN_KEY);
+  } catch {
+    // Storage unavailable: Admin lasts for this page only.
+  }
+}
+
+let knownWorkspace: Workspace | undefined;
+
+/** Called by the frame whenever the workspace it shows changes. */
+export function publishWorkspace(ws: Workspace): void {
+  knownWorkspace = ws;
+  try {
+    window.dispatchEvent(new CustomEvent(WORKSPACE_EVENT, { detail: ws }));
+  } catch {
+    // No window (server render).
+  }
+}
+
+/** The workspace the frame shows (freelancer, client or admin), for pages that list items of all kinds. */
+export function useWorkspace(): Workspace {
+  const mode = useMode();
+  const [ws, setWs] = useState<Workspace | undefined>(() => knownWorkspace);
+  useEffect(() => {
+    const onChange = (e: Event) => {
+      const next = (e as CustomEvent<Workspace>).detail;
+      if (next === 'admin' || next === 'client' || next === 'freelancer') setWs(next);
+    };
+    window.addEventListener(WORKSPACE_EVENT, onChange);
+    return () => window.removeEventListener(WORKSPACE_EVENT, onChange);
+  }, []);
+  return ws ?? mode;
 }

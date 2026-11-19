@@ -133,7 +133,37 @@ export type Json = Record<string, unknown>;
  * Arrays are returned as-is; objects get the envelope message merged in,
  * matching the existing page helpers so callers need no changes.
  */
+/**
+ * One account lookup shared by every caller on the page (frame, session check,
+ * pages): concurrent GET /api/v1/me calls share one request, and the answer is
+ * reused for a few seconds. Anything that can change roles or the session
+ * clears it. This removes the chain of identical requests on every page load.
+ */
+const ME_PATH = '/api/v1/me';
+const ME_TTL_MS = 10_000;
+let meInflight: Promise<unknown> | null = null;
+let meCache: { at: number; value: unknown } | null = null;
+export function forgetMe(): void {
+  meInflight = null;
+  meCache = null;
+}
+
 export async function api<T = any>(path: string, method = 'GET', body?: Json | FormData): Promise<T> {
+  if (method === 'GET' && path === ME_PATH) {
+    if (meCache && Date.now() - meCache.at < ME_TTL_MS) return meCache.value as T;
+    if (!meInflight) {
+      meInflight = rawApi<unknown>(path, method, body).then(
+        (value) => { meCache = { at: Date.now(), value }; meInflight = null; return value; },
+        (error) => { meInflight = null; meCache = null; throw error; }
+      );
+    }
+    return meInflight as Promise<T>;
+  }
+  if (method !== 'GET' && (path.startsWith('/api/v1/me/roles') || path.startsWith('/api/v1/auth/') || path.startsWith('/api/v1/organization-invitations/'))) forgetMe();
+  return rawApi<T>(path, method, body);
+}
+
+async function rawApi<T = any>(path: string, method = 'GET', body?: Json | FormData): Promise<T> {
   const isForm = typeof FormData !== 'undefined' && body instanceof FormData;
   const headers: Record<string, string> = {};
   if (body !== undefined && !isForm) headers['Content-Type'] = 'application/json';
@@ -189,17 +219,28 @@ export async function hasSession(): Promise<boolean> {
  * token, or COOKIE_SESSION in cookie mode) and '' otherwise. The setter
  * persists bearer tokens and clears storage on sign-out.
  */
+/**
+ * The session as last seen on this page. Undefined until the first check, so the
+ * first render after a full page load matches the server's HTML; after moving
+ * between pages inside the app it is known at once, so pages never flash
+ * "Sign in first" while the session is looked up again.
+ */
+let knownSession: string | undefined;
+
 export function useSessionToken(): [string, (value: string | null | undefined) => void] {
-  const [token, setTokenState] = useState('');
+  const [token, setTokenState] = useState(() => knownSession ?? '');
 
   useEffect(() => {
     let cancelled = false;
     if (AUTH_MODE === 'bearer') {
-      setTokenState(legacyToken());
+      knownSession = legacyToken();
+      setTokenState(knownSession);
     } else {
       purgeLegacyToken();
+      if (knownSession !== undefined) setTokenState(knownSession);
       void hasSession().then((ok) => {
-        if (!cancelled) setTokenState(ok ? COOKIE_SESSION : '');
+        knownSession = ok ? COOKIE_SESSION : '';
+        if (!cancelled) setTokenState(knownSession);
       });
     }
     // Other components using this hook (e.g. the workspace frame) follow sign-in and sign-out.
@@ -218,6 +259,8 @@ export function useSessionToken(): [string, (value: string | null | undefined) =
     const next = value || '';
     if (AUTH_MODE === 'bearer') storeLegacyToken(next);
     const state = AUTH_MODE === 'cookie' && next ? COOKIE_SESSION : next;
+    knownSession = state;
+    forgetMe();
     setTokenState(state);
     if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(SESSION_EVENT, { detail: state }));
   }, []);

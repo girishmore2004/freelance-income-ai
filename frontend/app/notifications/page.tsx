@@ -1,6 +1,7 @@
 'use client';
+import { BackToWorkspace } from '../back-to-workspace';
 import { NotificationSettings } from './settings';
-import { useMode } from '@/lib/mode';
+import { useWorkspace } from '@/lib/mode';
 import { useCallback, useEffect, useState } from 'react';
 import { api, useSessionToken } from '@/lib/api-client';
 
@@ -10,7 +11,8 @@ type Item = { id: string; title: string; message: string; kind: string; link: st
 
 export default function NotificationsPage() {
   // Only the active side's notifications (account-wide ones show on both).
-  const mode = useMode();
+  // Freelancer and Client show their side plus account notices; Admin shows staff and account notices only.
+  const mode = useWorkspace();
   const [token] = useSessionToken();
   const [items, setItems] = useState<Item[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -52,12 +54,12 @@ export default function NotificationsPage() {
     <main className="shell">
       <div className="row between">
         <h2>Notifications</h2>
-        <span className="row">{unread > 0 && <button className="btn" onClick={() => void markAll()}>Mark all as read</button>}<a className="link" href="/workspace">← Back to workspace</a></span>
+        <span className="row">{unread > 0 && <button className="btn" onClick={() => void markAll()}>Mark all as read</button>}<BackToWorkspace /></span>
       </div>
       {error && <p className="error" role="alert">{error}</p>}
       {loaded && items.length === 0 && !error && <p className="empty">No notifications yet.</p>}
       <ul aria-label="Notifications">
-        {items.filter((n) => !n.side || n.side === mode).map((n) => (
+        {items.filter((n) => (mode === 'admin' ? !n.side : !n.side || n.side === mode)).map((n) => (
           <li key={n.id} className="card item">
             <button className="link" onClick={() => void open(n)}><b>{n.read ? '' : '● '}{n.title}</b></button>
             <p className="muted">{n.message}{n.created_at ? ` · ${new Date(n.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}` : ''}</p>
