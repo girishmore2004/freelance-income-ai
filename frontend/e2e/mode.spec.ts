@@ -193,3 +193,83 @@ test('from the Admin portal the bell and Notifications stay in Admin, and sideba
   await expect(page.getByText('New proposal on Logo')).toBeVisible();
   await expect(page.getByText('Invoice paid')).toHaveCount(0);
 });
+
+test('the Client portal shows only client items: dashboard, next actions, analytics, AI agents and account', async ({ page }) => {
+  await signIn(page);
+  await page.addInitScript(() => localStorage.setItem('fia_mode', 'client'));
+  const ORG = { id: 'o1', name: 'Acme Studio', kind: 'company', industry: '', website: '', country: 'IN', preferred_language: 'en', status: 'active', membership_role: 'owner', billing: { name: '', email: '', address: '', tax_id: '' } };
+  await page.route('**/api/v1/**', async (route: Route) => {
+    const path = new URL(route.request().url()).pathname.replace(/\/+$/, '');
+    const reply = (body: string) => route.fulfill({ status: 200, contentType: 'application/json', body });
+    if (path === '/api/v1/me') return reply(ok({ id: 'u1', roles: ['freelancer', 'client'] }));
+    if (path === '/api/v1/me/identity') return reply(ok({ user_id: 'u1', roles: ['freelancer', 'client'], organizations: [ORG], client_side_enabled: true }));
+    if (path === '/api/v1/workspace/overview') {
+      return reply(ok({
+        as_of: '2026-11-19', metrics: { active_contracts_as_freelancer: 1, active_contracts_as_client: 1 }, goals: { monthly_income_target: 0, weekly_hours_target: 10, monthly_proposals_target: 4, monthly_outreach_target: 10, currency: 'INR' },
+        alerts: [
+          { id: 'a1', severity: 'high', title: 'Answer the offer: Logo for Acme', action: 'Accept or decline.', href: '/contracts#K1', side: 'freelancer' },
+          { id: 'a2', severity: 'high', title: 'Review delivery: Website, milestone 1', action: 'Approve or ask for a revision.', href: '/contracts#K2', side: 'client' },
+        ],
+        recommendations: [
+          { priority: 'medium', title: 'Behind your proposal target', reason: 'r', action: 'a', evidence: [], side: 'freelancer' },
+          { priority: 'high', title: 'Unblock your freelancers', reason: 'r', action: 'a', evidence: [], side: 'client' },
+        ],
+        deadlines: [], pending_release: [], apply_next: { invitations: [], external: [] }, data_policy: 'Your records only.',
+      }));
+    }
+    if (path === '/api/v1/agent/action-plan') {
+      return reply(ok({ actions: [
+        { priority: 1, category: 'pipeline', title: 'Answer the offer: Logo for Acme', reason: 'r', evidence: { type: 'contract', id: 'K1' }, suggested_action: 's', due_date: null, requires_human_approval: true, href: '/contracts#K1', side: 'freelancer' },
+        { priority: 1, category: 'delivery', title: 'Review delivery: Website, milestone 1', reason: 'r', evidence: { type: 'contract', id: 'K2' }, suggested_action: 's', due_date: null, requires_human_approval: true, href: '/contracts#K2', side: 'client' },
+      ] }));
+    }
+    if (path === '/api/v1/me/agent-usage') return reply(ok({ agents: {}, pending_approvals: 3 }));
+    if (path === '/api/v1/me/blocks') {
+      return reply(ok([
+        { id: 'B1', side: 'freelancer', name: 'Spammy Client', for_account: null, reason: '', created_at: '2026-11-18T00:00:00Z' },
+        { id: 'B2', side: 'client', name: 'Ravi K', for_account: 'Acme Studio', reason: '', created_at: '2026-11-18T00:00:00Z' },
+      ]));
+    }
+    return reply(JSON.stringify([]));
+  });
+  const switcher = page.getByRole('group', { name: 'Workspace' });
+
+  await page.goto('/workspace');
+  await expect(page.getByText('Client dashboard')).toBeVisible();
+  await expect(page.getByText('Review delivery: Website, milestone 1')).toBeVisible();
+  await expect(page.getByText('Answer the offer: Logo for Acme')).toHaveCount(0);
+  await expect(page.getByText('Unblock your freelancers')).toBeVisible();
+  await expect(page.getByText('Behind your proposal target')).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Business goals' })).toHaveCount(0);
+
+  await page.goto('/agent');
+  await expect(page.getByText('Review delivery: Website, milestone 1')).toBeVisible();
+  await expect(page.getByText('Answer the offer: Logo for Acme')).toHaveCount(0);
+
+  // Client analytics → no freelancer planning tools to fall into.
+  await page.goto('/analytics');
+  await expect(switcher.getByRole('button', { name: 'Client' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('heading', { name: 'Analytics', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Planning tools' })).toHaveCount(0);
+
+  await page.goto('/ai-agents');
+  await expect(page.getByText('My agent runs')).toBeVisible();
+  await expect(page.getByText('Drafts waiting for my approval')).toHaveCount(0);
+
+  // Account: the client account and the client side's blocks only.
+  await page.goto('/account');
+  await expect(page.getByRole('heading', { name: 'Client accounts' })).toBeVisible();
+  const blocked = page.getByRole('region', { name: 'Blocked' });
+  await expect(blocked.getByText('Ravi K', { exact: true })).toBeVisible();
+  await expect(blocked.getByText('Spammy Client')).toHaveCount(0);
+
+  // The same pages on the Freelancer side show the freelancer items instead.
+  await switcher.getByRole('button', { name: 'Freelancer' }).click();
+  await expect(switcher.getByRole('button', { name: 'Freelancer' })).toHaveAttribute('aria-pressed', 'true');
+  await page.goto('/analytics');
+  await expect(page.getByRole('link', { name: 'Planning tools' })).toBeVisible();
+  await page.goto('/account');
+  await expect(page.getByRole('heading', { name: 'Client accounts' })).toHaveCount(0);
+  await expect(page.getByText('Your client accounts and team are on the Client side')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Blocked' }).getByText('Spammy Client')).toBeVisible();
+});

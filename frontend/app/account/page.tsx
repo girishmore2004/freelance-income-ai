@@ -7,6 +7,7 @@ import { SuspensionCard } from './suspension-card';
 import { VerificationCard } from './verification-card';
 import { MyInvitations, TeamPanel } from './team-panel';
 import { BlocksPanel } from './blocks-panel';
+import { saveMode, useWorkspace } from '@/lib/mode';
 
 /**
  * Account & roles (Phase 1). One login, two public roles:
@@ -68,6 +69,8 @@ function messageOf(error: unknown): string {
 
 export default function AccountPage() {
   const [token] = useSessionToken();
+  // Account-wide parts (roles, plan, invitations) show everywhere; side parts follow the active portal.
+  const workspace = useWorkspace();
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -112,6 +115,8 @@ export default function AccountPage() {
       const result = active
         ? await api<{ message: string }>(`/api/v1/me/roles/${role}`, 'DELETE')
         : await api<{ message: string }>('/api/v1/me/roles', 'POST', { role });
+      // Turning a side on from the other side's portal opens that side, so its setup (client accounts) is right here.
+      if (!active && workspace !== 'admin' && workspace !== role) saveMode(role);
       return result.message;
     });
   }
@@ -183,7 +188,7 @@ export default function AccountPage() {
           <SuspensionCard />
           <MyInvitations onJoined={() => void load()} />
           <PlanCard />
-          <VerificationCard />
+          {workspace !== 'admin' && <VerificationCard side={workspace} />}
           <section className="card" aria-labelledby="roles-heading">
             <h3 id="roles-heading">Your roles</h3>
             <p className="muted">One login can both find work and hire. Your freelancer and client records stay separate.</p>
@@ -211,7 +216,8 @@ export default function AccountPage() {
             </div>
           </section>
 
-          {isClient && (
+          {workspace === 'freelancer' && isClient && <p className="muted small">Your client accounts and team are on the Client side (switch at the top).</p>}
+          {workspace === 'client' && isClient && (
             <section className="card" aria-labelledby="orgs-heading">
               <h3 id="orgs-heading">Client accounts</h3>
               <p className="muted">Projects and invoices will belong to a client account. Use an individual account for yourself, or a company account for a business.</p>
@@ -313,7 +319,7 @@ export default function AccountPage() {
         </>
       )}
 
-      {identity && <BlocksPanel />}
+      {identity && workspace !== 'admin' && <BlocksPanel side={workspace} />}
 
       {!loading && !identity && !error && <p className="muted">No account data.</p>}
       {!identity && error && (

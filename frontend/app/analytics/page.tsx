@@ -231,7 +231,7 @@ export default function AnalyticsPage() {
 
   return (
     <main className="shell">
-      <div className="row between"><h2>Analytics</h2><a className="link" href="/analytics/planning">Planning tools</a></div>
+      <div className="row between"><h2>Analytics</h2>{view === 'freelancer' && <a className="link" href="/analytics/planning">Planning tools</a>}</div>
       <p className="muted">Computed from your records on this platform. Small samples are marked; test-mode payments are labelled and never added to real money.</p>
       <h3>{TITLES[view]}</h3>
       {view === 'client' && orgs.length === 0 && <p className="empty">Create a client account on the Account page to see hiring numbers.</p>}

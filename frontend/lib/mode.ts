@@ -34,6 +34,17 @@ export function sideOfHref(href: string | null | undefined): Mode | null {
   return modeForPath(q < 0 ? pathAndSearch : pathAndSearch.slice(0, q), q < 0 ? '' : pathAndSearch.slice(q));
 }
 
+/**
+ * Whether an item (action, alert, recommendation) belongs on the active side:
+ * its own side when the server tags it, otherwise the side of the page it opens.
+ * Account-wide items show on both sides. Pure.
+ */
+export function onSide(item: { side?: Mode | null; href?: string | null }, mode: Mode): boolean {
+  if (item.side) return item.side === mode;
+  const side = sideOfHref(item.href);
+  return !side || side === mode;
+}
+
 /** Where a side starts after switching from a page of the other side. */
 export const HOME: Record<Mode, string> = { freelancer: '/workspace', client: '/workspace' };
 

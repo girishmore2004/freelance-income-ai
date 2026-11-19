@@ -2,7 +2,7 @@
 import { CapacityCard } from './capacity-card';
 import { useCallback, useEffect, useState } from 'react';
 import { api, useSessionToken } from '@/lib/api-client';
-import { useMode, type Mode } from '@/lib/mode';
+import { onSide, useMode, type Mode } from '@/lib/mode';
 import { formatMinor } from '@/lib/listing-format';
 
 /**
@@ -15,8 +15,8 @@ import { formatMinor } from '@/lib/listing-format';
 
 type Goals = { monthly_income_target: number; weekly_hours_target: number; monthly_proposals_target: number; monthly_outreach_target: number; currency: string };
 type Metrics = Record<string, number | null | Record<string, number>>;
-type Alert = { id: string; severity: string; title: string; action: string; href: string };
-type Rec = { priority: string; title: string; reason: string; action: string; evidence: { type: string; value: number }[] };
+type Alert = { id: string; severity: string; title: string; action: string; href: string; side?: Mode | null };
+type Rec = { priority: string; title: string; reason: string; action: string; evidence: { type: string; value: number }[]; side?: Mode | null };
 type ApplyNext = { external: Array<{ id: string; title: string; source: string; match_score: number; source_url: string }>; invitations: Array<{ listing_id: string; title: string }> };
 type Deadline = { contract_id: string; title: string; milestone: number; milestone_title: string; due_date: string; overdue: boolean; side: string };
 type Pending = { mode: string; amount_minor: number; milestones: number };
@@ -85,6 +85,9 @@ export default function WorkspacePage() {
   const num = (k: string) => (typeof m[k] === 'number' ? (m[k] as number) : m[k] === null ? '—' : '…');
   const released = (m.released_this_month_minor ?? {}) as Record<string, number>;
   const deadlines = (data?.deadlines ?? []).filter((d) => !d.side || d.side === mode);
+  // One side at a time: alerts and recommendations of the other side stay on that side's dashboard.
+  const alerts = (data?.alerts ?? []).filter((a) => onSide(a, mode));
+  const recommendations = (data?.recommendations ?? []).filter((r) => onSide(r, mode));
   const paid = (m.paid_this_month_by_currency ?? {}) as Record<string, number>;
   const setNum = (key: keyof Goals) => (e: { target: { value: string } }) => setGoal({ ...goal, [key]: Number(e.target.value) });
 
@@ -142,7 +145,7 @@ export default function WorkspacePage() {
 
       <section className="card">
         <h2>Needs attention</h2>
-        {(data?.alerts ?? []).length === 0 ? <p className="muted">Nothing urgent in your records.</p> : (data?.alerts ?? []).map((a) => (
+        {alerts.length === 0 ? <p className="muted">Nothing urgent in your records.</p> : alerts.map((a) => (
           <article className="item" key={a.id}><b>{a.title}</b><p>{a.action}</p><span className="muted">{a.severity === 'high' ? 'High priority' : 'Medium priority'}</span> {a.href && <a className="link" href={a.href}>Open</a>}</article>
         ))}
       </section>
@@ -150,12 +153,13 @@ export default function WorkspacePage() {
       <section className="card">
         <h2>Recommendations</h2>
         <p className="muted">Rules applied to your saved records — not AI guesses.</p>
-        {(data?.recommendations ?? []).map((r, i) => (
+        {recommendations.length === 0 && <p className="muted">Nothing to recommend on this side right now.</p>}
+        {recommendations.map((r, i) => (
           <article className="item" key={i}><b>{r.title}</b><p>{r.reason}</p><p>{r.action}</p><small className="muted">Priority: {r.priority} · Evidence: {r.evidence.map((e) => `${e.type.replace(/_/g, ' ')} = ${e.value}`).join(', ')}</small></article>
         ))}
       </section>
 
-      <section className="card" aria-labelledby="goals-heading">
+{mode === 'freelancer' &&       <section className="card" aria-labelledby="goals-heading">
         <h2 id="goals-heading">Business goals</h2>
         <p className="muted">Targets used for planning. They are goals, not predictions.</p>
         <div className="grid">
@@ -166,7 +170,7 @@ export default function WorkspacePage() {
           <div className="field"><label htmlFor="g-outreach">Monthly outreach target</label><input id="g-outreach" type="number" min="0" value={goal.monthly_outreach_target} onChange={setNum('monthly_outreach_target')} /></div>
         </div>
         <button className="btn primary" disabled={busy} onClick={() => void save()}>Save goals</button>
-      </section>
+      </section>}
 
       <section className="card">
         <h2>Workspace history</h2>

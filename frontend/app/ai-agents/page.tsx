@@ -109,7 +109,7 @@ export default function AiAgentsPage() {
           <article className="card"><small className="muted">My agent runs</small><div className="metric">{Object.values(usage.agents).reduce((n, u) => n + u.runs, 0)}</div></article>
           <article className="card"><small className="muted">Failed runs</small><div className="metric">{Object.values(usage.agents).reduce((n, u) => n + u.failed, 0)}</div></article>
           <article className="card"><small className="muted">AI calls today</small><div className="metric">{Object.values(usage.agents).reduce((n, u) => n + u.ai_calls_today, 0)}</div></article>
-          <article className="card"><small className="muted">Drafts waiting for my approval</small><div className="metric">{usage.pending_approvals}</div>{usage.pending_approvals > 0 && <a className="link" href="/?tab=approvals">Review</a>}</article>
+          {mode === 'freelancer' && !adminView && <article className="card"><small className="muted">Drafts waiting for my approval</small><div className="metric">{usage.pending_approvals}</div>{usage.pending_approvals > 0 && <a className="link" href="/?tab=approvals">Review</a>}</article>}
         </section>
       )}
 

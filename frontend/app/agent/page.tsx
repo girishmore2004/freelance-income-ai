@@ -1,11 +1,11 @@
 'use client';
-import { useMode, sideOfHref } from '@/lib/mode';
+import { useMode, onSide } from '@/lib/mode';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, useSessionToken } from '@/lib/api-client';
 
 /** Action planner: one prioritised, evidence-linked queue built from your records. Read-only. */
 
-type Action = { priority: number; category: string; title: string; reason: string; evidence: { type: string; id: string }; suggested_action: string; due_date: string | null; requires_human_approval: boolean; href?: string };
+type Action = { priority: number; category: string; title: string; reason: string; evidence: { type: string; id: string }; suggested_action: string; due_date: string | null; requires_human_approval: boolean; href?: string; side?: 'freelancer' | 'client' | null };
 type Plan = { as_of_date: string; actions: Action[]; total_actionable_records: number; returned_actions: number; policy: string };
 
 const LABELS: Record<string, string> = { pipeline: 'Pipeline', delivery: 'Delivery', approval: 'Approvals', communication: 'Communication', finance: 'Finance' };
@@ -38,8 +38,8 @@ export default function AgentPlanPage() {
     for (const a of plan?.actions ?? []) out[a.category] = (out[a.category] ?? 0) + 1;
     return out;
   }, [plan]);
-  // Only the active side's actions: an action belongs to the side of the page it opens.
-  const visible = (plan?.actions ?? []).filter((a) => filter === 'all' || a.category === filter).filter((a) => { const side = sideOfHref(a.href); return !side || side === mode; });
+  // Only the active side's actions (the server tags each action's side; older replies fall back to the page it opens).
+  const visible = (plan?.actions ?? []).filter((a) => filter === 'all' || a.category === filter).filter((a) => onSide(a, mode));
 
   if (!token) return <main className="shell"><p>Sign in first to see your action plan.</p><a className="btn" href="/">Back to dashboard</a></main>;
   return (

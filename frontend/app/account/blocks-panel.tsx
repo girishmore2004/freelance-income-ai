@@ -5,7 +5,8 @@ import { api } from '@/lib/api-client';
 /** The people and client accounts you blocked, with Unblock (U23). */
 type Block = { id: string; side: 'freelancer' | 'client'; name: string; for_account: string | null; reason: string; created_at: string };
 
-export function BlocksPanel() {
+/** Blocks made on the active side only (a freelancer's blocked clients, or a client account's blocked freelancers). */
+export function BlocksPanel({ side }: { side: 'freelancer' | 'client' }) {
   const [items, setItems] = useState<Block[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
@@ -36,15 +37,16 @@ export function BlocksPanel() {
   }
 
   if (items === null) return null;
+  const mine = items.filter((b) => b.side === side);
   return (
     <section className="card" aria-labelledby="blocks-heading">
       <h3 id="blocks-heading">Blocked</h3>
       <div aria-live="polite">{notice && <p className="success small">{notice}</p>}{error && <p className="error small" role="alert">{error}</p>}</div>
-      {items.length === 0 ? (
-        <p className="empty">You have not blocked anyone. Use “Block this client” on a project or “Block this freelancer” on a proposal.</p>
+      {mine.length === 0 ? (
+        <p className="empty">{side === 'freelancer' ? 'You have not blocked anyone on the freelancer side. Use “Block this client” on a project.' : 'You have not blocked anyone on the client side. Use “Block this freelancer” on a proposal.'}</p>
       ) : (
         <ul>
-          {items.map((b) => (
+          {mine.map((b) => (
             <li key={b.id} className="row between">
               <span>
                 <b>{b.name}</b> <span className="muted small">{b.side === 'freelancer' ? 'client account you blocked as a freelancer' : `freelancer blocked for ${b.for_account ?? 'your client account'}`} · {new Date(b.created_at).toLocaleDateString()}{b.reason ? ` · ${b.reason}` : ''}</span>

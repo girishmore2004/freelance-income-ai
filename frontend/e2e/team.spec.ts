@@ -15,6 +15,8 @@ test('an owner invites a teammate and gets a one-time join link', async ({ page 
   const invites: unknown[] = [];
   let pending: unknown[] = [];
   await signIn(page);
+  // Client accounts and teams live on the Client side of Account (one portal at a time, 2026-11-19).
+  await page.addInitScript(() => localStorage.setItem('fia_mode', 'client'));
   await page.route('**/api/v1/**', async (route: Route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname.replace(/\/+$/, '');

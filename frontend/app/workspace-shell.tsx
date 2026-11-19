@@ -4,8 +4,9 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { api, useSessionToken } from '@/lib/api-client';
 import { routeCommand } from '@/lib/command-route';
+import { isActive } from '@/lib/nav-active';
 import {
-  ACCOUNT_PAGES, HOME, isAdminPath, modeForPath, publishWorkspace, readAdminSticky, readMode, saveAdminSticky, saveMode, workspaceFor,
+  ACCOUNT_PAGES, HOME, MODE_EVENT, isAdminPath, modeForPath, publishWorkspace, readAdminSticky, readMode, saveAdminSticky, saveMode, workspaceFor,
   type Mode, type Workspace
 } from '@/lib/mode';
 import { ThemeToggle } from './theme-toggle';
@@ -28,7 +29,7 @@ const NO_FRAME = new Set(['/how-it-works', '/pricing', '/safety', '/help', '/joi
 const FREELANCER: NavGroup[] = [
   { label: 'Home', items: [{ href: '/workspace', label: 'Overview' }, { href: '/agent', label: 'Next actions' }, { href: '/inbox', label: 'Inbox' }, { href: '/calendar', label: 'Calendar' }, { href: '/analytics', label: 'Analytics' }] },
   { label: 'Profile', items: [{ href: '/profile', label: 'My profile and resume' }, { href: '/services?view=mine', label: 'My services' }] },
-  { label: 'Find work', items: [{ href: '/projects', label: 'Find work' }, { href: '/projects?view=saved', label: 'Saved projects' }, { href: '/', label: 'My proposals' }] },
+  { label: 'Find work', items: [{ href: '/projects', label: 'Find work' }, { href: '/projects?view=saved', label: 'Saved projects' }, { href: '/projects?view=proposals', label: 'My proposals' }, { href: '/', label: 'External applications' }] },
   { label: 'Work', items: [{ href: '/contracts', label: 'Offers and contracts' }, { href: '/earnings', label: 'Earnings and payouts' }] },
   { label: 'AI', items: [{ href: '/ai-agents', label: 'AI agent centre' }, { href: '/coach', label: 'Business coach' }] },
 ];
@@ -54,6 +55,13 @@ const ADMIN: NavGroup[] = [
   { label: 'AI', items: [{ href: '/ai-agents?view=admin', label: 'AI agents on/off' }] },
 ];
 const STAFF_ROLES = ['admin', 'finance', 'moderator'];
+/** Command bar examples for the active workspace only. */
+const COMMAND_EXAMPLES: Record<'freelancer' | 'client' | 'admin', string[]> = {
+  freelancer: ['What should I do next?', 'Summarise my earnings this month', 'Find projects for my skills', 'Which contract needs attention first?'],
+  client: ['What should I do next?', 'Post a new project', 'Find freelancers', 'My spend', 'Contracts to review'],
+  admin: ['Find a user', 'Platform earnings', 'Notifications', 'Security'],
+};
+
 const ROLES_HINT = 'fia_roles_hint';
 
 /** Last roles seen in this browser: only to draw the right menu at once; the server still checks every request. */
@@ -84,10 +92,6 @@ function sidesOf(roles: string[]): Record<Mode, boolean> {
 const SIDE_NAME: Record<Mode, string> = { freelancer: 'Freelancer', client: 'Client (hiring)' };
 const WORKSPACE_LABEL: Record<Workspace, string> = { freelancer: 'Freelancer workspace', client: 'Hiring workspace', admin: 'Admin workspace' };
 
-function isActive(path: string, href: string): boolean {
-  if (href === '/') return path === '/';
-  return path === href || path.startsWith(`${href}/`);
-}
 
 export function AppFrame({ children }: { children: ReactNode }) {
   const [token, setToken] = useSessionToken();
@@ -165,6 +169,18 @@ function WorkspaceShell({ path, onSignedOut, children }: { path: string; onSigne
     setMode(next);
     if (next !== saved) saveMode(next);
   }, [path, me]);
+
+  // A page that switches the side itself (e.g. turning on hiring on Account) moves the frame with it.
+  useEffect(() => {
+    const onMode = (e: Event) => {
+      const next = (e as CustomEvent<Mode>).detail;
+      if (next !== 'freelancer' && next !== 'client') return;
+      setMode(next);
+      setMe((m) => (m && !m.roles.includes(next) ? { ...m, roles: [...m.roles, next] } : m));
+    };
+    window.addEventListener(MODE_EVENT, onMode);
+    return () => window.removeEventListener(MODE_EVENT, onMode);
+  }, []);
 
   useEffect(() => {
     if (!profileOpen) return;
@@ -244,7 +260,7 @@ function WorkspaceShell({ path, onSignedOut, children }: { path: string; onSigne
 
   function submitCommand(e: FormEvent) {
     e.preventDefault();
-    window.location.href = routeCommand(command);
+    window.location.href = routeCommand(command, workspace);
   }
 
   async function signOut() {
@@ -279,7 +295,7 @@ function WorkspaceShell({ path, onSignedOut, children }: { path: string; onSigne
             <div className="nav-label">{g.label}</div>
             <div className="nav">
               {g.items.map((i) => (
-                <NavLink key={i.href + i.label} className="nav-item" href={i.href} current={isActive(path, i.href)} onClick={() => setDrawer(false)}>
+                <NavLink key={i.href + i.label} className="nav-item" href={i.href} current={isActive(path, i.href, query, g.items.map((x) => x.href))} onClick={() => setDrawer(false)}>
                   <span className="nav-text">{i.label}</span>
                   {i.href === '/notifications' && sideUnread > 0 && <span className="count" aria-label={`${sideUnread} unread`}>{sideUnread > 99 ? '99+' : sideUnread}</span>}
                 </NavLink>
@@ -311,11 +327,7 @@ function WorkspaceShell({ path, onSignedOut, children }: { path: string; onSigne
             <label htmlFor="ws-cmd" className="sr-only">AI command</label>
             <input id="ws-cmd" list="ws-cmd-examples" value={command} onChange={(e) => setCommand(e.target.value)} maxLength={500} placeholder="Ask AI or jump to… (e.g. what should I do next?)" />
             <datalist id="ws-cmd-examples">
-              <option value="What should I do next?" />
-              <option value="Summarise my earnings this month" />
-              <option value="Find projects for my skills" />
-              <option value="Which contract needs attention first?" />
-              <option value="Post a new project" />
+              {COMMAND_EXAMPLES[workspace].map((x) => <option key={x} value={x} />)}
             </datalist>
           </form>
           <span className="spacer" />

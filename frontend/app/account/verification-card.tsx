@@ -60,7 +60,8 @@ function Subject({ title, verifiedAt, latest, canRequest, onSubmit }: {
   );
 }
 
-export function VerificationCard() {
+/** Review requests for the active side only: the freelancer profile, or the client accounts. */
+export function VerificationCard({ side }: { side: 'freelancer' | 'client' }) {
   const [status, setStatus] = useState<Status | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -90,17 +91,19 @@ export function VerificationCard() {
     }
   }
 
-  if (!status || !status.available || (!status.freelancer && status.organizations.length === 0)) return null;
+  const showFreelancer = side === 'freelancer' && Boolean(status?.freelancer);
+  const orgs = side === 'client' ? status?.organizations ?? [] : [];
+  if (!status || !status.available || (!showFreelancer && orgs.length === 0)) return null;
   return (
     <section className="card" aria-labelledby="verify-heading">
       <h3 id="verify-heading">Account review</h3>
       <p className="muted">{status.meaning}</p>
       <div aria-live="polite">{notice && <p className="success">{notice}</p>}{error && <p className="error" role="alert">{error}</p>}</div>
-      {status.freelancer && (
+      {showFreelancer && status.freelancer && (
         <Subject title="Your freelancer profile" verifiedAt={status.freelancer.verified_at} latest={status.freelancer.latest} canRequest
           onSubmit={(links, note, reg) => request({ subject: 'freelancer', links, note, registration_number: reg })} />
       )}
-      {status.organizations.map((o) => (
+      {orgs.map((o) => (
         <Subject key={o.id} title={`Client account: ${o.name}`} verifiedAt={o.verified_at} latest={o.latest} canRequest={o.can_request}
           onSubmit={(links, note, reg) => request({ subject: 'client', organization_id: o.id, links, note, registration_number: reg })} />
       ))}

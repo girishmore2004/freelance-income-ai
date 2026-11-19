@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isAdminPath, modeForPath, sideOfHref, workspaceFor } from './mode.ts';
+import { isAdminPath, modeForPath, onSide, sideOfHref, workspaceFor } from './mode.ts';
 
 test('pages belong to one side or are shared', () => {
   assert.equal(modeForPath('/client/projects'), 'client');
@@ -48,4 +48,14 @@ test('the Admin workspace keeps staff on account pages and never leaks into the 
   assert.equal(isAdminPath('/finance/'), true);
   assert.equal(isAdminPath('/ai-agents', '?view=admin'), true);
   assert.equal(isAdminPath('/ai-agents'), false);
+});
+
+test('items follow their own side, then the page they open; account-wide items show on both sides', () => {
+  assert.equal(onSide({ side: 'freelancer', href: '/contracts#K1' }, 'client'), false);
+  assert.equal(onSide({ side: 'client', href: '/contracts#K1' }, 'client'), true);
+  assert.equal(onSide({ href: '/analytics/planning' }, 'client'), false);
+  assert.equal(onSide({ href: '/client/projects' }, 'freelancer'), false);
+  assert.equal(onSide({ href: '/contracts#K1' }, 'client'), true);
+  assert.equal(onSide({ side: null }, 'freelancer'), true);
+  assert.equal(onSide({}, 'client'), true);
 });

@@ -13,7 +13,7 @@ import { ExternalOpportunities } from './external-opportunities';
 import { SavedSearches } from './saved-searches';
 import { ProfileChecklist } from './profile-checklist';
 
-type View = 'all' | 'native' | 'external' | 'saved';
+type View = 'all' | 'native' | 'external' | 'saved' | 'proposals';
 type Saved = PublicListing & { closes_at: string | null; status: string; open: boolean; note: string; saved_at: string };
 
 /**
@@ -100,7 +100,7 @@ export default function ProjectsPage() {
     const initial = typeof window === 'undefined' ? '' : (new URLSearchParams(window.location.search).get('q') ?? '').slice(0, 100);
     if (initial) { setQuery(initial); setApplied(initial); }
     const v = new URLSearchParams(window.location.search).get('view');
-    if (v === 'native' || v === 'external' || v === 'saved') setView(v);
+    if (v === 'native' || v === 'external' || v === 'saved' || v === 'proposals') setView(v);
     void fetchPage(null, false, '', initial);
     // Alerts link to /projects?project=<id>: open that project even when it is not on the first page.
     const wanted = new URLSearchParams(window.location.search).get('project');
@@ -129,7 +129,7 @@ export default function ProjectsPage() {
     <main className="shell">
       {!token && <div className="row between" style={{ marginBottom: 12 }}><a href="/" className="row" style={{ gap: 8 }}><span className="logo" aria-hidden="true">F</span><b>Freelance Income AI</b></a><PublicNav /></div>}
       <div className="row between">
-        <h2>Find work</h2>
+        <h2>{view === 'proposals' ? 'My proposals' : 'Find work'}</h2>
         {token && <span className="row"><NotificationLink /><a className="link" href="/contracts">Contracts</a></span>}
       </div>
       {!token && <p className="card muted">You are browsing as a visitor. <a className="link" href="/#signin">Sign in</a> to send proposals and see invitations.</p>}
@@ -143,14 +143,15 @@ export default function ProjectsPage() {
         <>
           {token && (
             <>
-              <ProfileChecklist />
-              <MarketplaceVisibility />
+              {view !== 'proposals' && <ProfileChecklist />}
+              {view !== 'proposals' && <MarketplaceVisibility />}
               {notice && <p className="success" role="status">{notice}</p>}
               <Invitations onProposalSent={(message) => { setNotice(message); setRefreshKey((k) => k + 1); }} />
               <MyProposals refreshKey={refreshKey} />
+              {view === 'proposals' && <p className="muted small">Applications to external job sites are tracked in <a className="link" href="/">External applications</a>. <button className="link" type="button" onClick={() => setView('all')}>Find more work</button></p>}
             </>
           )}
-          <form className="row" onSubmit={search} role="search">
+          {view !== 'proposals' && <form className="row" onSubmit={search} role="search">
             <div className="field">
               <label htmlFor="q">Search</label>
               <input id="q" value={query} onChange={(e) => setQuery(e.target.value)} maxLength={100} placeholder="Title or outcome" />
@@ -163,8 +164,8 @@ export default function ProjectsPage() {
               </select>
             </div>
             <button className="btn primary" type="submit" disabled={loading}>Search</button>
-          </form>
-          {token && <SavedSearches query={applied} category={category} onOpen={(id) => void openProject(id)} />}
+          </form>}
+          {token && view !== 'proposals' && <SavedSearches query={applied} category={category} onOpen={(id) => void openProject(id)} />}
           {token && (
             <div className="ws-role" role="group" aria-label="Show" style={{ maxWidth: 460, margin: '4px 0 14px' }}>
               {([['all', 'All'], ['native', 'Native projects'], ['external', 'External opportunities'], ['saved', `Saved${saved && saved.length ? ` (${saved.length})` : ''}`]] as const).map(([v, label]) => (
