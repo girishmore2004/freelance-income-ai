@@ -266,11 +266,11 @@ function WorkspaceShell({ path, onSignedOut, children }: { path: string; onSigne
         {/* On phones the top bar has no room for search and the AI command; they live here instead. */}
         <div className="side-tools">
           <form role="search" onSubmit={(e) => { setDrawer(false); submitSearch(e); }}>
-            <label htmlFor="ws-search-m" className="sr-only">Global search</label>
+            <label htmlFor="ws-search-m" className="sr-only">Search from the menu</label>
             <input id="ws-search-m" type="search" value={search} onChange={(e) => setSearch(e.target.value)} maxLength={100} placeholder={workspace === 'client' ? 'Search freelancers and skills' : 'Search projects and skills'} />
           </form>
           <form onSubmit={(e) => { setDrawer(false); submitCommand(e); }}>
-            <label htmlFor="ws-cmd-m" className="sr-only">AI command</label>
+            <label htmlFor="ws-cmd-m" className="sr-only">Ask AI from the menu</label>
             <input id="ws-cmd-m" list="ws-cmd-examples" value={command} onChange={(e) => setCommand(e.target.value)} maxLength={500} placeholder="Ask AI or jump to…" />
           </form>
         </div>
