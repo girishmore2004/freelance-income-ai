@@ -30,6 +30,9 @@ test('a freelancer reviews the profile, sees capacity, gets a reply starter and 
   let proposalsOn = true;
   await mock(page, captured, (path, method, body) => {
     if (path === '/api/v1/me') return ok({ id: 'f1', roles: ['freelancer'] });
+    if (path === '/api/v1/profile') return ok({ full_name: 'Asha Rao', headline: 'World-class expert web developer', bio: '', skills: ['Next.js'], services: [], portfolio_links: [], hourly_rate: 1500, weekly_hours: 20, timezone: 'Asia/Kolkata' });
+    if (path === '/api/v1/me/portfolio-projects') return ok({ available: true, items: [{ title: 'Bakery ordering site', description: 'Online ordering.', skills: ['Next.js'], link: '', year: '2026' }] });
+    if (path === '/api/v1/me/suggested-projects') return ok({ native: [], external: [], note: 'No matches yet.' });
     if (path === '/api/v1/me/profile-review') {
       return ok({ score: 56, note: 'Advice from rules only. Nothing on your profile was changed.', skills_without_evidence: ['Kubernetes'],
         items: [{ severity: 'warn', field: 'headline', message: '"expert" is a strong claim with no completed contracts or reviews yet.' }],

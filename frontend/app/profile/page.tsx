@@ -63,7 +63,9 @@ export default function ProfilePage() {
 
   const loadSuggested = useCallback(async () => {
     try {
-      setSuggested(await api<Suggested>('/api/v1/me/suggested-projects'));
+      const r = await api<Suggested>('/api/v1/me/suggested-projects');
+      // Only a reply of the expected shape is shown; anything else must not take the page down.
+      setSuggested(r && Array.isArray(r.native) && Array.isArray(r.external) ? r : null);
     } catch {
       setSuggested(null);
     }
