@@ -1,4 +1,5 @@
 import type { Env } from "../types";
+import { rankEvidence, ruleAnswer } from "./agent-complete";
 import type { AuthenticatedSession } from "./session-service";
 import { authenticateRequest } from "./auth-context";
 import { body, database, safeHttpUrl, textArray } from "./core-routes";
@@ -203,6 +204,32 @@ async function coachEvidence(sql: Queryable, userId: string): Promise<Evidence[]
   const out: Evidence[] = [];
   const profile = (await tolerant(() => sql<Record<string, unknown>[]>`SELECT * FROM profiles WHERE user_id = ${userId} LIMIT 1`))?.[0];
   if (profile) out.push({ id: `profile:${String(profile.id ?? userId)}`, type: "profile", text: `headline=${String(profile.headline ?? "")}; skills=${String(profile.skills ?? "")}; services=${String(profile.services ?? "")}; hourly_rate=${String(profile.hourly_rate ?? "")}; weekly_hours=${String(profile.weekly_hours ?? "")}` });
+  // U24 (F11 retrieval): the person's own portfolio projects, services for sale and reviews received.
+  if (profile && typeof profile.portfolio_items_json === "string") {
+    try {
+      const items = JSON.parse(profile.portfolio_items_json);
+      if (Array.isArray(items)) {
+        items.slice(0, 20).forEach((p: Record<string, unknown>, i: number) => out.push({
+          id: `portfolio:${i + 1}`, type: "portfolio_project",
+          text: `${String(p.title ?? "")}; ${String(p.description ?? "").slice(0, 300)}; skills=${Array.isArray(p.skills) ? p.skills.join(", ") : ""}; year=${String(p.year ?? "")}${p.link ? `; link=${String(p.link)}` : ""}`
+        }));
+      }
+    } catch {
+      // Malformed portfolio data is skipped, never guessed.
+    }
+  }
+  const services = await tolerant(() => sql<{ id: string; title: string; status: string; category_slug: string }[]>`
+    SELECT id, title, status, category_slug FROM services WHERE freelancer_user_id = ${userId} ORDER BY updated_at DESC LIMIT 10
+  `);
+  for (const sv of services ?? []) out.push({ id: `service:${sv.id}`, type: "service", text: `${sv.title}; status=${sv.status}; category=${sv.category_slug}` });
+  const reviews = await tolerant(() => sql<{ id: string; rating: number; comment: string; title: string }[]>`
+    SELECT rv.id, rv.rating, rv.comment, v.title FROM contract_reviews rv
+    JOIN contracts c ON c.id = rv.contract_id JOIN contract_versions v ON v.contract_id = c.id AND v.version = COALESCE(c.agreed_version, c.current_version)
+    WHERE c.freelancer_user_id = ${userId} AND rv.reviewer_party = 'client'
+      AND EXISTS (SELECT 1 FROM contract_reviews rf WHERE rf.contract_id = c.id AND rf.reviewer_party = 'freelancer')
+    ORDER BY rv.created_at DESC LIMIT 10
+  `);
+  for (const r of reviews ?? []) out.push({ id: `review:${r.id}`, type: "review_received", text: `${r.title}; rating=${r.rating}/5; ${String(r.comment ?? "").slice(0, 300)}` });
   const goal = (await tolerant(() => sql<Record<string, unknown>[]>`SELECT * FROM business_goals WHERE user_id = ${userId} LIMIT 1`))?.[0];
   if (goal) out.push({ id: `business_goal:${String(goal.id)}`, type: "business_goal", text: `monthly_income_target=${String(goal.monthly_income_target)} ${String(goal.currency)}; weekly_hours_target=${String(goal.weekly_hours_target)}; monthly_proposals_target=${String(goal.monthly_proposals_target)}` });
   const contracts = await tolerant(() => sql<{ id: string; status: string; title: string; total_minor: string | number; currency: string; side: string }[]>`
@@ -361,13 +388,15 @@ export async function handleBusinessRoute(request: Request, env: Env, requestId:
     const question = typeof payload.question === "string" ? payload.question.trim() : "";
     if (!question || question.length > 2000) return failure("INVALID_QUESTION", "Ask a question of up to 2,000 characters.", 422, requestId);
     const agentCode = typeof payload.agent === "string" && /^[CFP]\d{1,2}$/.test(payload.agent) ? payload.agent : null;
-    let evidence = await coachEvidence(sql, userId);
+    // F11 retrieval (U24): the person's records ranked by how closely they match the question; the profile stays first.
+    const ranked = rankEvidence(question, await coachEvidence(sql, userId), 25);
+    let evidence: Array<Evidence & { relevance?: number }> = ranked;
     if (agentCode) {
       const extra = await agentEvidence(sql, userId, agentCode);
       if (!extra) return failure("NOT_FOUND", "Agent not found", 404, requestId);
-      evidence = [...extra, ...evidence].slice(0, 60);
+      evidence = [...extra, ...ranked].slice(0, 40);
     }
-    const sources = evidence.map((e) => ({ id: e.id, type: e.type, excerpt: e.text.slice(0, 320) }));
+    const sources = evidence.map((e) => ({ id: e.id, type: e.type, excerpt: e.text.slice(0, 320), relevance: e.relevance ?? null }));
     let answer: string;
     let mode: "llm_grounded_context" | "rules_fallback" = "rules_fallback";
     const inventory = () => {
@@ -378,7 +407,7 @@ export async function handleBusinessRoute(request: Request, env: Env, requestId:
     if (!evidence.length) {
       answer = "I do not have enough saved records to answer this reliably yet. Add your profile, goals, proposals or contracts, then ask again.";
     } else {
-      answer = `I could not use the AI model, so I have not generated a conclusion. I found ${inventory()}. Review the records below and ask a narrower question; no action has been taken.`;
+      answer = ruleAnswer(question, ranked);
       if (env.AI) {
         const fenceId = newFenceId();
         const system =

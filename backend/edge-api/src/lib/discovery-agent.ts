@@ -277,6 +277,10 @@ export async function runDiscovery(
   `;
   const knownIds = new Set(known.map((r) => `${r.source}:${r.external_id}`));
   const knownPrints = new Set(known.map((r) => r.source_fingerprint).filter(Boolean));
+  // P5: listings taken down at their owner's request are never collected again (table from migration 0079).
+  const takenDown = new Set(
+    (await sql<{ source_code: string; source_url: string }[]>`SELECT source_code, source_url FROM source_takedowns LIMIT 5000`.catch(() => [])).map((r) => `${r.source_code}|${r.source_url}`)
+  );
 
   const preferred = jsonList(profile.preferred_work_types);
   const result: DiscoveryResult = {
@@ -296,6 +300,10 @@ export async function runDiscovery(
   for (const job of jobs) {
     if ((result.new_matches ?? 0) >= MAX_NEW_PER_RUN) break;
     if (!job.title || !job.url || !job.external_id) continue;
+    if (takenDown.has(`${job.source}|${safeHttpUrl(job.url) || job.url}`)) {
+      result.skipped_duplicates = (result.skipped_duplicates ?? 0) + 1;
+      continue;
+    }
 
     const print = await fingerprint(job);
     if (knownIds.has(`${job.source}:${job.external_id}`) || knownPrints.has(print)) {

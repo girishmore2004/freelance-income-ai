@@ -15,6 +15,8 @@
  *   timezone      0–5   same timezone, or the listing does not ask for one
  */
 
+import { availabilityFit } from "./agent-complete";
+
 export const NEWCOMER_DAYS = 60;
 export const SHORTLIST_SIZE = 10;
 export const NEWCOMER_SLOTS = 2;
@@ -36,6 +38,8 @@ export interface CandidateRow {
   user_created_at: Date | string;
   /** Revealed client reviews (optional: only the matching queries load them). */
   rating_avg?: number | string | null;
+  /** Weekly limits of the freelancer's active hourly contracts (U24, F7 capacity feeding C2). */
+  booked_hours?: number | string | null;
   rating_count?: number | string | null;
   /** Set when staff reviewed the freelancer's public evidence (U10, migration 0071). Never an identity check. */
   verified_at?: Date | string | null;
@@ -195,10 +199,10 @@ export function evaluateCandidate(listing: ListingForMatch, row: CandidateRow, n
     reasons.push(`Offers ${listing.category_name.toLowerCase()} services`);
   }
 
-  // Availability
-  const hours = row.weekly_hours ?? 0;
-  breakdown.availability = hours >= 20 ? 10 : hours >= 10 ? 7 : 3;
-  if (hours >= 20) reasons.push(`Available about ${hours} hours a week`);
+  // Availability: free hours after active hourly contracts (F7 capacity feeds matching).
+  const fit = availabilityFit(row.weekly_hours, Number(row.booked_hours ?? 0) || 0);
+  breakdown.availability = fit.points;
+  if (fit.reason) reasons.push(fit.reason);
 
   // Timezone
   if (!listing.timezone || listing.timezone === row.timezone) {

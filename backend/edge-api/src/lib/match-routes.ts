@@ -59,7 +59,11 @@ async function visibleCandidates(sql: Queryable, excludeOrganizationId: string):
   return sql<CandidateRow[]>`
     SELECT p.user_id, p.full_name, p.headline, p.skills, p.services, p.minimum_budget, p.hourly_rate,
            p.currency, p.weekly_hours, p.timezone, p.dealbreakers, u.created_at AS user_created_at, (to_jsonb(p)->>'verified_at') AS verified_at,
-           rt.rating_avg, rt.rating_count
+           rt.rating_avg, rt.rating_count,
+           (SELECT COALESCE(sum(CASE WHEN COALESCE(to_jsonb(v)->>'billing_json', '') LIKE '{%'
+                                     THEN COALESCE(((to_jsonb(v)->>'billing_json')::jsonb->>'weekly_limit_hours')::int, 0) ELSE 0 END), 0)::int
+              FROM contracts ct JOIN contract_versions v ON v.contract_id = ct.id AND v.version = COALESCE(ct.agreed_version, ct.current_version)
+             WHERE ct.freelancer_user_id = p.user_id AND ct.status = 'active') AS booked_hours
     FROM profiles p
     JOIN users u ON u.id = p.user_id
     JOIN user_roles r ON r.user_id = p.user_id AND r.role = 'freelancer' AND r.status = 'active'
@@ -84,7 +88,11 @@ export async function visibleCandidate(sql: Queryable, freelancerUserId: string)
   const rows = await sql<CandidateRow[]>`
     SELECT p.user_id, p.full_name, p.headline, p.skills, p.services, p.minimum_budget, p.hourly_rate,
            p.currency, p.weekly_hours, p.timezone, p.dealbreakers, u.created_at AS user_created_at, (to_jsonb(p)->>'verified_at') AS verified_at,
-           rt.rating_avg, rt.rating_count
+           rt.rating_avg, rt.rating_count,
+           (SELECT COALESCE(sum(CASE WHEN COALESCE(to_jsonb(v)->>'billing_json', '') LIKE '{%'
+                                     THEN COALESCE(((to_jsonb(v)->>'billing_json')::jsonb->>'weekly_limit_hours')::int, 0) ELSE 0 END), 0)::int
+              FROM contracts ct JOIN contract_versions v ON v.contract_id = ct.id AND v.version = COALESCE(ct.agreed_version, ct.current_version)
+             WHERE ct.freelancer_user_id = p.user_id AND ct.status = 'active') AS booked_hours
     FROM profiles p
     JOIN users u ON u.id = p.user_id
     JOIN user_roles r ON r.user_id = p.user_id AND r.role = 'freelancer' AND r.status = 'active'

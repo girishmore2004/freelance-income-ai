@@ -1,4 +1,5 @@
 import type { Env } from "../types";
+import { notificationGroup } from "./agent-complete";
 import type { AuthenticatedSession } from "./session-service";
 import { authenticateRequest } from "./auth-context";
 import { body, database, textArray } from "./core-routes";
@@ -25,8 +26,15 @@ export interface NotificationInput {
 }
 
 export async function notifyUsers(sql: Queryable, userIds: Array<string | null | undefined>, n: NotificationInput): Promise<void> {
-  const recipients = [...new Set(userIds.filter((u): u is string => Boolean(u)))];
+  let recipients = [...new Set(userIds.filter((u): u is string => Boolean(u)))];
   if (!recipients.length) return;
+  // P9 (U24): people can switch off a notification group; account and safety notices are always delivered.
+  const group = notificationGroup(n.kind);
+  if (group !== "account") {
+    const muted = await mutedRecipients(sql, recipients, group);
+    if (muted.size) recipients = recipients.filter((u) => !muted.has(u));
+    if (!recipients.length) return;
+  }
   const write = async (q: Queryable) => {
     for (const userId of recipients) {
       await q`
@@ -43,6 +51,20 @@ export async function notifyUsers(sql: Queryable, userIds: Array<string | null |
     else await write(sql);
   } catch (error) {
     console.warn(JSON.stringify({ service: "freelance-income-ai-api-edge", event: "notify.failed", kind: n.kind, error: error instanceof Error ? error.message : "unknown" }));
+  }
+}
+
+/** Recipients who switched this group off. Never throws: before migration 0079 nobody is muted. */
+async function mutedRecipients(sql: Queryable, userIds: string[], group: string): Promise<Set<string>> {
+  const read = (q: Queryable) => q<{ user_id: string }[]>`
+    SELECT np.user_id FROM notification_preferences np WHERE np.user_id = ANY(${textArray(userIds)}::text[]) AND np.group_key = ${group} AND np.in_app = false
+  `;
+  try {
+    const candidate = sql as { savepoint?: (cb: (tx: Queryable) => Promise<{ user_id: string }[]>) => Promise<{ user_id: string }[]> };
+    const rows = typeof candidate.savepoint === "function" ? await candidate.savepoint(read) : await read(sql);
+    return new Set(rows.map((r) => r.user_id));
+  } catch {
+    return new Set();
   }
 }
 

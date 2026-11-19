@@ -1,4 +1,7 @@
 import type { Env } from "../types";
+import { triageMessage } from "./agent-complete";
+import type { Triage } from "./agent-complete";
+import { recordTrustSignal } from "./agent-complete-routes";
 import { NOT_AVAILABLE, isBlocked } from "./fair-proposals";
 import type { AuthenticatedSession } from "./session-service";
 import { authenticateRequest } from "./auth-context";
@@ -146,6 +149,8 @@ export type InboxThread = {
   /** Which of the user's roles the thread belongs to, so the app can show one side at a time. */
   side: "freelancer" | "client";
   href: string;
+  /** F9 (U24): what the other side's last message asks for, with a reply starter to edit. Only when it is waiting for you. */
+  triage?: Triage | null;
 };
 
 /** Newest first; "needs reply" = the last message came from the other side. Optional text filter. */
@@ -225,7 +230,8 @@ export async function handleDiscussionRoute(request: Request, env: Env, requestI
   try {
     if (path === "/api/v1/inbox") {
       const q = (url.searchParams.get("q") ?? "").slice(0, 100);
-      return success(await inbox(sql, userId, q), "Inbox", 200, requestId);
+      const threads = await inbox(sql, userId, q);
+      return success(threads.map((t) => ({ ...t, triage: t.from_other_side ? triageMessage(t.last_message) : null })), "Inbox", 200, requestId);
     }
     if (!(await isEnabled(env, sql, FLAGS.clientMarketplace, false))) return failure("FEATURE_DISABLED", "The client marketplace is not open yet.", 403, requestId);
     if (!(await tableExists(sql, "proposal_messages"))) return failure("MIGRATION_PENDING", "Discussions need database migration 0070.", 503, requestId);
@@ -266,6 +272,11 @@ export async function handleDiscussionRoute(request: Request, env: Env, requestI
         if (text.length > MAX_MESSAGE) return failure("MESSAGE_TOO_LONG", `Keep messages under ${MAX_MESSAGE} characters.`, 422, requestId);
         const findings = screenText(text);
         if (findings.length) {
+          // P1: recorded for staff review (patterns only; nothing happens to the person automatically).
+          await recordTrustSignal(sql, userId, findings.map((f) => f.code), {
+            type: "proposal", id: access.id, organization_id: access.organization_id,
+            counterpart_user_id: access.party === "client" ? access.freelancer_user_id : null
+          });
           return failure("MESSAGE_NOT_ALLOWED", "Keep contact and payment on the platform: remove phone numbers, emails, messaging apps or payment requests.", 422, requestId, [{ codes: findings.map((f) => f.code) }]);
         }
         const id = crypto.randomUUID();

@@ -82,7 +82,10 @@ export async function handleSourceRoute(request: Request, env: Env, requestId: s
     }
 
     const switches = ready
-      ? await sql<Array<{ code: string; enabled: boolean; note: string; updated_at: Date }>>`SELECT code, enabled, note, updated_at FROM discovery_sources`
+      ? await sql<Array<{ code: string; enabled: boolean; note: string; updated_at: Date; terms_url: string | null; permitted_fields: string | null; reviewed_at: string | null }>>`
+          SELECT code, enabled, note, updated_at, (to_jsonb(d)->>'terms_url') AS terms_url, (to_jsonb(d)->>'permitted_fields') AS permitted_fields, (to_jsonb(d)->>'reviewed_at') AS reviewed_at
+          FROM discovery_sources d
+        `
       : [];
     const stats = (await tableExists(sql, "discovery_source_runs"))
       ? await sql<Stats[]>`
@@ -128,7 +131,14 @@ export async function handleSourceRoute(request: Request, env: Env, requestId: s
         last_success_at: iso(st?.last_success_at),
         last_error: st?.last_error ?? null,
         last_error_at: iso(st?.last_error_at),
-        freshness: { open: fr?.open ?? 0, under_3_days: fr?.under_3 ?? 0, days_3_to_14: fr?.d3_14 ?? 0, over_14_days: fr?.over_14 ?? 0, unknown: fr?.unknown ?? 0 }
+        freshness: { open: fr?.open ?? 0, under_3_days: fr?.under_3 ?? 0, days_3_to_14: fr?.d3_14 ?? 0, over_14_days: fr?.over_14 ?? 0, unknown: fr?.unknown ?? 0 },
+        // P5 (U24): the source's terms as recorded by an admin; a review is due when never done or older than 180 days.
+        terms: {
+          terms_url: sw?.terms_url ?? "",
+          permitted_fields: sw?.permitted_fields ?? "",
+          reviewed_at: iso(sw?.reviewed_at ? new Date(sw.reviewed_at) : null),
+          review_due: !sw?.reviewed_at || Date.now() - new Date(sw.reviewed_at).getTime() > 180 * 86_400_000
+        }
       };
     });
     const others = fresh.filter((f) => !SOURCE_CATALOGUE.some((c) => c.code === f.source)).map((f) => ({ source: f.source, open: f.open, stored_7d: f.stored_7d }));

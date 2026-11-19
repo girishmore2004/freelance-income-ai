@@ -1,4 +1,5 @@
 import type { Env } from "../types";
+import { evalSummary, runEvals } from "./agent-evals";
 import type { AuthenticatedSession } from "./session-service";
 import { authenticateRequest } from "./auth-context";
 import { body, database, jsonList, safeHttpUrl } from "./core-routes";
@@ -275,6 +276,8 @@ export async function handleAgentToolRoute(request: Request, env: Env, requestId
         SELECT operation, count(*)::int AS calls FROM ai_usage_events WHERE created_at > now() - interval '7 days' GROUP BY operation
       `.catch(() => []);
       const tests = selfTests(now);
+      // P8 (U24): the per-agent evaluation sets, also run in CI.
+      const evals = evalSummary(runEvals(now, { priceAdvice, interviewPrep }));
       // ?live=1 (admin): one tiny model call to prove the AI provider answers. Costs one small call.
       let liveModel: { ok: boolean; ms: number; detail: string } | null = null;
       if (url.searchParams.get("live") === "1" && roles.includes("admin")) {
@@ -301,7 +304,11 @@ export async function handleAgentToolRoute(request: Request, env: Env, requestId
           runs_7d: r.reduce((n, x) => n + Number(x.runs), 0), failed_7d: r.reduce((n, x) => n + Number(x.failed), 0),
           last_run_at: last ? new Date(last).toISOString() : null,
           self_test: test ? { ok: test.ok, detail: test.detail } : null,
-          verdict: !a.enabled ? "switched_off" : test && !test.ok ? "failing" : ["planned", "blocked"].includes(a.status) ? a.status : test?.ok ? "working" : "no_test"
+          evaluation: evals[a.code] ?? null,
+          verdict: !a.enabled ? "switched_off"
+            : (test && !test.ok) || (evals[a.code] && evals[a.code].failed.length) ? "failing"
+            : ["planned", "blocked"].includes(a.status) ? a.status
+            : test?.ok || evals[a.code] ? "working" : "no_test"
         };
       });
       return success(
@@ -309,6 +316,7 @@ export async function handleAgentToolRoute(request: Request, env: Env, requestId
           ai_provider: { configured: Boolean(env.AI), model: env.WORKERS_AI_MODEL || "@cf/meta/llama-3.1-8b-instruct", calls_7d: ai.reduce((n, x) => n + Number(x.calls), 0), by_operation: ai, live_check: liveModel },
           items,
           passed: tests.filter((t) => t.ok).length, total: tests.length,
+          evaluation: { cases: Object.values(evals).reduce((n, e) => n + e.cases, 0), passed: Object.values(evals).reduce((n, e) => n + e.passed, 0), agents: Object.keys(evals).length },
           note: "Self-tests run each rules-based agent on fixed examples with known answers. Model-based agents (F4, F9, F11, C1, F3 extraction) also need the AI provider; their fallbacks are tested here."
         },
         "Agent health", 200, requestId

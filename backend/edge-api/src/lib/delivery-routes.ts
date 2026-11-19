@@ -1,4 +1,5 @@
 import type { Env } from "../types";
+import { recordTrustSignal } from "./agent-complete-routes";
 import { notifyUsers, organizationManagers } from "./notify";
 import type { AuthenticatedSession } from "./session-service";
 import { authenticateRequest } from "./auth-context";
@@ -232,6 +233,11 @@ export async function handleDeliveryRoute(
       if (text.length > MAX_MESSAGE) return failure("MESSAGE_TOO_LONG", `Keep messages under ${MAX_MESSAGE} characters.`, 422, requestId);
       const findings = screenText(text);
       if (findings.length) {
+        // P1: a refused attempt to share contact details or move payment is recorded for staff review.
+        await recordTrustSignal(sql, userId, findings.map((f) => f.code), {
+          type: "contract", id: contract.id, organization_id: contract.organization_id,
+          counterpart_user_id: side.party === "client" ? contract.freelancer_user_id : null
+        });
         return failure(
           "MESSAGE_NOT_ALLOWED",
           "Keep contact and payment on the platform: remove phone numbers, emails, messaging apps or payment requests.",

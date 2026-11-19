@@ -21,6 +21,7 @@ import { handleServiceRoute } from "./lib/service-routes";
 import { autoApproveTimesheets, handleTimesheetRoute } from "./lib/timesheet-routes";
 import { handleAgentToolRoute } from "./lib/agent-tools-routes";
 import { handleFairRoute } from "./lib/fair-routes";
+import { expireStaleOpportunities, handleAgentCompleteRoute, runBalanceDigest } from "./lib/agent-complete-routes";
 import { handleOpsRoute } from "./lib/ops-routes";
 import { handleSupportRoute } from "./lib/support-routes";
 import { handleListingRoute } from "./lib/listing-routes";
@@ -414,7 +415,7 @@ async function routeRequest(
   }
 
   // Project reference files, verification queues and source management (U10).
-  for (const handler of [handleListingFileRoute, handleVerificationRoute, handleSourceRoute, handleTaskRoute, handleGrowthRoute, handleStatementRoute, handleProfileRoute, handleServiceRoute, handleTimesheetRoute, handleAgentToolRoute, handleFairRoute]) {
+  for (const handler of [handleListingFileRoute, handleVerificationRoute, handleSourceRoute, handleTaskRoute, handleGrowthRoute, handleStatementRoute, handleProfileRoute, handleServiceRoute, handleTimesheetRoute, handleAgentToolRoute, handleFairRoute, handleAgentCompleteRoute]) {
     const response = await handler(request, env, requestId);
     if (response) {
       return response;
@@ -768,6 +769,11 @@ async function runScheduledProgressDigests(env: Env): Promise<void> {
     if (digests) console.log(JSON.stringify({ service: "freelance-income-ai-api-edge", event: "jobs_digest.sent", users: digests }));
     const approved = await autoApproveTimesheets(sql, now);
     if (approved) console.log(JSON.stringify({ service: "freelance-income-ai-api-edge", event: "timesheets.auto_approved", weeks: approved }));
+    // F1: hide stale external jobs (reversible); P7: weekly supply-and-demand summary to admins (deduplicated per week).
+    const stale = await expireStaleOpportunities(sql, now);
+    if (stale) console.log(JSON.stringify({ service: "freelance-income-ai-api-edge", event: "opportunities.stale_hidden", count: stale }));
+    const balance = await runBalanceDigest(sql, now);
+    if (balance) console.log(JSON.stringify({ service: "freelance-income-ai-api-edge", event: "balance_digest.sent", admins: balance }));
   } finally {
     await sql.end({ timeout: 5 });
   }
