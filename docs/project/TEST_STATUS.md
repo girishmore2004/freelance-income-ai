@@ -1,5 +1,12 @@
 # Test Status
 
+## U27 — Client profile, Security fixed, sides from the switch (GitHub CI verified, 2026-11-19, release 5.94.0)
+- Edge: vitest **439 passed** (new: automatic client account named after the person or email, created once, not for freelancer-only accounts or while hiring is closed). Edge API CI success @ afeb428.
+- PostgreSQL through the real Worker: a new "Hire" account → three identity requests at the same moment all returned 200 and saw the same single individual client account (owner, IN); 1 membership in the database; editing it to a company with billing details 200; a freelancer-only account had none until hiring was turned on, then one. Security: sessions 200 (list), two-factor status 200 (the local test database first lacked `mfa_recovery_codes` from migration 0045; production has it).
+- Security page defect found and fixed: it read the API reply as a bare list, so the page crashed ("This page couldn't load"); there was no browser test for it. Now on the shared API client with a new e2e.
+- Frontend: typecheck clean; unit 49 passed. New `e2e/client-profile.spec.ts` (client profile edit with a field error, Projects without a setup step; Security with sessions and two-factor status). Changed on purpose: `account.spec.ts` (no roles section; hiring added from the top switch, closed → message) and the owner test in `mode.spec.ts` (Freelancer added from the switch).
+- GitHub CI: `main` @ fcccdb4 pytest **596 passed**; Playwright **99 passed** (bearer), **100 passed** (cookie).
+
 ## U26 — one portal at a time (GitHub CI verified, 2026-11-19, release 5.93.0)
 - Edge: vitest **436 passed** (new: top items per side so one side cannot crowd out the other; the action-plan fixture carries a side). Typecheck clean; bundle builds. Edge API CI success @ 4659c54.
 - PostgreSQL: action plans for 19 local accounts carried a side on every action (13 actions: invitations, drafts and disputes as freelancer; deliveries, proposals and disputes as client); an open dispute appeared as Freelancer for one party and Client for the other. Sign-up through the real Worker: Find work → [freelancer], Hire → [client], Both → [client, freelancer], no choice → [freelancer], unknown choice 422.
