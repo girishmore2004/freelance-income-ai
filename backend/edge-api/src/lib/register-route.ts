@@ -28,13 +28,13 @@ function database(env: Env) {
 
 function validate(
   body: unknown
-): { email: string; password: string; intent: "freelancer" | "client" } | null {
+): { email: string; password: string; intent: "freelancer" | "client" | "both" } | null {
   if (!body || typeof body !== "object") return null;
 
   const { email, password, intent } = body as Record<string, unknown>;
 
-  // Optional: which public role to start with (Master Plan: "Find work" / "Hire").
-  if (intent !== undefined && intent !== "freelancer" && intent !== "client") {
+  // Optional: which public role(s) to start with (Master Plan: "Find work" / "Hire" / both).
+  if (intent !== undefined && intent !== "freelancer" && intent !== "client" && intent !== "both") {
     return null;
   }
 
@@ -55,7 +55,7 @@ function validate(
   // Same limits as the original FastAPI RegisterIn schema.
   if (password.length < 12 || password.length > 128) return null;
 
-  return { email: normalized, password, intent: intent === "client" ? "client" : "freelancer" };
+  return { email: normalized, password, intent: intent === "client" || intent === "both" ? intent : "freelancer" };
 }
 
 /**
@@ -117,7 +117,7 @@ export async function handleRegisterRoute(
   if (!input) {
     return failure(
       "INVALID_REGISTER_INPUT",
-      "Provide a valid email, a password of 12 to 128 characters and, optionally, intent \"freelancer\" or \"client\".",
+      "Provide a valid email, a password of 12 to 128 characters and, optionally, intent \"freelancer\", \"client\" or \"both\".",
       422,
       requestId
     );
@@ -125,7 +125,7 @@ export async function handleRegisterRoute(
 
   const sql = database(env);
 
-  if (input.intent === "client" && !(await isEnabled(env, sql, FLAGS.clientMarketplace, false))) {
+  if (input.intent !== "freelancer" && !(await isEnabled(env, sql, FLAGS.clientMarketplace, false))) {
     await sql.end({ timeout: 5 });
     return failure(
       "FEATURE_DISABLED",
@@ -171,12 +171,14 @@ export async function handleRegisterRoute(
         )
       `;
 
-      // Public role chosen at sign-up (migration 0050). The other role can be
-      // activated later from the account page.
-      await tx`
-        INSERT INTO user_roles (id, user_id, role, status, granted_by, created_at, updated_at)
-        VALUES (${crypto.randomUUID()}, ${userId}, ${input.intent}, 'active', 'self', now(), now())
-      `;
+      // Public role(s) chosen at sign-up (migration 0050): the workspace shows only
+      // these sides. The other role can be activated later from the account page.
+      for (const role of input.intent === "both" ? (["freelancer", "client"] as const) : [input.intent]) {
+        await tx`
+          INSERT INTO user_roles (id, user_id, role, status, granted_by, created_at, updated_at)
+          VALUES (${crypto.randomUUID()}, ${userId}, ${role}, 'active', 'self', now(), now())
+        `;
+      }
 
       if (requireVerification) {
         // Issued and emailed inside the transaction: if the provider rejects
