@@ -1,7 +1,7 @@
 'use client';
 import { BackToWorkspace } from '../back-to-workspace';
 import {useEffect,useState} from 'react';
-import {API_BASE as API,authFetch,useSessionToken,sessionFromAuthResponse} from '@/lib/api-client';
+import {api,useSessionToken,sessionFromAuthResponse} from '@/lib/api-client';
 type Session={id:string;created_at:string;expires_at:string;revoked:boolean};
 type MfaSetup={secret:string;otpauth_uri:string;recovery_codes:string[];message:string};
 export default function SecurityPage(){
@@ -10,8 +10,9 @@ export default function SecurityPage(){
  const [setupPassword,setSetupPassword]=useState('');const [mfaCode,setMfaCode]=useState('');
  const [disablePassword,setDisablePassword]=useState('');const [disableCode,setDisableCode]=useState('');
  const [mfaSetup,setMfaSetup]=useState<MfaSetup|null>(null);const [rotatePassword,setRotatePassword]=useState('');const [rotateCode,setRotateCode]=useState('');const [newRecoveryCodes,setNewRecoveryCodes]=useState<string[]>([]);
- async function request(path:string,method='GET',body?:Record<string,string>){const response=await authFetch(API+path,{method,headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},...(body?{body:JSON.stringify(body)}:{})});const result=await response.json().catch(()=>({detail:'Invalid server response'}));if(!response.ok)throw new Error(result.detail||'Request failed');return result}
- async function refresh(){const rows=await request('/api/v1/auth/sessions');setSessions(rows);const status=await request('/api/v1/auth/mfa/status');setMfaEnabled(status.enabled);setRecoveryRemaining(status.recovery_codes_remaining)}
+ // The shared client unwraps the API reply ({success, data}) and works in bearer and cookie sessions.
+ async function request(path:string,method='GET',body?:Record<string,string>):Promise<any>{return api(path,method,body)}
+ async function refresh(){const rows=await request('/api/v1/auth/sessions');setSessions(Array.isArray(rows)?rows:[]);const status=await request('/api/v1/auth/mfa/status');setMfaEnabled(Boolean(status?.enabled));setRecoveryRemaining(Number(status?.recovery_codes_remaining??0))}
  
  useEffect(()=>{if(token)refresh().catch((e:any)=>setMessage(e.message))},[token]);
  async function run(fn:()=>Promise<void>){setBusy(true);setMessage('');try{await fn()}catch(e:any){setMessage(e.message)}finally{setBusy(false)}}

@@ -117,8 +117,9 @@ export default function ClientProjectsPage() {
     try {
       const identity = await api<{ roles: string[]; organizations: Org[]; client_side_enabled: boolean }>('/api/v1/me/identity');
       if (!identity.client_side_enabled) { setClosed('Posting projects opens when the client marketplace launches.'); return; }
-      if (!identity.roles.includes('client')) { setClosed('Turn on the "Hire freelancers" role on the Account page first.'); return; }
-      if (!identity.organizations.length) { setClosed('Create a client account on the Account page first.'); return; }
+      if (!identity.roles.includes('client')) { setClosed('Hiring is not on for your account yet. Use “+ Client” in the top bar to start hiring.'); return; }
+      // Every client gets an individual client account automatically (API); this shows only if that could not happen.
+      if (!identity.organizations.length) { setClosed('Your client profile could not be prepared yet. Open Client profile and reload.'); return; }
       setClosed('');
       setOrgs(identity.organizations);
       const selected = orgId || identity.organizations[0].id;
@@ -263,14 +264,14 @@ export default function ClientProjectsPage() {
     <main className="shell">
       <div className="row between">
         <h2>Client projects</h2>
-        <span className="row"><NotificationLink /><a className="link" href="/contracts">Contracts</a><a className="link" href="/account">← Account &amp; roles</a></span>
+        <span className="row"><NotificationLink /><a className="link" href="/contracts">Contracts</a><a className="link" href="/client/profile">Client profile</a></span>
       </div>
       <div aria-live="polite">
         {notice && <p className="success">{notice}</p>}
         {error && <p className="error" role="alert">{error}</p>}
       </div>
       {loading && <p className="muted">Loading…</p>}
-      {closed && !loading && <div className="card"><p className="muted">{closed}</p><a className="btn" href="/account">Open Account &amp; roles</a></div>}
+      {closed && !loading && <div className="card"><p className="muted">{closed}</p>{closed.includes('Client profile') && <a className="btn" href="/client/profile">Open Client profile</a>}</div>}
 
       {!closed && !loading && orgs.length > 0 && (
         <>

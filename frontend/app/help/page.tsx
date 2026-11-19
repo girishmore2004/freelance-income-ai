@@ -3,7 +3,7 @@ import { PublicNav } from '../public-nav';
 export const metadata = { title: 'Help · Freelance Income AI', description: 'Answers to common questions about Freelance Income AI.' };
 
 const FAQ: Array<[string, string]> = [
-  ['Can one account both find work and hire?', 'Yes. Turn on the "Hire freelancers" role on the Account page. Your freelancer and client records stay separate.'],
+  ['Can one account both find work and hire?', 'Yes. Choose “Both” when you sign up, or later use “+ Client” or “+ Freelancer” in the top bar. Your freelancer and client records stay separate.'],
   ['Does the AI send anything for me?', 'No. AI drafts proposals, briefs and checklists. You review and approve before anything is sent, published or accepted.'],
   ['What happens when I reach my AI limit?', 'Proposals and briefs are drafted from templates instead. Your plan and usage are on the Account page.'],
   ['How does a contract become active?', 'The client sends an offer. It becomes active only when both of you accept the same version of the terms. Either side can propose changes; each change is a new version.'],

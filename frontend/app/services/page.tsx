@@ -275,7 +275,7 @@ function MyServices({ categories, onOpen }: { categories: Category[]; onOpen: (i
   }
   return (
     <section aria-label="My services">
-      {!canSell && <p className="muted">Turn on the freelancer role on your <a className="link" href="/account">Account</a> page to sell services.</p>}
+      {!canSell && <p className="muted">Use “+ Freelancer” in the top bar to start selling services.</p>}
       <div className="row between"><p className="muted">Up to {max} services. New and edited services are checked; flagged ones wait for a moderator.</p>
         <button className="btn primary" type="button" disabled={!canSell || (items?.length ?? 0) >= max || categories.length === 0} onClick={() => setEditing('new')}>New service</button></div>
       {notice && <p className="success" role="status">{notice}</p>}

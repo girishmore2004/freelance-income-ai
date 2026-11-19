@@ -59,24 +59,30 @@ async function mockApi(page: Page, state: MockState): Promise<void> {
   });
 }
 
-test('shows roles from the API and keeps hiring closed while the flag is off', async ({ page }) => {
+// Changed on purpose (founder, 2026-11-19): there is no roles section on Account; sides are added from the top switch.
+test('adds no hiring side while the client marketplace is closed, and Account has no roles section', async ({ page }) => {
   const state: MockState = { roles: ['freelancer'], organizations: [], clientSideEnabled: false, requests: [] };
   await mockApi(page, state);
   await page.goto('/account');
 
-  await expect(page.getByRole('heading', { name: 'Your roles' })).toBeVisible();
-  await expect(page.getByText('Hiring opens when the client marketplace launches.')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Turn on' })).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Account', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Your roles' })).toHaveCount(0);
+  const switcher = page.getByRole('group', { name: 'Workspace' });
+  await switcher.getByRole('button', { name: 'Start hiring too' }).click();
+  await expect(page.getByText('Hiring features are not open yet.')).toBeVisible();
+  expect(state.roles).toEqual(['freelancer']);
   await expect(page.getByRole('heading', { name: 'Client accounts' })).toHaveCount(0);
 });
 
-test('turns on hiring, shows a field error from the API, then creates a client account', async ({ page }) => {
+test('adds hiring from the top switch, shows a field error from the API, then creates a client account', async ({ page }) => {
   const state: MockState = { roles: ['freelancer'], organizations: [], clientSideEnabled: true, requests: [] };
   await mockApi(page, state);
   await page.goto('/account');
 
-  await page.getByRole('button', { name: 'Turn on' }).click();
-  await expect(page.getByText('The client role is active.')).toBeVisible();
+  // The Client side is added from the top switch and opens at once.
+  const switcher = page.getByRole('group', { name: 'Workspace' });
+  await switcher.getByRole('button', { name: 'Start hiring too' }).click();
+  await expect(switcher.getByRole('button', { name: 'Client', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByText('You have no client accounts yet. Create one below.')).toBeVisible();
 
   await page.getByLabel('Account type').selectOption('company');

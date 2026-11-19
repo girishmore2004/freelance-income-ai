@@ -79,8 +79,8 @@ test('staff open the Admin workspace from the switch, and the theme toggle switc
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
 });
 
-// Changed on purpose (founder decision 2026-11-19): the switch shows only the sides the account has; another side is turned on from Account.
-test('an owner account with admin and client roles sees only Client and Admin, turns Freelancer on from Account, and the calendar stays on the chosen side', async ({ page }) => {
+// Changed on purpose (founder decisions 2026-11-19): the switch shows only the sides the account has; another side is added from the switch itself.
+test('an owner account with admin and client roles sees only Client and Admin, adds Freelancer from the switch, and the calendar stays on the chosen side', async ({ page }) => {
   await signIn(page);
   let roles = ['admin', 'client'];
   const activated: unknown[] = [];
@@ -114,10 +114,9 @@ test('an owner account with admin and client roles sees only Client and Admin, t
   await expect(page.getByRole('link', { name: 'AI coach' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Post a project' }).first()).toBeVisible();
 
-  // Freelancer is turned on from Account → Your roles, then appears in the switch as the active side.
-  await page.goto('/account');
-  await page.getByRole('button', { name: 'Turn on' }).click();
-  await expect(switcher.getByRole('button', { name: 'Freelancer' })).toHaveAttribute('aria-pressed', 'true');
+  // Freelancer is added from the top switch ("+ Freelancer") and becomes the active side.
+  await switcher.getByRole('button', { name: 'Start finding work too' }).click();
+  await expect(switcher.getByRole('button', { name: 'Freelancer', exact: true })).toHaveAttribute('aria-pressed', 'true');
   expect(activated).toEqual([{ role: 'freelancer' }]);
   await page.goto('/workspace');
   await expect(page.getByText('Freelancer dashboard')).toBeVisible();

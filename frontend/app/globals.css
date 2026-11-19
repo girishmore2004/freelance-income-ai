@@ -138,6 +138,8 @@ ul{padding-left:20px}
 .ws-role .side-f[aria-pressed=true]{background:var(--f-btn)}
 .ws-role .side-c[aria-pressed=true]{background:var(--c-btn)}
 .ws-role .side-a[aria-pressed=true]{background:var(--a-btn)}
+.ws-role .side-add{color:var(--muted);font-weight:500;border:1px dashed var(--line2)}
+.ws-role .side-add:hover{color:var(--text)}
 .side-dot{position:absolute;top:3px;right:5px;width:7px;height:7px;border-radius:50%;background:var(--bad)}
 .ws-body{display:flex;flex-direction:column;min-width:0}
 .ws-top{position:sticky;top:0;z-index:20;height:var(--top-h);display:flex;align-items:center;gap:10px;padding:0 20px;background:var(--glass);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}

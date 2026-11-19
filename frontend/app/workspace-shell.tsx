@@ -6,7 +6,7 @@ import { api, useSessionToken } from '@/lib/api-client';
 import { routeCommand } from '@/lib/command-route';
 import { isActive } from '@/lib/nav-active';
 import {
-  ACCOUNT_PAGES, HOME, MODE_EVENT, ROLES_EVENT, isAdminPath, modeForPath, publishWorkspace, readAdminSticky, readMode, saveAdminSticky, saveMode, workspaceFor,
+  ACCOUNT_PAGES, HOME, MODE_EVENT, ROLES_EVENT, announceRole, isAdminPath, modeForPath, publishWorkspace, readAdminSticky, readMode, saveAdminSticky, saveMode, workspaceFor,
   type Mode, type Workspace
 } from '@/lib/mode';
 import { ThemeToggle } from './theme-toggle';
@@ -35,6 +35,7 @@ const FREELANCER: NavGroup[] = [
 ];
 const CLIENT: NavGroup[] = [
   { label: 'Home', items: [{ href: '/workspace', label: 'Overview' }, { href: '/agent', label: 'Next actions' }, { href: '/inbox', label: 'Inbox' }, { href: '/calendar', label: 'Calendar' }, { href: '/analytics', label: 'Analytics' }] },
+  { label: 'Profile', items: [{ href: '/client/profile', label: 'Client profile' }] },
   { label: 'Hiring', items: [{ href: '/client/projects', label: 'Projects and proposals' }, { href: '/freelancers', label: 'Find freelancers' }, { href: '/services', label: 'Buy a service' }] },
   { label: 'Work', items: [{ href: '/contracts', label: 'Contracts and deliveries' }, { href: '/earnings?view=client', label: 'Spend and statements' }] },
   { label: 'AI', items: [{ href: '/ai-agents', label: 'AI agent centre' }] },
@@ -209,7 +210,7 @@ function WorkspaceShell({ path, onSignedOut, children }: { path: string; onSigne
   const has = sidesOf(roles);
   const staff = roles.some((r) => STAFF_ROLES.includes(r));
   const workspace: Workspace = workspaceFor(path, query, staff, adminSticky, mode);
-  // The switch shows only the sides the account has (sign-up: Find work, Hire or both; more from Account → Your roles).
+  // The switch shows only the sides the account has (sign-up: Find work, Hire or both; another side is added with "+ Client" or "+ Freelancer" in the switch).
   // A page of a side that is off still shows that side's button while it is open (with its "Turn on" offer).
   const known = Boolean(me) || roles.length > 0;
   const showSide: Record<Mode, boolean> = {
@@ -237,6 +238,8 @@ function WorkspaceShell({ path, onSignedOut, children }: { path: string; onSigne
       const result = await api<{ roles: string[] }>('/api/v1/me/roles', 'POST', { role: side });
       const nextRoles = Array.isArray(result?.roles) ? result.roles : [...roles, side];
       setMe((m) => (m ? { ...m, roles: nextRoles } : m));
+      try { localStorage.setItem(ROLES_HINT, JSON.stringify(nextRoles)); } catch { /* hint only */ }
+      announceRole(side, true);
       return true;
     } catch (e) {
       setRoleError(e instanceof Error ? e.message : `Could not turn on the ${SIDE_NAME[side]} side.`);
@@ -334,13 +337,16 @@ function WorkspaceShell({ path, onSignedOut, children }: { path: string; onSigne
           <button type="button" className="icon-btn menu" aria-label="Open navigation" aria-expanded={drawer} onClick={() => setDrawer(true)}>
             <svg className="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
           </button>
-          {(showSide.freelancer || showSide.client || staff) && <div className="ws-role" role="group" aria-label="Workspace">
+          {(Boolean(me) || showSide.freelancer || showSide.client || staff) && <div className="ws-role" role="group" aria-label="Workspace">
             {showSide.freelancer && <button type="button" className="side-f" disabled={roleBusy} aria-pressed={workspace === 'freelancer'} onClick={() => void switchMode('freelancer')}>
               Freelancer{otherUnread('freelancer') > 0 && <span className="side-dot" aria-label={`${otherUnread('freelancer')} unread`} />}
             </button>}
             {showSide.client && <button type="button" className="side-c" disabled={roleBusy} aria-pressed={workspace === 'client'} onClick={() => void switchMode('client')}>
               Client{otherUnread('client') > 0 && <span className="side-dot" aria-label={`${otherUnread('client')} unread`} />}
             </button>}
+            {/* A side the account does not have yet is added here in one click (no roles page). */}
+            {known && me && !showSide.freelancer && <button type="button" className="side-add" disabled={roleBusy} aria-label="Start finding work too" title="Add the Freelancer side to find work" onClick={() => void switchMode('freelancer')}>+ Freelancer</button>}
+            {known && me && !showSide.client && <button type="button" className="side-add" disabled={roleBusy} aria-label="Start hiring too" title="Add the Client side to hire freelancers" onClick={() => void switchMode('client')}>+ Client</button>}
             {staff && <button type="button" className="side-a" aria-pressed={workspace === 'admin'} onClick={() => void switchMode('admin')}>Admin</button>}
           </div>}
           <form className="ws-search" role="search" onSubmit={submitSearch}>
