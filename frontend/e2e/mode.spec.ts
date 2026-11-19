@@ -277,7 +277,7 @@ test('the Client portal shows only client items: dashboard, next actions, analyt
   await page.goto('/account');
   await expect(page.getByRole('heading', { name: 'Client accounts' })).toHaveCount(0);
   await expect(page.getByText('Your client accounts and team are on the Client side')).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Blocked' }).getByText('Spammy Client')).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Blocked' }).getByText('Spammy Client', { exact: true })).toBeVisible();
 });
 
 test('the switch shows only the sides chosen at sign-up: Find work → Freelancer, Hire → Client, both → both', async ({ page }) => {
