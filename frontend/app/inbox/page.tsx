@@ -72,14 +72,15 @@ export default function InboxPage() {
         {shown.map((t) => (
           <li key={`${t.kind}:${t.id}`} className="card item">
             <div className="row between">
-              <span><span className="badge">{THREAD_KIND_LABELS[t.kind]}</span> <b>{t.title}</b>{t.from_other_side && <span className="badge"> Waiting for you</span>}</span>
+              <span><span className="badge">{THREAD_KIND_LABELS[t.kind]}</span> <b>{t.title}</b>{t.from_other_side && <span className="badge"> Waiting for you</span>}{t.triage && <span className="badge native"> {t.triage.label}</span>}</span>
               <span className="muted">{new Date(t.last_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</span>
             </div>
             <p className="muted">{t.last_message}</p>
+            {t.triage && t.kind !== 'proposal' && <p className="small">Suggested start of your reply: <i>{t.triage.reply}</i></p>}
             {t.kind === 'proposal'
               ? <button className="link" type="button" aria-expanded={open === t.id} onClick={() => setOpen(open === t.id ? null : t.id)}>{open === t.id ? 'Close conversation' : 'Open conversation'}</button>
               : <a className="link" href={t.href.startsWith('/') ? t.href : '/'}>{t.kind === 'contract' ? 'Open contract' : 'Open application'}</a>}
-            {open === t.id && t.kind === 'proposal' && <DiscussionPanel proposalId={t.id} />}
+            {open === t.id && t.kind === 'proposal' && <DiscussionPanel proposalId={t.id} draft={t.triage?.reply} />}
           </li>
         ))}
       </ul>

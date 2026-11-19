@@ -1530,6 +1530,11 @@ class DiscoverySource(Base):
     note: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     updated_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+    # P5 source compliance (0079): the source's terms as recorded by an admin.
+    terms_url: Mapped[str] = mapped_column(String(1200), nullable=False, default="", server_default="")
+    permitted_fields: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_by_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
 
 class DiscoverySourceRun(Base):
@@ -2316,3 +2321,53 @@ class MarketplaceBlock(Base):
     created_by_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     reason: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
+
+class TrustSignal(Base):
+    """A refused attempt to share contact details or move payment off the platform (P1, 0079)."""
+
+    __tablename__ = "trust_signals"
+    __table_args__ = (
+        CheckConstraint("kind IN ('contact_attempt', 'payment_attempt')", name="ck_trust_signals_kind"),
+        CheckConstraint("context_type IN ('proposal', 'contract')", name="ck_trust_signals_context"),
+        Index("ix_trust_signals_user", "user_id", "created_at"),
+        Index("ix_trust_signals_org", "organization_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    context_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    context_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    counterpart_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    organization_id: Mapped[str | None] = mapped_column(ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
+
+class SourceTakedown(Base):
+    """A listing removed at its owner's request; never collected again (P5, 0079)."""
+
+    __tablename__ = "source_takedowns"
+    __table_args__ = (UniqueConstraint("source_code", "source_url", name="uq_source_takedowns_link"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    source_code: Mapped[str] = mapped_column(String(40), nullable=False)
+    source_url: Mapped[str] = mapped_column(String(1200), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    created_by_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    removed_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)
+
+
+class NotificationPreference(Base):
+    """A notification group a person switched on or off (P9, 0079). No row = on."""
+
+    __tablename__ = "notification_preferences"
+    __table_args__ = (
+        CheckConstraint("group_key IN ('proposals', 'work', 'payments', 'alerts', 'team')", name="ck_notification_preferences_group"),
+    )
+
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    group_key: Mapped[str] = mapped_column(String(30), primary_key=True)
+    in_app: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=sql_text("true"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now, server_default=func.now(), nullable=False)

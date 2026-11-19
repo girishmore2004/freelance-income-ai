@@ -18,9 +18,10 @@ function when(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-export function DiscussionPanel({ proposalId }: { proposalId: string }) {
+export function DiscussionPanel({ proposalId, draft }: { proposalId: string; draft?: string }) {
   const [data, setData] = useState<Discussion | null>(null);
-  const [text, setText] = useState('');
+  // F9 (U24): a reply starter from the inbox triage; the person finishes and sends it themselves.
+  const [text, setText] = useState(draft ?? '');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);

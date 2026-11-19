@@ -1,4 +1,6 @@
 'use client';
+import { SpendForecast } from './spend-forecast';
+import { BalanceAlertsPanel } from '../admin/agent-tools';
 import { useMode } from '@/lib/mode';
 import { Fragment, useCallback, useEffect, useState, type ReactNode } from 'react';
 import { ApiError, api, useSessionToken } from '@/lib/api-client';
@@ -244,6 +246,8 @@ export default function AnalyticsPage() {
         {view === 'client' && client && <ClientView data={client} />}
         {view === 'platform' && platform && <PlatformView data={platform} />}
       </section>
+      {view === 'client' && orgId && <SpendForecast organizationId={orgId} />}
+      {view === 'platform' && staff && <BalanceAlertsPanel />}
     </main>
   );
 }

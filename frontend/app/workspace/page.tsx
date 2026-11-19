@@ -1,4 +1,5 @@
 'use client';
+import { CapacityCard } from './capacity-card';
 import { useCallback, useEffect, useState } from 'react';
 import { api, useSessionToken } from '@/lib/api-client';
 import { useMode, type Mode } from '@/lib/mode';
@@ -128,6 +129,8 @@ export default function WorkspacePage() {
           ))}
         </section>}
       </div>
+
+      {mode === 'freelancer' && <CapacityCard />}
 
       {mode === 'freelancer' && <section className="card">
         <h2>Earnings this month</h2>

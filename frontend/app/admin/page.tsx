@@ -5,6 +5,7 @@ import { formatBudget } from '@/lib/listing-format';
 import { TrustCases } from './trust-cases';
 import { AuditLogPanel, HealthPanel, JobsPanel, SupportPanel, UsersPanel } from './staff-tools';
 import { SourcesPanel, VerificationQueue } from './review-tools';
+import { BalanceAlertsPanel, RiskSignalsPanel, SourceComplianceTools } from './agent-tools';
 import { CategoriesPanel, ServiceModeration } from './catalogue-tools';
 
 /**
@@ -158,6 +159,9 @@ export default function AdminPage() {
       {overview && <VerificationQueue />}
       {overview && <UsersPanel />}
       {overview && <SourcesPanel />}
+      {overview && <SourceComplianceTools />}
+      {overview && <RiskSignalsPanel />}
+      {overview && <BalanceAlertsPanel />}
       {overview && <CategoriesPanel />}
       {overview?.is_admin && <AuditLogPanel />}
       {overview?.is_admin && <HealthPanel />}

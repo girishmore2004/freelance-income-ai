@@ -80,6 +80,8 @@ ul{padding-left:20px}
 .badge.s-ready,.badge.s-won{background:var(--good-soft);color:var(--good);border-color:var(--good-line)}
 .badge.s-applied,.badge.s-replied{background:var(--warn-soft);color:var(--warn);border-color:var(--warn-line)}
 .badge.s-lost,.badge.s-skipped{background:var(--bad-soft);color:var(--bad);border-color:var(--bad-line)}
+.badge.danger{background:var(--bad-soft);color:var(--bad);border-color:var(--bad-line)}
+.meter{height:8px;border-radius:999px;background:var(--surface2);border:1px solid var(--line);overflow:hidden;margin:6px 0 10px}.meter>span{display:block;height:100%;background:var(--accent)}
 .bar{height:6px;border-radius:99px;background:var(--line);overflow:hidden;margin:8px 0}
 .bar span{display:block;height:100%;border-radius:99px;background:var(--accent)}
 .link{background:none;border:0;padding:0;color:var(--accent);cursor:pointer;text-align:left;font-size:inherit;font-weight:500}

@@ -1,4 +1,5 @@
 'use client';
+import { ProfileReview } from './profile-review';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ApiError, api, useSessionToken } from '@/lib/api-client';
 import { applyPicks, defaultPicks, scoreLabel, splitList, type Picks, type ProfileForm, type ResumeProject, type ResumeSuggestions } from '@/lib/profile-import';
@@ -303,6 +304,8 @@ export default function ProfilePage() {
           </>
         )}
       </section>
+
+      <ProfileReview />
 
       <section className="card" aria-label="Projects for you">
         <div className="row between"><h3>Projects for you</h3><button className="btn" type="button" onClick={() => void loadSuggested()}>Refresh</button></div>

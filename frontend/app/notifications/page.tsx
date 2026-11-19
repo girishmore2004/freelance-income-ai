@@ -1,4 +1,5 @@
 'use client';
+import { NotificationSettings } from './settings';
 import { useMode } from '@/lib/mode';
 import { useCallback, useEffect, useState } from 'react';
 import { api, useSessionToken } from '@/lib/api-client';
@@ -63,6 +64,7 @@ export default function NotificationsPage() {
           </li>
         ))}
       </ul>
+      <NotificationSettings />
     </main>
   );
 }
