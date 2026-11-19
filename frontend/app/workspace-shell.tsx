@@ -6,7 +6,7 @@ import { api, useSessionToken } from '@/lib/api-client';
 import { routeCommand } from '@/lib/command-route';
 import { isActive } from '@/lib/nav-active';
 import {
-  ACCOUNT_PAGES, HOME, MODE_EVENT, isAdminPath, modeForPath, publishWorkspace, readAdminSticky, readMode, saveAdminSticky, saveMode, workspaceFor,
+  ACCOUNT_PAGES, HOME, MODE_EVENT, ROLES_EVENT, isAdminPath, modeForPath, publishWorkspace, readAdminSticky, readMode, saveAdminSticky, saveMode, workspaceFor,
   type Mode, type Workspace
 } from '@/lib/mode';
 import { ThemeToggle } from './theme-toggle';
@@ -170,16 +170,26 @@ function WorkspaceShell({ path, onSignedOut, children }: { path: string; onSigne
     if (next !== saved) saveMode(next);
   }, [path, me]);
 
-  // A page that switches the side itself (e.g. turning on hiring on Account) moves the frame with it.
+  // A page that switches the side itself (e.g. after turning on hiring on Account) moves the frame with it,
+  // and a side turned on or off there appears in or leaves the switch at once.
   useEffect(() => {
     const onMode = (e: Event) => {
       const next = (e as CustomEvent<Mode>).detail;
-      if (next !== 'freelancer' && next !== 'client') return;
-      setMode(next);
-      setMe((m) => (m && !m.roles.includes(next) ? { ...m, roles: [...m.roles, next] } : m));
+      if (next === 'freelancer' || next === 'client') setMode(next);
+    };
+    const onRole = (e: Event) => {
+      const { role, on } = (e as CustomEvent<{ role: Mode; on: boolean }>).detail ?? {};
+      if (role !== 'freelancer' && role !== 'client') return;
+      setMe((m) => {
+        if (!m) return m;
+        const roles = on ? [...new Set([...m.roles, role])] : m.roles.filter((r) => r !== role);
+        try { localStorage.setItem(ROLES_HINT, JSON.stringify(roles)); } catch { /* hint only */ }
+        return { ...m, roles };
+      });
     };
     window.addEventListener(MODE_EVENT, onMode);
-    return () => window.removeEventListener(MODE_EVENT, onMode);
+    window.addEventListener(ROLES_EVENT, onRole);
+    return () => { window.removeEventListener(MODE_EVENT, onMode); window.removeEventListener(ROLES_EVENT, onRole); };
   }, []);
 
   useEffect(() => {

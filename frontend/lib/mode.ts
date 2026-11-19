@@ -48,6 +48,16 @@ export function onSide(item: { side?: Mode | null; href?: string | null }, mode:
 /** Where a side starts after switching from a page of the other side. */
 export const HOME: Record<Mode, string> = { freelancer: '/workspace', client: '/workspace' };
 
+/** Announced when the person turns a side on or off (Account → Your roles), so the frame's switch updates at once. */
+export const ROLES_EVENT = 'fia-roles';
+export function announceRole(role: Mode, on: boolean): void {
+  try {
+    window.dispatchEvent(new CustomEvent(ROLES_EVENT, { detail: { role, on } }));
+  } catch {
+    // No window (server render).
+  }
+}
+
 /** The side as last seen on this page, so pages opened inside the app start on the right side (no flicker). */
 let knownMode: Mode | undefined;
 

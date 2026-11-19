@@ -7,7 +7,7 @@ import { SuspensionCard } from './suspension-card';
 import { VerificationCard } from './verification-card';
 import { MyInvitations, TeamPanel } from './team-panel';
 import { BlocksPanel } from './blocks-panel';
-import { saveMode, useWorkspace } from '@/lib/mode';
+import { announceRole, saveMode, useWorkspace } from '@/lib/mode';
 
 /**
  * Account & roles (Phase 1). One login, two public roles:
@@ -115,6 +115,7 @@ export default function AccountPage() {
       const result = active
         ? await api<{ message: string }>(`/api/v1/me/roles/${role}`, 'DELETE')
         : await api<{ message: string }>('/api/v1/me/roles', 'POST', { role });
+      announceRole(role, !active);
       // Turning a side on from the other side's portal opens that side, so its setup (client accounts) is right here.
       if (!active && workspace !== 'admin' && workspace !== role) saveMode(role);
       return result.message;

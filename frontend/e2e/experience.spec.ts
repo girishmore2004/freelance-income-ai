@@ -57,7 +57,8 @@ test('signed-in pages get the workspace shell with role-aware navigation, AI usa
   await expect(page.getByRole('menuitem', { name: 'Sign out' })).toBeVisible();
   await page.getByLabel('AI command').fill('earnings');
   await page.getByLabel('AI command').press('Enter');
-  await expect(page).toHaveURL(/\/earnings$/);
+  // On the Client side the command opens the client's spend (the command bar follows the active portal, 2026-11-19).
+  await expect(page).toHaveURL(/\/earnings\?view=client$/);
 });
 
 test('Find work shows native and external opportunities in one place, clearly labelled', async ({ page }) => {

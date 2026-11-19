@@ -201,7 +201,8 @@ test('from the Admin portal the bell and Notifications stay in Admin, and sideba
 
 test('the Client portal shows only client items: dashboard, next actions, analytics, AI agents and account', async ({ page }) => {
   await signIn(page);
-  await page.addInitScript(() => localStorage.setItem('fia_mode', 'client'));
+  // Start on the Client side once (later page loads keep whatever side the test switches to).
+  await page.addInitScript(() => { if (!sessionStorage.getItem('seeded')) { sessionStorage.setItem('seeded', '1'); localStorage.setItem('fia_mode', 'client'); } });
   const ORG = { id: 'o1', name: 'Acme Studio', kind: 'company', industry: '', website: '', country: 'IN', preferred_language: 'en', status: 'active', membership_role: 'owner', billing: { name: '', email: '', address: '', tax_id: '' } };
   await page.route('**/api/v1/**', async (route: Route) => {
     const path = new URL(route.request().url()).pathname.replace(/\/+$/, '');
