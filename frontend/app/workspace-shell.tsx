@@ -199,6 +199,13 @@ function WorkspaceShell({ path, onSignedOut, children }: { path: string; onSigne
   const has = sidesOf(roles);
   const staff = roles.some((r) => STAFF_ROLES.includes(r));
   const workspace: Workspace = workspaceFor(path, query, staff, adminSticky, mode);
+  // The switch shows only the sides the account has (sign-up: Find work, Hire or both; more from Account → Your roles).
+  // A page of a side that is off still shows that side's button while it is open (with its "Turn on" offer).
+  const known = Boolean(me) || roles.length > 0;
+  const showSide: Record<Mode, boolean> = {
+    freelancer: known && (has.freelancer || workspace === 'freelancer'),
+    client: known && (has.client || workspace === 'client'),
+  };
   const groups = useMemo(() => [...(workspace === 'admin' ? ADMIN : workspace === 'client' ? CLIENT : FREELANCER), ACCOUNT], [workspace]);
   // Each side has its own colour (globals.css: html[data-side]).
   useEffect(() => {
@@ -270,6 +277,13 @@ function WorkspaceShell({ path, onSignedOut, children }: { path: string; onSigne
       // Signing out locally still ends this browser's session.
     }
     onSignedOut();
+    try {
+      // The next person on this browser starts from their own sides.
+      localStorage.removeItem(ROLES_HINT);
+      localStorage.removeItem('fia_mode');
+    } catch {
+      // Storage unavailable: nothing stored.
+    }
     window.location.href = '/';
   }
 
@@ -310,15 +324,15 @@ function WorkspaceShell({ path, onSignedOut, children }: { path: string; onSigne
           <button type="button" className="icon-btn menu" aria-label="Open navigation" aria-expanded={drawer} onClick={() => setDrawer(true)}>
             <svg className="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" /></svg>
           </button>
-          <div className="ws-role" role="group" aria-label="Workspace">
-            <button type="button" className="side-f" disabled={roleBusy} aria-pressed={workspace === 'freelancer'} title={has.freelancer ? undefined : 'Turns on the freelancer side for your account'} onClick={() => void switchMode('freelancer')}>
+          {(showSide.freelancer || showSide.client || staff) && <div className="ws-role" role="group" aria-label="Workspace">
+            {showSide.freelancer && <button type="button" className="side-f" disabled={roleBusy} aria-pressed={workspace === 'freelancer'} onClick={() => void switchMode('freelancer')}>
               Freelancer{otherUnread('freelancer') > 0 && <span className="side-dot" aria-label={`${otherUnread('freelancer')} unread`} />}
-            </button>
-            <button type="button" className="side-c" disabled={roleBusy} aria-pressed={workspace === 'client'} title={has.client ? undefined : 'Turns on hiring for your account'} onClick={() => void switchMode('client')}>
+            </button>}
+            {showSide.client && <button type="button" className="side-c" disabled={roleBusy} aria-pressed={workspace === 'client'} onClick={() => void switchMode('client')}>
               Client{otherUnread('client') > 0 && <span className="side-dot" aria-label={`${otherUnread('client')} unread`} />}
-            </button>
+            </button>}
             {staff && <button type="button" className="side-a" aria-pressed={workspace === 'admin'} onClick={() => void switchMode('admin')}>Admin</button>}
-          </div>
+          </div>}
           <form className="ws-search" role="search" onSubmit={submitSearch}>
             <label htmlFor="ws-search" className="sr-only">Global search</label>
             <input id="ws-search" type="search" value={search} onChange={(e) => setSearch(e.target.value)} maxLength={100} placeholder={workspace === 'client' ? 'Search freelancers and skills' : 'Search projects and skills'} />

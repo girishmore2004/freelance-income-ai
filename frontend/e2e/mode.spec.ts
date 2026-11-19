@@ -79,7 +79,8 @@ test('staff open the Admin workspace from the switch, and the theme toggle switc
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
 });
 
-test('an owner account with only admin and client roles still sees Freelancer, turns it on in one click, and the calendar stays on the chosen side', async ({ page }) => {
+// Changed on purpose (founder decision 2026-11-19): the switch shows only the sides the account has; another side is turned on from Account.
+test('an owner account with admin and client roles sees only Client and Admin, turns Freelancer on from Account, and the calendar stays on the chosen side', async ({ page }) => {
   await signIn(page);
   let roles = ['admin', 'client'];
   const activated: unknown[] = [];
@@ -89,6 +90,7 @@ test('an owner account with only admin and client roles still sees Freelancer, t
     const path = url.pathname.replace(/\/+$/, '');
     const reply = (body: string) => route.fulfill({ status: 200, contentType: 'application/json', body });
     if (path === '/api/v1/me') return reply(ok({ id: 'o1', email: 'owner@example.test', roles }));
+    if (path === '/api/v1/me/identity') return reply(ok({ user_id: 'o1', roles, organizations: [], client_side_enabled: true }));
     if (path === '/api/v1/me/roles' && request.method() === 'POST') {
       activated.push(JSON.parse(request.postData() as string));
       roles = ['admin', 'client', 'freelancer'];
@@ -106,17 +108,20 @@ test('an owner account with only admin and client roles still sees Freelancer, t
   await page.goto('/workspace');
   const switcher = page.getByRole('group', { name: 'Workspace' });
   await expect(switcher.getByRole('button', { name: 'Client' })).toHaveAttribute('aria-pressed', 'true');
-  await expect(switcher.getByRole('button', { name: 'Freelancer' })).toBeVisible();
   await expect(switcher.getByRole('button', { name: 'Admin' })).toBeVisible();
+  await expect(switcher.getByRole('button', { name: 'Freelancer' })).toHaveCount(0);
   // The client dashboard links only to client pages.
   await expect(page.getByRole('link', { name: 'AI coach' })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Post a project' }).first()).toBeVisible();
 
-  // Freelancer is switched on for the account and becomes the active side.
-  await switcher.getByRole('button', { name: 'Freelancer' }).click();
+  // Freelancer is turned on from Account → Your roles, then appears in the switch as the active side.
+  await page.goto('/account');
+  await page.getByRole('button', { name: 'Turn on' }).click();
   await expect(switcher.getByRole('button', { name: 'Freelancer' })).toHaveAttribute('aria-pressed', 'true');
   expect(activated).toEqual([{ role: 'freelancer' }]);
+  await page.goto('/workspace');
   await expect(page.getByText('Freelancer dashboard')).toBeVisible();
+  await expect(switcher.getByRole('button', { name: 'Client' })).toBeVisible();
 
   // The calendar from the freelancer sidebar opens on the freelancer side with freelancer dates only.
   const sidebar = page.getByRole('complementary', { name: 'Workspace navigation' });
@@ -272,4 +277,36 @@ test('the Client portal shows only client items: dashboard, next actions, analyt
   await expect(page.getByRole('heading', { name: 'Client accounts' })).toHaveCount(0);
   await expect(page.getByText('Your client accounts and team are on the Client side')).toBeVisible();
   await expect(page.getByRole('region', { name: 'Blocked' }).getByText('Spammy Client')).toBeVisible();
+});
+
+test('the switch shows only the sides chosen at sign-up: Find work → Freelancer, Hire → Client, both → both', async ({ page }) => {
+  await signIn(page);
+  let roles: string[] = ['freelancer'];
+  await page.route('**/api/v1/**', async (route: Route) => {
+    const path = new URL(route.request().url()).pathname.replace(/\/+$/, '');
+    const reply = (body: string) => route.fulfill({ status: 200, contentType: 'application/json', body });
+    if (path === '/api/v1/me') return reply(ok({ id: 'u1', roles }));
+    return reply(JSON.stringify([]));
+  });
+  const switcher = page.getByRole('group', { name: 'Workspace' });
+
+  await page.goto('/workspace');
+  await expect(switcher.getByRole('button', { name: 'Freelancer' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(switcher.getByRole('button', { name: 'Client' })).toHaveCount(0);
+  await expect(page.getByText('Freelancer dashboard')).toBeVisible();
+
+  roles = ['client'];
+  await page.evaluate(() => { localStorage.removeItem('fia_roles_hint'); localStorage.removeItem('fia_mode'); });
+  await page.goto('/workspace');
+  await expect(switcher.getByRole('button', { name: 'Client' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(switcher.getByRole('button', { name: 'Freelancer' })).toHaveCount(0);
+  await expect(page.getByText('Client dashboard')).toBeVisible();
+  const sidebar = page.getByRole('complementary', { name: 'Workspace navigation' });
+  await expect(sidebar.getByRole('link', { name: 'Find work' })).toHaveCount(0);
+
+  roles = ['client', 'freelancer'];
+  await page.evaluate(() => { localStorage.removeItem('fia_roles_hint'); });
+  await page.goto('/workspace');
+  await expect(switcher.getByRole('button', { name: 'Client' })).toBeVisible();
+  await expect(switcher.getByRole('button', { name: 'Freelancer' })).toBeVisible();
 });
