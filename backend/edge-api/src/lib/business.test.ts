@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Env } from "../types";
-import { buildActionPlan, duePriority, handleBusinessRoute, sortActions, upcomingDeadlines, validateCitations, validateGoals } from "./business-routes";
+import { buildActionPlan, duePriority, handleBusinessRoute, sortActions, topPerSide, upcomingDeadlines, validateCitations, validateGoals } from "./business-routes";
 import type { Action, BusinessRouteDeps } from "./business-routes";
 import { createFakeSql, jsonRequest, readJson } from "./test-support";
 import type { AuthenticatedSession } from "./session-service";
@@ -42,11 +42,19 @@ describe("goals", () => {
 
 describe("action plan", () => {
   it("orders by priority then due date and marks every action as needing a human", () => {
-    const a = (priority: number, due: string | null, title: string): Action => ({ priority, category: "delivery", title, reason: "", evidence: { type: "t", id: title }, suggested_action: "", due_date: due, requires_human_approval: true });
+    const a = (priority: number, due: string | null, title: string): Action => ({ priority, category: "delivery", title, reason: "", evidence: { type: "t", id: title }, suggested_action: "", due_date: due, requires_human_approval: true, side: null });
     expect(sortActions([a(3, null, "c"), a(1, "2026-11-20", "b"), a(1, "2026-11-10", "a")]).map((x) => x.title)).toEqual(["a", "b", "c"]);
     expect(duePriority("2026-11-17", "2026-11-18")).toBe(1);
     expect(duePriority("2026-11-18", "2026-11-18")).toBe(2);
     expect(duePriority("2026-11-19", "2026-11-18")).toBe(3);
+  });
+
+  it("keeps the top items of each side so one side cannot crowd out the other", () => {
+    const item = (id: string, side: "freelancer" | "client" | null) => ({ id, side });
+    const items = [item("f1", "freelancer"), item("f2", "freelancer"), item("f3", "freelancer"), item("n1", null), item("c1", "client"), item("c2", "client")];
+    expect(topPerSide(items, 2).map((x) => x.id)).toEqual(["f1", "f2", "n1", "c1"]);
+    expect(topPerSide(items, 3).map((x) => x.id)).toEqual(["f1", "f2", "f3", "n1", "c1", "c2"]);
+    expect(topPerSide([], 3)).toEqual([]);
   });
 
   it("combines marketplace work with legacy records and survives missing legacy tables", async () => {

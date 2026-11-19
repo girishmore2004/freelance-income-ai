@@ -91,6 +91,8 @@ export interface Action {
   due_date: string | null;
   requires_human_approval: true;
   href?: string;
+  /** Which side of the account the action belongs to (null: account-wide). The pages show one side at a time. */
+  side: "freelancer" | "client" | null;
 }
 
 export function duePriority(due: string | null, today: string, overdue = 1, onDay = 2, upcoming = 3): number {
@@ -98,6 +100,19 @@ export function duePriority(due: string | null, today: string, overdue = 1, onDa
   if (due < today) return overdue;
   if (due === today) return onDay;
   return upcoming;
+}
+
+/** The first `limit` items of each side (account-wide items count for both), in the original order. Pure; exported for tests. */
+export function topPerSide<T extends { side: "freelancer" | "client" | null }>(items: T[], limit: number): T[] {
+  let f = 0;
+  let c = 0;
+  return items.filter((a) => {
+    const forF = a.side !== "client" && f < limit;
+    const forC = a.side !== "freelancer" && c < limit;
+    if (a.side !== "client" && forF) f += 1;
+    if (a.side !== "freelancer" && forC) c += 1;
+    return forF || forC;
+  });
 }
 
 /** Sorts by priority, then due date (undated last), then title. Pure; exported for tests. */
@@ -122,12 +137,12 @@ export async function buildActionPlan(sql: Queryable, userId: string, today: str
     SELECT c.id, v.title FROM contracts c JOIN contract_versions v ON v.contract_id = c.id AND v.version = c.current_version
     WHERE c.freelancer_user_id = ${userId} AND c.status = 'offered' AND v.freelancer_accepted_at IS NULL LIMIT 50
   `);
-  for (const o of offers ?? []) add({ priority: 1, category: "pipeline", title: `Answer the offer: ${o.title}`, reason: "A client sent you contract terms.", evidence: { type: "contract", id: o.id }, suggested_action: "Accept, propose changes or decline the offer.", due_date: null, href: `/contracts#${o.id}` });
+  for (const o of offers ?? []) add({ side: "freelancer", priority: 1, category: "pipeline", title: `Answer the offer: ${o.title}`, reason: "A client sent you contract terms.", evidence: { type: "contract", id: o.id }, suggested_action: "Accept, propose changes or decline the offer.", due_date: null, href: `/contracts#${o.id}` });
 
   const invitations = await tolerant(() => sql<{ id: string; listing_id: string }[]>`
     SELECT id, listing_id FROM listing_invitations WHERE freelancer_user_id = ${userId} AND status = 'pending' LIMIT 50
   `);
-  for (const i of invitations ?? []) add({ priority: 2, category: "pipeline", title: "Reply to a project invitation", reason: "A client invited you to send a proposal.", evidence: { type: "listing_invitation", id: i.id }, suggested_action: "Open the project and send a proposal or decline.", due_date: null, href: "/projects" });
+  for (const i of invitations ?? []) add({ side: "freelancer", priority: 2, category: "pipeline", title: "Reply to a project invitation", reason: "A client invited you to send a proposal.", evidence: { type: "listing_invitation", id: i.id }, suggested_action: "Open the project and send a proposal or decline.", due_date: null, href: "/projects" });
 
   const latestByMilestone = await tolerant(() => sql<{ contract_id: string; milestone_index: number; status: string; title: string }[]>`
     SELECT DISTINCT ON (s.contract_id, s.milestone_index) s.contract_id, s.milestone_index, s.status, v.title
@@ -137,7 +152,7 @@ export async function buildActionPlan(sql: Queryable, userId: string, today: str
     ORDER BY s.contract_id, s.milestone_index, s.submitted_at DESC
   `);
   for (const r of (latestByMilestone ?? []).filter((x) => x.status === "revision_requested")) {
-    add({ priority: 1, category: "delivery", title: `Revise ${r.title}, milestone ${Number(r.milestone_index) + 1}`, reason: "The client requested a revision.", evidence: { type: "contract", id: r.contract_id }, suggested_action: "Read the client's feedback and deliver again.", due_date: null, href: `/contracts#${r.contract_id}` });
+    add({ side: "freelancer", priority: 1, category: "delivery", title: `Revise ${r.title}, milestone ${Number(r.milestone_index) + 1}`, reason: "The client requested a revision.", evidence: { type: "contract", id: r.contract_id }, suggested_action: "Read the client's feedback and deliver again.", due_date: null, href: `/contracts#${r.contract_id}` });
   }
 
   /* Marketplace — client side (organisations the user manages) */
@@ -147,48 +162,48 @@ export async function buildActionPlan(sql: Queryable, userId: string, today: str
       JOIN contract_versions v ON v.contract_id = c.id AND v.version = COALESCE(c.agreed_version, c.current_version)
       WHERE c.organization_id = ANY(${textArray(orgs)}::text[]) AND c.status = 'active' AND s.status = 'submitted' ORDER BY s.submitted_at ASC LIMIT 50
     `);
-    for (const r of reviews ?? []) add({ priority: 1, category: "delivery", title: `Review delivery: ${r.title}, milestone ${Number(r.milestone_index) + 1}`, reason: "The freelancer delivered work and is waiting for your decision.", evidence: { type: "contract", id: r.contract_id }, suggested_action: "Check the work against the acceptance criteria, then approve or request a revision.", due_date: null, href: `/contracts#${r.contract_id}` });
+    for (const r of reviews ?? []) add({ side: "client", priority: 1, category: "delivery", title: `Review delivery: ${r.title}, milestone ${Number(r.milestone_index) + 1}`, reason: "The freelancer delivered work and is waiting for your decision.", evidence: { type: "contract", id: r.contract_id }, suggested_action: "Check the work against the acceptance criteria, then approve or request a revision.", due_date: null, href: `/contracts#${r.contract_id}` });
 
     const proposals = await tolerant(() => sql<{ listing_id: string; n: number }[]>`
       SELECT p.listing_id, count(*)::int AS n FROM listing_proposals p JOIN project_listings l ON l.id = p.listing_id
       WHERE l.organization_id = ANY(${textArray(orgs)}::text[]) AND p.status = 'submitted' GROUP BY p.listing_id LIMIT 50
     `);
-    for (const p of proposals ?? []) add({ priority: 2, category: "pipeline", title: `${p.n} new proposal${Number(p.n) === 1 ? "" : "s"} to review`, reason: "Freelancers replied to your project.", evidence: { type: "project_listing", id: p.listing_id }, suggested_action: "Compare proposals, shortlist or decline.", due_date: null, href: "/client/projects" });
+    for (const p of proposals ?? []) add({ side: "client", priority: 2, category: "pipeline", title: `${p.n} new proposal${Number(p.n) === 1 ? "" : "s"} to review`, reason: "Freelancers replied to your project.", evidence: { type: "project_listing", id: p.listing_id }, suggested_action: "Compare proposals, shortlist or decline.", due_date: null, href: "/client/projects" });
 
     const clientOffers = await tolerant(() => sql<{ id: string; title: string }[]>`
       SELECT c.id, v.title FROM contracts c JOIN contract_versions v ON v.contract_id = c.id AND v.version = c.current_version
       WHERE c.organization_id = ANY(${textArray(orgs)}::text[]) AND c.status = 'offered' AND v.client_accepted_at IS NULL LIMIT 50
     `);
-    for (const o of clientOffers ?? []) add({ priority: 1, category: "pipeline", title: `Answer proposed terms: ${o.title}`, reason: "The freelancer proposed different terms.", evidence: { type: "contract", id: o.id }, suggested_action: "Accept the terms or propose changes.", due_date: null, href: `/contracts#${o.id}` });
+    for (const o of clientOffers ?? []) add({ side: "client", priority: 1, category: "pipeline", title: `Answer proposed terms: ${o.title}`, reason: "The freelancer proposed different terms.", evidence: { type: "contract", id: o.id }, suggested_action: "Accept the terms or propose changes.", due_date: null, href: `/contracts#${o.id}` });
   }
 
   /* Both sides */
-  const disputes = await tolerant(() => sql<{ id: string; contract_id: string }[]>`
-    SELECT d.id, d.contract_id FROM disputes d JOIN contracts c ON c.id = d.contract_id
+  const disputes = await tolerant(() => sql<{ id: string; contract_id: string; side: "freelancer" | "client" }[]>`
+    SELECT d.id, d.contract_id, CASE WHEN c.freelancer_user_id = ${userId} THEN 'freelancer' ELSE 'client' END AS side FROM disputes d JOIN contracts c ON c.id = d.contract_id
     WHERE d.status = 'open' AND (c.freelancer_user_id = ${userId} OR c.organization_id = ANY(${textArray(orgs)}::text[])) LIMIT 20
   `);
-  for (const d of disputes ?? []) add({ priority: 2, category: "communication", title: "A dispute is open on your contract", reason: "Staff are reviewing the contract record.", evidence: { type: "dispute", id: d.id }, suggested_action: "Add your statement and any evidence.", due_date: null, href: `/contracts#${d.contract_id}` });
+  for (const d of disputes ?? []) add({ side: d.side === "client" ? "client" : "freelancer", priority: 2, category: "communication", title: "A dispute is open on your contract", reason: "Staff are reviewing the contract record.", evidence: { type: "dispute", id: d.id }, suggested_action: "Add your statement and any evidence.", due_date: null, href: `/contracts#${d.contract_id}` });
 
   /* Legacy records (Python-era tables; skipped when absent) */
   const approvals = await tolerant(() => sql<{ id: string }[]>`SELECT id FROM approvals WHERE user_id = ${userId} AND decision = 'pending' ORDER BY created_at ASC LIMIT 50`);
-  for (const a of approvals ?? []) add({ priority: 2, category: "approval", title: "Review a proposal draft", reason: "A drafted proposal is waiting for your approval.", evidence: { type: "approval", id: a.id }, suggested_action: "Approve, edit or reject; sending stays a separate step.", due_date: null, href: "/" });
+  for (const a of approvals ?? []) add({ side: "freelancer", priority: 2, category: "approval", title: "Review a proposal draft", reason: "A drafted proposal is waiting for your approval.", evidence: { type: "approval", id: a.id }, suggested_action: "Approve, edit or reject; sending stays a separate step.", due_date: null, href: "/" });
 
   const invoices = await tolerant(() => sql<{ id: string; invoice_number: string; due_date: string }[]>`
     SELECT id, invoice_number, due_date FROM invoices WHERE user_id = ${userId} AND status NOT IN ('paid', 'void', 'cancelled') AND due_date <> '' AND due_date <= ${today} LIMIT 50
   `);
-  for (const i of invoices ?? []) add({ priority: duePriority(i.due_date, today), category: "finance", title: `Follow up invoice ${i.invoice_number || ""}`.trim(), reason: i.due_date < today ? "The invoice is overdue." : "The invoice is due today.", evidence: { type: "invoice", id: i.id }, suggested_action: "Check whether it was paid and record the payment, or follow up with the client.", due_date: i.due_date });
+  for (const i of invoices ?? []) add({ side: "freelancer", priority: duePriority(i.due_date, today), category: "finance", title: `Follow up invoice ${i.invoice_number || ""}`.trim(), reason: i.due_date < today ? "The invoice is overdue." : "The invoice is due today.", evidence: { type: "invoice", id: i.id }, suggested_action: "Check whether it was paid and record the payment, or follow up with the client.", due_date: i.due_date });
 
   const tasks = await tolerant(() => sql<{ id: string; title: string; due_date: string }[]>`
     SELECT id, title, due_date FROM project_tasks WHERE user_id = ${userId} AND status NOT IN ('done', 'completed') AND due_date <> '' AND due_date <= ${today} LIMIT 50
   `);
-  for (const t of tasks ?? []) add({ priority: duePriority(t.due_date, today), category: "delivery", title: `Handle task: ${t.title}`, reason: t.due_date < today ? "The task is overdue." : "The task is due today.", evidence: { type: "task", id: t.id }, suggested_action: "Finish it or move the date and tell the client.", due_date: t.due_date });
+  for (const t of tasks ?? []) add({ side: "freelancer", priority: duePriority(t.due_date, today), category: "delivery", title: `Handle task: ${t.title}`, reason: t.due_date < today ? "The task is overdue." : "The task is due today.", evidence: { type: "task", id: t.id }, suggested_action: "Finish it or move the date and tell the client.", due_date: t.due_date });
 
   const reminders = await tolerant(() => sql<{ id: string; due_at: Date | null }[]>`
     SELECT id, due_at FROM follow_up_reminders WHERE user_id = ${userId} AND status = 'open' AND due_at <= now() LIMIT 50
   `);
   for (const r of reminders ?? []) {
     const due = r.due_at ? new Date(r.due_at) : null;
-    add({ priority: 2, category: "communication", title: "Client follow-up is due", reason: "A follow-up reminder reached its time.", evidence: { type: "follow_up_reminder", id: r.id }, suggested_action: "Read the conversation and decide whether to follow up.", due_date: due && !Number.isNaN(due.getTime()) ? due.toISOString().slice(0, 10) : null });
+    add({ side: "freelancer", priority: 2, category: "communication", title: "Client follow-up is due", reason: "A follow-up reminder reached its time.", evidence: { type: "follow_up_reminder", id: r.id }, suggested_action: "Read the conversation and decide whether to follow up.", due_date: due && !Number.isNaN(due.getTime()) ? due.toISOString().slice(0, 10) : null });
   }
 
   return sortActions(actions);
@@ -566,14 +581,14 @@ async function overview(sql: Queryable, userId: string, today: string) {
     SELECT i.mode, COALESCE(sum(i.amount_minor - i.freelancer_fee_minor), 0) AS net, count(*)::int AS n FROM payment_intents i JOIN contracts c ON c.id = i.contract_id
     WHERE c.freelancer_user_id = ${userId} AND i.status = 'funded' GROUP BY i.mode
   `);
-  const top = actions.filter((a) => a.priority <= 2);
-  const alerts = top.slice(0, 8).map((a, i) => ({ id: `${a.evidence.type}-${i}`, severity: a.priority === 1 ? "high" : "medium", title: a.title, action: a.suggested_action, href: a.href ?? "/agent" }));
-  const recommendations: Array<{ priority: string; title: string; reason: string; evidence: Array<{ type: string; value: number }>; action: string }> = [];
-  if ((deliveriesToReview ?? 0) > 0) recommendations.push({ priority: "high", title: "Unblock your freelancers", reason: "Deliveries are waiting for your review.", evidence: [{ type: "deliveries_to_review", value: deliveriesToReview ?? 0 }], action: "Review each delivery against its acceptance criteria." });
-  if ((overdueInvoices ?? 0) > 0) recommendations.push({ priority: "high", title: "Protect cash flow", reason: "Overdue invoices are present in your records.", evidence: [{ type: "overdue_invoices", value: overdueInvoices ?? 0 }], action: "Review overdue invoices and record verified payments." });
-  if ((pendingApprovals ?? 0) > 0) recommendations.push({ priority: "medium", title: "Clear proposal review queue", reason: "Proposal drafts are awaiting your decision.", evidence: [{ type: "pending_approvals", value: pendingApprovals ?? 0 }], action: "Approve, edit or reject each draft." });
-  if ((marketplaceProposals ?? 0) + (monthProposals ?? 0) < goals.monthly_proposals_target) recommendations.push({ priority: "medium", title: "Behind your proposal target", reason: "Proposals this month are below your monthly target.", evidence: [{ type: "proposals_this_month", value: (marketplaceProposals ?? 0) + (monthProposals ?? 0) }, { type: "monthly_target", value: goals.monthly_proposals_target }], action: "Open Find work and reply to projects that match your skills." });
-  if (!recommendations.length) recommendations.push({ priority: "low", title: "Keep records current", reason: "No urgent action was detected from your saved records.", evidence: [{ type: "open_actions", value: actions.length }], action: "Keep contracts, deliveries and goals up to date for better recommendations." });
+  const top = topPerSide(actions.filter((a) => a.priority <= 2), 8);
+  const alerts = top.map((a, i) => ({ id: `${a.evidence.type}-${i}`, severity: a.priority === 1 ? "high" : "medium", title: a.title, action: a.suggested_action, href: a.href ?? "/agent", side: a.side }));
+  const recommendations: Array<{ priority: string; title: string; reason: string; evidence: Array<{ type: string; value: number }>; action: string; side: "freelancer" | "client" | null }> = [];
+  if ((deliveriesToReview ?? 0) > 0) recommendations.push({ side: "client", priority: "high", title: "Unblock your freelancers", reason: "Deliveries are waiting for your review.", evidence: [{ type: "deliveries_to_review", value: deliveriesToReview ?? 0 }], action: "Review each delivery against its acceptance criteria." });
+  if ((overdueInvoices ?? 0) > 0) recommendations.push({ side: "freelancer", priority: "high", title: "Protect cash flow", reason: "Overdue invoices are present in your records.", evidence: [{ type: "overdue_invoices", value: overdueInvoices ?? 0 }], action: "Review overdue invoices and record verified payments." });
+  if ((pendingApprovals ?? 0) > 0) recommendations.push({ side: "freelancer", priority: "medium", title: "Clear proposal review queue", reason: "Proposal drafts are awaiting your decision.", evidence: [{ type: "pending_approvals", value: pendingApprovals ?? 0 }], action: "Approve, edit or reject each draft." });
+  if ((marketplaceProposals ?? 0) + (monthProposals ?? 0) < goals.monthly_proposals_target) recommendations.push({ side: "freelancer", priority: "medium", title: "Behind your proposal target", reason: "Proposals this month are below your monthly target.", evidence: [{ type: "proposals_this_month", value: (marketplaceProposals ?? 0) + (monthProposals ?? 0) }, { type: "monthly_target", value: goals.monthly_proposals_target }], action: "Open Find work and reply to projects that match your skills." });
+  if (!recommendations.length) recommendations.push({ side: null, priority: "low", title: "Keep records current", reason: "No urgent action was detected from your saved records.", evidence: [{ type: "open_actions", value: actions.length }], action: "Keep contracts, deliveries and goals up to date for better recommendations." });
   return {
     as_of: today,
     metrics: {
