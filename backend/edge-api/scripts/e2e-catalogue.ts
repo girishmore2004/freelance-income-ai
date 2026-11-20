@@ -169,14 +169,16 @@ const terms2 = { title: "Bakery ordering website", scope: "Order form and admin 
   await st("F22", FA, "Edit the proposal while it is open (new version)", "asha", "PUT", `/api/v1/listing-proposals/${P.d.id}`, { cover_letter: letter(6), price_minor: 2900000, estimated_days: 20 }, 200);
   await st("F23", FA, "Proposal version history", "asha", "GET", `/api/v1/listing-proposals/${P.d.id}/versions`, undefined, 200);
   const P2 = await req("ravi", "POST", `/api/v1/marketplace/listings/${L.d.id}/proposals`, { cover_letter: "I can deliver the order form in two weeks with Next.js, including an admin view and SEO basics for local search.", price_minor: 2500000, estimated_days: 14 });
-  await st("F24", FA, "A near-copy of an earlier proposal is warned about (warning only)", "ravi", "POST", `/api/v1/marketplace/listings/${Lscam.d.id}/proposal-check`, { cover_letter: "I can deliver the order form in two weeks with Next.js, including an admin view and SEO basics for local search.", price_minor: 2500000, estimated_days: 14 }, [200, 404], (r) => [r.s === 404 || JSON.stringify(r.d).includes("near") || JSON.stringify(r.d).includes("similar") || true, r.s === 404 ? "held project not open (expected)" : "checked"]);
+  const Lnear = await req("acme", "POST", `/api/v1/organizations/${org.id}/listings`, listing("Cafe ordering website"));
+  await req("acme", "POST", `/api/v1/listings/${Lnear.d.id}/transition`, { action: "submit" });
+  await st("F24", FA, "A near-copy of a proposal sent to another project is warned about (warning only)", "ravi", "POST", `/api/v1/marketplace/listings/${Lnear.d.id}/proposal-check`, { cover_letter: "I can deliver the order form in two weeks with Next.js, including an admin view and SEO basics for local search.", price_minor: 2500000, estimated_days: 14 }, 200, (r) => { const f = (r.d.findings ?? []).find((x: any) => x.code === "near_duplicate"); return [Boolean(f) && f.severity === "warn", f ? f.message : "no warning"]; });
   // Invite-only project
   const Linv = await req("acme", "POST", `/api/v1/organizations/${org.id}/listings`, listing("Private logo job", { visibility: "invite_only" }));
   await req("acme", "POST", `/api/v1/listings/${Linv.d.id}/transition`, { action: "submit" });
   await st("F25", FA, "An invite-only project is hidden from freelancers not invited", "ravi", "GET", `/api/v1/marketplace/listings/${Linv.d.id}`, undefined, 404);
   await st("F26", FA, "…and a proposal to it is refused", "ravi", "POST", `/api/v1/marketplace/listings/${Linv.d.id}/proposals`, { cover_letter: letter(7), price_minor: 1000000, estimated_days: 7 }, [403, 404]);
   // Client and the person on both sides
-  await st("F27", FA, "Someone with both sides cannot propose to their own client account's project", "both", "POST", `/api/v1/marketplace/listings/${L.d.id}/proposals`, { cover_letter: letter(8), price_minor: 1000000, estimated_days: 7 }, 201, (r) => [true, "different account owns the project, allowed"]);
+  await st("F27", FA, "Someone with both sides can propose to another client's project", "both", "POST", `/api/v1/marketplace/listings/${L.d.id}/proposals`, { cover_letter: letter(8), price_minor: 1000000, estimated_days: 7 }, 201, (r) => [true, "different account owns the project, allowed"]);
   const idB = await req("both", "GET", "/api/v1/me/identity");
   const orgB = idB.d.organizations?.[0];
   const LB = await req("both", "POST", `/api/v1/organizations/${orgB?.id}/listings`, listing("Own project"));
@@ -211,7 +213,7 @@ const terms2 = { title: "Bakery ordering website", scope: "Order form and admin 
   await st("C33", CA, "Funding the same milestone again is refused", "acme", "POST", `/api/v1/contracts/${K}/milestones/0/fund`, {}, 409, undefined, { "Idempotency-Key": `fund-${tag}-again` });
   await st("C34", CA, "C6 acceptance check before any delivery is refused", "acme", "GET", `/api/v1/contracts/${K}/milestones/0/acceptance-check`, undefined, 409);
   await st("F34", FA, "F8 checks the delivery against the criteria (no change)", "asha", "POST", `/api/v1/contracts/${K}/milestones/0/precheck`, { note: "Orders arrive in the admin list and it works on mobile.", links: ["https://example.dev/demo"] }, 200);
-  await st("F35", FA, "A delivery link without https is refused", "asha", "POST", `/api/v1/contracts/${K}/milestones/0/submit`, { note: "Ready", links: ["http://example.dev/demo"] }, 422);
+  await st("F35", FA, "A delivery link without https is refused", "asha", "POST", `/api/v1/contracts/${K}/milestones/0/submit`, { note: "Order form is ready for review", links: ["http://example.dev/demo"] }, 422, (r) => [/https/i.test(JSON.stringify(r.d)), `field error: ${JSON.stringify(r.d.error?.details ?? []).slice(0, 80)}`]);
   await st("F36", FA, "Deliver milestone 1", "asha", "POST", `/api/v1/contracts/${K}/milestones/0/submit`, { note: "Orders arrive in the admin list; tested on mobile.", links: ["https://example.dev/demo"] }, [200, 201]);
   await st("F37", FA, "A second delivery while one is waiting is refused", "asha", "POST", `/api/v1/contracts/${K}/milestones/0/submit`, { note: "Delivering the same milestone again", links: ["https://example.dev/demo"] }, 409);
   await st("C35", CA, "C6 checks the delivery against the criteria", "acme", "GET", `/api/v1/contracts/${K}/milestones/0/acceptance-check`, undefined, 200);
@@ -275,7 +277,11 @@ const terms2 = { title: "Bakery ordering website", scope: "Order form and admin 
   await st("C54", CA, "Order a service without requirements is refused", "acme", "POST", `/api/v1/services/${svc.d.id}/order`, { organization_id: org.id, package: "basic", requirements: "" }, 422);
   const order = await st("C55", CA, "Order the service → an offered contract the freelancer accepts", "acme", "POST", `/api/v1/services/${svc.d.id}/order`, { organization_id: org.id, package: "basic", requirements: "Logo and text attached in messages." }, 201);
   await st("F53", FA, "Accept the service order", "ravi", "POST", `/api/v1/contracts/${order.d.contract_id}/accept`, { version: 1 }, 200);
-  await st("F54", FA, "A freelancer cannot order their own service", "both", "POST", `/api/v1/services/${svc.d.id}/order`, { organization_id: orgB?.id, package: "basic", requirements: "x" }, [201, 403, 422], (r) => [true, r.s === 201 ? "different person: allowed" : "refused"]);
+  await req("both", "PUT", "/api/v1/profile", { ...profile, full_name: "Kiran Both" });
+  await req("both", "PUT", "/api/v1/me/marketplace-profile", { visible: true });
+  const svcB = await req("both", "POST", "/api/v1/me/services", { ...svcBody, title: "Logo design for a shop" });
+  await req("both", "POST", `/api/v1/services/${svcB.d.id}/transition`, { action: "publish" });
+  await st("F54", FA, "Someone with both sides cannot order their own service", "both", "POST", `/api/v1/services/${svcB.d.id}/order`, { organization_id: orgB?.id, package: "basic", requirements: "Our logo files and colours are attached in messages." }, 409);
 
   // ================= Hourly contracts =================
   const LH = await req("acme", "POST", `/api/v1/organizations/${org.id}/listings`, listing("Ongoing website support"));
@@ -338,11 +344,12 @@ const terms2 = { title: "Bakery ordering website", scope: "Order form and admin 
 
   // ================= Portal separation (API side) =================
   const PA = "Portals and sides";
-  const plan = await req("asha", "GET", "/api/v1/agent/action-plan");
-  const acts = plan.d.actions ?? plan.d ?? [];
-  tc("P01", PA, "Every next action carries its side", "side on each", Array.isArray(acts) && acts.every((a: any) => "side" in a), `${acts.length} actions`);
+  await req("acme", "POST", `/api/v1/listings/${many[5]}/invitations`, { freelancer_user_id: F, message: "Would you look at this project?" });
+  const acts: any[] = [];
+  for (const who of ["asha", "ravi", "acme", "both", "quota"]) { const pl = await req(who, "GET", "/api/v1/agent/action-plan"); acts.push(...(pl.d.actions ?? [])); }
+  tc("P01", PA, "Every next action carries its side (5 accounts)", "side on each, at least 1 action", acts.length > 0 && acts.every((a: any) => a.side === "freelancer" || a.side === "client" || a.side === null), `${acts.length} actions: ${acts.filter((a) => a.side === "freelancer").length} freelancer, ${acts.filter((a) => a.side === "client").length} client`);
   const ov = await req("acme", "GET", "/api/v1/workspace/overview");
-  tc("P02", PA, "Dashboard alerts and recommendations carry their side", "side on each", [...(ov.d.alerts ?? []), ...(ov.d.recommendations ?? [])].every((a: any) => "side" in a), `${(ov.d.alerts ?? []).length} alerts, ${(ov.d.recommendations ?? []).length} recommendations`);
+  tc("P02", PA, "Dashboard alerts and recommendations carry their side", "side on each", [...(ov.d.alerts ?? []), ...(ov.d.recommendations ?? [])].length > 0 && [...(ov.d.alerts ?? []), ...(ov.d.recommendations ?? [])].every((a: any) => "side" in a), `${(ov.d.alerts ?? []).length} alerts, ${(ov.d.recommendations ?? []).length} recommendations`);
   await st("P03", PA, "Unread notifications are split by side", "asha", "GET", "/api/v1/notifications/unread-count", undefined, 200, (r) => [typeof r.d.by_side === "object", JSON.stringify(r.d.by_side)]);
   await st("P04", PA, "A freelancer-only account cannot create a client account", "asha", "POST", "/api/v1/organizations", { name: "Asha Studio", kind: "individual", country: "IN" }, 403);
   await st("P05", PA, "A client-only account cannot send proposals", "acme", "POST", `/api/v1/marketplace/listings/${many[1]}/proposals`, { cover_letter: letter(12), price_minor: 1000000, estimated_days: 7 }, 403);
@@ -355,10 +362,10 @@ const terms2 = { title: "Bakery ordering website", scope: "Order form and admin 
   tc("P09", PA, "A staff account keeps its own Freelancer side (not mixed with staff)", "freelancer + admin", (meAd.d.roles ?? []).includes("admin") && (meAd.d.roles ?? []).includes("freelancer"), (meAd.d.roles ?? []).join(", "));
   const inbox = await req("acme", "GET", "/api/v1/inbox");
   const threads = inbox.d.threads ?? inbox.d.items ?? inbox.d ?? [];
-  tc("P10", PA, "Inbox threads carry their side", "side on each", Array.isArray(threads) && threads.every((t: any) => "side" in t), `${Array.isArray(threads) ? threads.length : 0} threads`);
+  tc("P10", PA, "Inbox threads carry their side", "side on each", Array.isArray(threads) && threads.length > 0 && threads.every((t: any) => "side" in t), `${Array.isArray(threads) ? threads.length : 0} threads`);
   const cal = await req("acme", "GET", "/api/v1/me/calendar");
   const evs = cal.d.events ?? cal.d ?? [];
-  tc("P11", PA, "Calendar events carry their side", "side on each", Array.isArray(evs) && evs.every((e: any) => "side" in e), `${Array.isArray(evs) ? evs.length : 0} events`);
+  tc("P11", PA, "Calendar events carry their side", "side on each", Array.isArray(evs) && evs.length > 0 && evs.every((e: any) => "side" in e), `${Array.isArray(evs) ? evs.length : 0} events`);
 
   // ================= Trust, safety, disputes =================
   const TA = "Trust and safety";
@@ -415,8 +422,8 @@ const terms2 = { title: "Bakery ordering website", scope: "Order form and admin 
   await st("S03", SA, "A fee above the allowed range is refused", "fin", "POST", "/api/v1/finance/fee-schedules", { name: `Bad ${tag}`, currency: "INR", client_fee_bps: 9000, freelancer_fee_bps: 300, min_fee_minor: 0 }, 422);
   await st("S04", SA, "Fee quote: ₹30,000 → client pays ₹31,500, freelancer receives ₹29,100", "acme", "GET", "/api/v1/finance/fee-quote?amount_minor=3000000&currency=INR", undefined, 200, (r) => [r.d.client_pays_minor === 3150000 && r.d.freelancer_receives_minor === 2910000, `client ${r.d.client_pays_minor}, freelancer ${r.d.freelancer_receives_minor}`]);
   await st("S05", SA, "Live payments cannot be switched on from the app", "admin", "POST", "/api/v1/admin/flags/payments.live", { enabled: true }, 409);
-  await st("S06", SA, "A payment webhook with a bad signature is refused", null, "POST", "/api/v1/payments/webhooks/razorpay", { event: "payment.captured" }, [401, 404], undefined, { "x-signature": "bad" });
-  await st("S07", SA, "Trial balance in test mode is balanced", "fin", "GET", "/api/v1/finance/trial-balance?mode=sandbox", undefined, 200, (r) => [r.d.balanced === true || r.d.total_debit_minor === r.d.total_credit_minor, `balanced ${r.d.balanced}`]);
+  await st("S06", SA, "A webhook for a payment provider that is not set up is refused", null, "POST", "/api/v1/payments/webhooks/razorpay", { event: "payment.captured" }, 404, undefined, { "x-signature": "bad" });
+  await st("S07", SA, "Trial balance in test mode is balanced", "fin", "GET", "/api/v1/finance/trial-balance?mode=sandbox", undefined, 200, (r) => { const t = r.d.totals?.INR; return [Boolean(t) && t.balanced === true && t.debit_minor === t.credit_minor, t ? `debits ${t.debit_minor} = credits ${t.credit_minor}` : "no totals"]; });
   const bal = await db`SELECT COALESCE(sum(CASE WHEN direction = 'debit' THEN amount_minor ELSE 0 END), 0)::bigint AS d, COALESCE(sum(CASE WHEN direction = 'credit' THEN amount_minor ELSE 0 END), 0)::bigint AS c FROM ledger_lines`;
   tc("S08", SA, "Every ledger entry ever written still balances", "debits = credits", bal[0].d === bal[0].c, `${bal[0].d} = ${bal[0].c}`);
   const upd = await db`UPDATE ledger_lines SET amount_minor = amount_minor WHERE false RETURNING 1`.then(() => "ok").catch((e) => String(e.message));
@@ -445,8 +452,8 @@ const terms2 = { title: "Bakery ordering website", scope: "Order form and admin 
   await st("X02", XA, "…or its workspace", "quota", "GET", `/api/v1/contracts/${K3}/workspace`, undefined, 404);
   await st("X03", XA, "…or its payments", "quota", "GET", `/api/v1/contracts/${K3}/payments`, undefined, 404);
   await st("X04", XA, "Someone outside a client account cannot open it", "ravi", "GET", `/api/v1/organizations/${org.id}`, undefined, 404);
-  await st("X05", XA, "…or edit its projects", "ravi", "PUT", `/api/v1/listings/${L.d.id}`, { ...listing("Hijack"), base_version: 2 }, [403, 404]);
-  await st("X06", XA, "…or read the proposals it received", "ravi", "GET", `/api/v1/listings/${L.d.id}/proposals`, undefined, [403, 404]);
+  await st("X05", XA, "…or edit its projects (another client)", "both", "PUT", `/api/v1/listings/${L.d.id}`, { ...listing("Hijack"), base_version: 2 }, 404);
+  await st("X06", XA, "…or read the proposals it received (another client)", "both", "GET", `/api/v1/listings/${L.d.id}/proposals`, undefined, 404);
   await st("X07", XA, "A freelancer cannot read another freelancer's proposal", "quota", "GET", `/api/v1/listing-proposals/${P.d.id}/versions`, undefined, 404);
   await st("X08", XA, "…or its discussion", "quota", "GET", `/api/v1/listing-proposals/${P.d.id}/discussion`, undefined, 404);
   await st("X09", XA, "Invalid JSON is refused cleanly", "asha", "PUT", "/api/v1/profile", "{not json", [400, 422]);
@@ -455,7 +462,7 @@ const terms2 = { title: "Bakery ordering website", scope: "Order form and admin 
   const stored = await db`SELECT title FROM project_listing_versions WHERE listing_id = ${sq.d.id} ORDER BY version DESC LIMIT 1`.catch(() => []);
   tc("X10", XA, "Text that looks like SQL is stored as plain text", "stored verbatim", sq.s === 201 && stored[0]?.title === quoteTitle, `${sq.s} · ${stored[0]?.title === quoteTitle ? "verbatim" : "changed"}`);
   await st("X11", XA, "Non-staff cannot see the admin area at all (404, not 403)", "acme", "GET", "/api/v1/admin/overview", undefined, 404);
-  await st("X12", XA, "A suspended or removed session token is refused after logout-all", "both", "POST", "/api/v1/auth/logout-all", {}, 200);
+  await st("X12", XA, "Sign out everywhere", "both", "POST", "/api/v1/auth/logout-all", {}, 200);
   await st("X13", XA, "…the old token then fails", "both", "GET", "/api/v1/me", undefined, 401);
   await st("X14", XA, "Contract files are only for the two parties", "quota", "GET", `/api/v1/contracts/${K3}/files`, undefined, [404, 503]);
 
