@@ -9,10 +9,11 @@ function session(userId: string): AuthenticatedSession {
   return { user: { id: userId, email: `${userId}@x.test`, email_verified: true, mfa_enabled: false }, claims: { sub: userId, jti: "j", iat: 0, exp: 0 } };
 }
 
-function world(opts: { roles?: string[]; user?: string; inserted?: boolean; openCount?: number; inReview?: boolean; reportStatus?: string; reportTarget?: string } = {}) {
+function world(opts: { roles?: string[]; user?: string; inserted?: boolean; openCount?: number; inReview?: boolean; reportStatus?: string; reportTarget?: string; ownListing?: boolean } = {}) {
   const fake = createFakeSql((text) => {
     if (text.startsWith("SELECT role, status FROM user_roles")) return (opts.roles ?? ["freelancer"]).map((role) => ({ role, status: "active" }));
-    if (text.startsWith("SELECT id FROM project_listings") || text.startsWith("SELECT id FROM users")) return [{ id: "X" }];
+    if (text.startsWith("SELECT l.id, EXISTS")) return [{ id: "X", own: opts.ownListing ?? false }];
+    if (text.startsWith("SELECT id FROM users")) return [{ id: "X" }];
     if (text.startsWith("SELECT count(*)::int AS n FROM reports")) return [{ n: opts.openCount ?? 0 }];
     if (text.startsWith("INSERT INTO reports")) return opts.inserted === false ? [] : [{ id: "R1", target_type: "listing", target_id: "L1", reason: "scam", details: "", status: "open", resolution_note: "", resolved_at: null, created_at: new Date(), reporter_user_id: "u1" }];
     if (text.startsWith("UPDATE project_listings SET status = 'published'") || text.startsWith("UPDATE project_listings SET status = 'draft'")) return opts.inReview === false ? [] : [{ id: "L1" }];
@@ -35,6 +36,8 @@ describe("reports", () => {
     expect((await call(world({ openCount: 20 }).deps, "POST", "/api/v1/reports", { target_type: "listing", target_id: "L1", reason: "scam" }))!.status).toBe(429);
     expect((await call(world().deps, "POST", "/api/v1/reports", { target_type: "planet", target_id: "L1", reason: "x" }))!.status).toBe(422);
     expect((await call(world().deps, "POST", "/api/v1/reports", { target_type: "user", target_id: "u1", reason: "spam" }))!.status).toBe(422);
+    // A project of the reporter's own client account cannot be reported (found by the end-to-end catalogue, 2026-11-20).
+    expect((await call(world({ ownListing: true }).deps, "POST", "/api/v1/reports", { target_type: "listing", target_id: "L1", reason: "spam" }))!.status).toBe(422);
   });
 });
 

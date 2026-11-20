@@ -233,6 +233,14 @@ const SCREEN_RULES: Array<{ code: ScreenFinding["code"]; pattern: RegExp }> = [
   { code: "off_platform_contact", pattern: /\b(whats\s?app|telegram|signal|wechat|skype)\b/i },
   { code: "off_platform_payment", pattern: /\b(pay|payment|paid)\s+(outside|off)[\s-]?(the\s+)?(platform|site)\b/i },
   { code: "off_platform_payment", pattern: /\b(crypto|usdt|bitcoin|gift\s?cards?)\b/i },
+  // Indian payment rails, only when they move this payment off the platform: "pay me by UPI",
+  // "send it to my Paytm", a UPI ID (name@okaxis), "pay directly", "avoid the fee". Building UPI
+  // or PayPal into a client's site ("integrate UPI payments") is ordinary work and passes.
+  { code: "off_platform_payment", pattern: /\b(pay|send|transfer)\s+(it\s+|the\s+\w+\s+)?(me|us)\b[\w\s]{0,20}?\b(via|by|through|on|using|in)\s+(upi|paytm|g\s?pay|google\s?pay|phone\s?pe|paypal|bhim|neft|imps|rtgs|bank\s+transfer|wire\s+transfer)\b/i },
+  { code: "off_platform_payment", pattern: /\bmy\s+(upi|paytm|g\s?pay|google\s?pay|phone\s?pe|paypal)\s*(id|number|no\.?|handle|account)?\b/i },
+  { code: "off_platform_payment", pattern: /\b[\w.-]{2,}@(ok(axis|hdfcbank|icici|sbi)|ybl|ibl|axl|apl|paytm|upi|oksbi)\b/i },
+  { code: "off_platform_payment", pattern: /\b(pay|paying|send|transfer)\s+(it\s+)?(me|us)\s+direct(ly)?\b|\b(pay|paying|send|transfer)\s+(it\s+)?direct(ly)?\s+to\s+(me|us|my)\b/i },
+  { code: "off_platform_payment", pattern: /\b(avoid|skip|save\s+on|bypass|without)\s+(the\s+)?(platform('s)?\s+|site('s)?\s+)?(fees?|commission|charges?)\b/i },
   { code: "upfront_fee", pattern: /\b(registration|joining|security|training|application)\s+(fee|deposit|charges?)\b/i },
   { code: "upfront_fee", pattern: /\bpay\s+(us|me)?\s*(to|before)\s+(apply|start|join)/i },
   { code: "prohibited_work", pattern: /\b(take|write|do)\s+my\s+(exam|test|assignment|thesis|homework)\b/i },

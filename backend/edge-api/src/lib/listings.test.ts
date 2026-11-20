@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Env } from "../types";
-import { briefHash, canTransition, publicListingOut, publicationGaps, screenBrief, validateBrief } from "./listings";
+import { briefHash, canTransition, publicListingOut, publicationGaps, screenBrief, screenText, validateBrief } from "./listings";
 import type { Brief, ListingRow, VersionRow } from "./listings";
 import { buildBrief, parseModelDraft, templateDraft } from "./brief-builder";
 import type { CategoryTemplate } from "./brief-builder";
@@ -88,6 +88,37 @@ describe("listing screen", () => {
     expect(codes({ outcome: "Need someone to take my exam online next week" })).toEqual(["prohibited_work"]);
     expect(codes({ outcome: "Buy reviews for my product listing quickly" })).toEqual(["prohibited_work"]);
     expect(codes({ description: "Details at bit.ly/abc123" })).toEqual(["link_shortener"]);
+  });
+
+  // Indian payment rails, found missing by the end-to-end catalogue (2026-11-20).
+  it("flags moving the payment to UPI, Paytm, a UPI ID or a bank account, and dodging the fee", () => {
+    const pay = (t: string) => screenText(t).some((f) => f.code === "off_platform_payment");
+    for (const t of [
+      "Pay me directly by UPI to avoid the fee",
+      "Please send the payment to my Paytm",
+      "My UPI id is asha@okaxis",
+      "send to ravi.k@ybl",
+      "You can pay me through Google Pay",
+      "Send me the amount on PhonePe",
+      "pay us using NEFT please",
+      "Just transfer it directly to my account",
+      "We can do this without the platform fee",
+    ]) expect(pay(t)).toBe(true);
+  });
+
+  it("lets ordinary payment work through: building UPI or PayPal into a site, customers paying at a counter", () => {
+    const pay = (t: string) => screenText(t).some((f) => f.code === "off_platform_payment");
+    for (const t of [
+      "I will integrate UPI payments into your checkout",
+      "The site should accept Paytm and Google Pay at checkout",
+      "Add PayPal and bank transfer as payment options on the order page",
+      "Payment gateway integration with Razorpay including UPI",
+      "Customers pay directly at the counter when they pick up",
+      "Pay on delivery or by UPI at the shop counter is what our customers want",
+      "The client pays directly on the website with UPI",
+      "Show the commission for each partner shop in the admin report",
+      "I paid attention to the mobile layout",
+    ]) expect(pay(t)).toBe(false);
   });
 });
 

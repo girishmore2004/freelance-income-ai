@@ -111,8 +111,15 @@ export async function handleTrustRoute(request: Request, env: Env, requestId: st
       if (Object.keys(errors).length) return failure("INVALID_REPORT", "Check the highlighted fields.", 422, requestId, [errors]);
       if (targetType === "user" && targetId === userId) return failure("INVALID_REPORT", "You cannot report yourself.", 422, requestId);
       if (targetType === "listing") {
-        const exists = await sql<{ id: string }[]>`SELECT id FROM project_listings WHERE id = ${targetId} LIMIT 1`;
+        const exists = await sql<{ id: string; own: boolean }[]>`
+          SELECT l.id, EXISTS (
+            SELECT 1 FROM organization_memberships m
+            WHERE m.organization_id = l.organization_id AND m.user_id = ${userId} AND m.status = 'active'
+          ) AS own
+          FROM project_listings l WHERE l.id = ${targetId} LIMIT 1
+        `;
         if (!exists[0]) return failure("NOT_FOUND", "Project not found", 404, requestId);
+        if (exists[0].own) return failure("INVALID_REPORT", "You cannot report a project of your own client account.", 422, requestId);
       }
       if (targetType === "user") {
         const exists = await sql<{ id: string }[]>`SELECT id FROM users WHERE id = ${targetId} LIMIT 1`;
