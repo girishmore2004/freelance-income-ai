@@ -1,5 +1,11 @@
 # Test Status
 
+## U29 — deadlines when someone stops answering (GitHub CI verified, 2026-11-20, release 5.96.0)
+- Edge: vitest **451 passed** (new `deadlines.test.ts` 9: review deadline with extensions, lateness, late-cancel after 24 h, 48-hour cancellation, dispute reply window, and the three jobs; `disputes.test.ts` changed on purpose: its dispute is 8 days old because staff now wait for the reply window, plus a test of the window). Edge API CI success @ 0cc2b26.
+- PostgreSQL through the real Worker (`scripts/e2e-catalogue.ts`, **267/267**): 21 new cases. A service delivery shows "completes in 3 days", the client extends twice and a third time is refused; the 6-hourly job run with a clock 14 days ahead approved it, completed the order and released exactly ₹7,760 (₹8,000 − 3%); a waiting fixed-price delivery stayed untouched (D-25); a second run changed nothing. A milestone due today is not late; 3 days past due it is Late and the client cancelled alone with the full ₹5,250 refunded. A cancellation request stayed open before 48 hours and was accepted with a refund after. Staff were refused (WAITING_FOR_REPLY) until the other side answered. Lockout message after 5 wrong passwords; a wrong password during the lock still gets the usual answer; a one-letter name refused; the automatic client account is named after the person. Ledger balanced.
+- Frontend: typecheck clean, unit 49 passed; new `e2e/deadlines.spec.ts` (3 journeys).
+- GitHub CI: `main` @ 6d0720a pytest **599 passed** (Alembic upgrade to 0080 on PostgreSQL); Playwright **102 passed** (bearer), **103 passed** (cookie).
+
 ## U28 — end-to-end test-case catalogue (2026-11-20, Edge 5.95.0)
 - 245 server cases through the real Edge Worker on PostgreSQL with fresh accounts (`backend/edge-api/scripts/e2e-catalogue.ts`): visitor and sign-up 24, freelancer 63, client 74, portals 11, trust and safety 36, staff/money/AI 23, security 14. **245/245 pass** after two fixes. Report: claude.ai Docs "Freelance Income AI — End-to-End Test Cases and Results".
 - Defects found and fixed: (1) off-platform payment screening missed UPI, Paytm, UPI IDs, NEFT and "without the platform fee" (12 phrasings now caught, 13 ordinary sentences pass; unit tests); (2) a client could report a project of their own client account (now 422; unit test).
