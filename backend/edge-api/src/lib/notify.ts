@@ -113,7 +113,12 @@ const CONTRACT_MESSAGES: Record<string, { title: string; to: "client" | "freelan
   "dispute.opened": { title: "A dispute was opened on your contract", to: "both" },
   "dispute.statement_added": { title: "A new statement was added to the dispute", to: "both" },
   "dispute.withdrawn": { title: "The dispute was withdrawn", to: "both" },
-  "dispute.resolved": { title: "Staff decided the dispute", to: "both" }
+  "dispute.resolved": { title: "Staff decided the dispute", to: "both" },
+  // U29 deadlines
+  "milestone.auto_completed": { title: "A delivery was completed automatically (no review within the deadline)", to: "both" },
+  "milestone.review_extended": { title: "The client extended the review by 5 days", to: "freelancer" },
+  "cancellation.expired": { title: "The cancellation went through: no answer within 48 hours", to: "both" },
+  "contract.cancelled_late": { title: "The client cancelled a late order", to: "both" }
 };
 
 export async function notifyContractEvent(sql: Queryable, contractId: string, actorUserId: string | null, eventType: string, details: Record<string, unknown>, eventId: string): Promise<void> {

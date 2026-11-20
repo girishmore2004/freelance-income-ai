@@ -10,6 +10,7 @@ import { screenText } from "./listings";
 import { contractVersionOut } from "./contracts";
 import type { ContractRow, ContractVersionRow, Party } from "./contracts";
 import { recordContractEvent } from "./contract-events";
+import { disputeReply } from "./deadlines";
 import { notifyUsers } from "./notify";
 import { intentOut, refundIntent, releaseMilestone } from "./payments";
 import type { IntentRow } from "./payments";
@@ -108,7 +109,9 @@ export function disputeOut(d: DisputeRow, statements: StatementRow[], viewer: Pa
     resolution_note: d.resolution_note,
     resolved_at: iso(d.resolved_at),
     created_at: iso(d.created_at),
-    statements: statements.map((s) => ({ id: s.id, party: s.party, body: s.body, created_at: iso(s.created_at) }))
+    statements: statements.map((s) => ({ id: s.id, party: s.party, body: s.body, created_at: iso(s.created_at) })),
+    // U29 (D-29): the other side has 7 days to answer; staff decide after that or once they answer.
+    ...disputeReply(d, statements, new Date())
   };
 }
 
@@ -430,6 +433,15 @@ export async function handleDisputeRoute(request: Request, env: Env, requestId: 
         return success({ id: dispute.id, resolution, ...result }, "Decision already recorded; any unfinished step was completed.", 200, requestId);
       }
       if (dispute.status !== "open") return failure("DISPUTE_CLOSED", "This dispute is no longer open.", 409, requestId);
+      const reply = disputeReply(dispute, await statementsFor(sql, dispute.id), new Date());
+      if (!reply.ready_for_decision) {
+        return failure(
+          "WAITING_FOR_REPLY",
+          `The other side can answer until ${reply.respond_by.slice(0, 10)}. Decide once they answer or the 7 days pass; suspend an account separately if there is fraud.`,
+          409,
+          requestId
+        );
+      }
 
       const claimed = await sql.begin(async (tx) => {
         const rows = await tx<DisputeRow[]>`

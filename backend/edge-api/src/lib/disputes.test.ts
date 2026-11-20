@@ -25,13 +25,17 @@ interface World {
   suspensionCreatedBy?: string;
   appealStatus?: string;
   statements?: number;
+  /** Age of the dispute in days (U29 reply window); default 0 = opened just now. */
+  ageDays?: number;
+  /** The other side has answered (a statement by the party that did not open it). */
+  replied?: boolean;
 }
 
 function world(o: World = {}) {
   const user = o.user ?? "c1";
   const dispute = () => ({
     id: "D1", contract_id: "K1", opened_by_party: o.openedBy ?? "client", opened_by: "c1", reason: "quality", description: LONG, desired_outcome: "",
-    status: o.disputeStatus ?? "open", resolution: o.disputeResolution ?? null, resolution_note: "", resolved_by: null, resolved_at: null, created_at: new Date()
+    status: o.disputeStatus ?? "open", resolution: o.disputeResolution ?? null, resolution_note: "", resolved_by: null, resolved_at: null, created_at: new Date(Date.now() - (o.ageDays ?? 0) * 864e5)
   });
   const fake = createFakeSql((text, values) => {
     if (text.startsWith("SELECT enabled FROM feature_flags")) return [{ enabled: true }];
@@ -48,6 +52,9 @@ function world(o: World = {}) {
     if (text.startsWith("UPDATE disputes SET status = 'resolved'")) return [{ ...dispute(), status: "resolved", resolution: values[0] }];
     if (text.startsWith("UPDATE disputes SET status = 'withdrawn'")) return [{ id: "D1" }];
     if (text.startsWith("SELECT count(*)::int AS n FROM dispute_statements")) return [{ n: o.statements ?? 0 }];
+    if (text.startsWith("SELECT * FROM dispute_statements WHERE dispute_id")) {
+      return o.replied ? [{ id: "S9", dispute_id: "D1", party: (o.openedBy ?? "client") === "client" ? "freelancer" : "client", author_user_id: "f1", body: "Our side of it.", created_at: new Date() }] : [];
+    }
     if (text.startsWith("INSERT INTO dispute_statements")) return [{ id: "S1", party: values[2], body: values[4], created_at: new Date() }];
     if (text.startsWith("SELECT DISTINCT milestone_index FROM payment_intents")) return [];
     if (text.startsWith("UPDATE contracts SET status")) return [{ id: "K1" }];
@@ -116,17 +123,28 @@ describe("staff decisions", () => {
     expect(w.fake.queries.some((q) => q.text.includes("ai_usage_events"))).toBe(false);
   });
 
+  // The dispute is 8 days old here: staff may decide (U29 reply window, D-29; changed on purpose 2026-11-20).
   it("requires an admin for outcomes that move money and logs the decision in the same transaction", async () => {
-    const mod = world({ user: "mod1", roles: ["moderator"] });
+    const mod = world({ user: "mod1", roles: ["moderator"], ageDays: 8 });
     expect((await call(mod.deps, "POST", "/api/v1/admin/disputes/D1/resolve", { resolution: "release_funded", note: "Work matches the agreed terms." }))!.status).toBe(403);
     expect((await call(mod.deps, "POST", "/api/v1/admin/disputes/D1/resolve", { resolution: "no_action", note: "short" }))!.status).toBe(422);
     expect((await call(mod.deps, "POST", "/api/v1/admin/disputes/D1/resolve", { resolution: "no_action", note: "Both sides should continue as agreed." }))!.status).toBe(200);
-    const admin = world({ user: "admin1", roles: ["admin"] });
+    const admin = world({ user: "admin1", roles: ["admin"], ageDays: 8 });
     expect((await call(admin.deps, "POST", "/api/v1/admin/disputes/D1/resolve", { resolution: "release_funded", note: "Work matches the agreed terms." }))!.status).toBe(200);
     const log = admin.fake.queries.find((q) => q.text.startsWith("INSERT INTO moderation_actions"))!;
     expect(log.inTransaction).toBe(true);
     expect(log.values).toContain("dispute.release_funded");
     expect(admin.fake.queries.some((q) => q.text.startsWith("UPDATE contracts SET status = 'completed'"))).toBe(true);
+  });
+
+  it("waits for the other side's answer for 7 days, then lets staff decide (D-29)", async () => {
+    const early = world({ user: "admin1", roles: ["admin"], ageDays: 2 });
+    const r = await call(early.deps, "POST", "/api/v1/admin/disputes/D1/resolve", { resolution: "no_action", note: "Both sides should continue as agreed." });
+    expect(r!.status).toBe(409);
+    expect((await readJson(r!)).error!.code).toBe("WAITING_FOR_REPLY");
+    expect(early.fake.queries.some((q) => q.text.startsWith("UPDATE disputes SET status = 'resolved'"))).toBe(false);
+    expect((await call(world({ user: "admin1", roles: ["admin"], ageDays: 2, replied: true }).deps, "POST", "/api/v1/admin/disputes/D1/resolve", { resolution: "no_action", note: "Both sides should continue as agreed." }))!.status).toBe(200);
+    expect((await call(world({ user: "admin1", roles: ["admin"], ageDays: 7.1 }).deps, "POST", "/api/v1/admin/disputes/D1/resolve", { resolution: "no_action", note: "Both sides should continue as agreed." }))!.status).toBe(200);
   });
 
   it("re-runs the same decision idempotently and refuses a different one", async () => {

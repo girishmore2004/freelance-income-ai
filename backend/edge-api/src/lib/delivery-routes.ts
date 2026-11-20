@@ -14,6 +14,7 @@ import type { ContractRow, ContractVersionRow, Party } from "./contracts";
 import { recordContractEvent } from "./contract-events";
 import { releaseMilestone } from "./payments";
 import { attachFilesToSubmission, filesBySubmission } from "./file-routes";
+import { MAX_REVIEW_EXTENSIONS, REVIEW_EXTENSION_DAYS, isLate, lateCancelAllowed, serviceReviewDeadline } from "./deadlines";
 
 /**
  * Shared delivery workspace (Phase 3 batch 2), for the two parties of a contract:
@@ -33,6 +34,8 @@ import { attachFilesToSubmission, filesBySubmission } from "./file-routes";
 export interface DeliveryRouteDeps {
   database: (env: Env) => Sql;
   authenticate: (request: Request, env: Env, requestId: string) => Promise<AuthenticatedSession | Response>;
+  /** Clock for deadlines (tests); defaults to now. */
+  now?: () => Date;
 }
 
 const defaultDeps: DeliveryRouteDeps = { database, authenticate: authenticateRequest };
@@ -139,6 +142,73 @@ async function agreedTerms(sql: Queryable, contract: ContractRow): Promise<Contr
   );
 }
 
+export type DecisionResult =
+  | { code: "OK"; completed: boolean }
+  | { code: "CLOSED" }
+  | { code: "NO_MILESTONE" }
+  | { code: "NOTHING_TO_REVIEW" }
+  | { code: "NO_REVISIONS_LEFT"; rounds: number };
+
+/**
+ * Decides the delivery waiting on a milestone, in one transaction: the client's Approve or
+ * revision request, or the automatic completion of a service-order delivery (actor "system",
+ * U29). Releasing the funded payment happens after commit (releaseMilestone).
+ */
+export async function decideSubmission(
+  sql: Sql,
+  contractId: string,
+  index: number,
+  decision: "approve" | "request_revision",
+  note: string,
+  actor: { userId: string | null; party: "client" | "system" }
+): Promise<DecisionResult> {
+  return sql.begin(async (tx) => {
+    const locked = (await tx<ContractRow[]>`SELECT * FROM contracts WHERE id = ${contractId} FOR UPDATE`)[0];
+    if (!locked || locked.status !== "active") return { code: "CLOSED" as const };
+    const terms = await agreedTerms(tx, locked);
+    const agreed = terms ? contractVersionOut(terms) : null;
+    if (!agreed || index >= agreed.milestones.length) return { code: "NO_MILESTONE" as const };
+    const open = (await tx<{ id: string }[]>`
+      SELECT id FROM milestone_submissions WHERE contract_id = ${locked.id} AND milestone_index = ${index} AND status = 'submitted' LIMIT 1
+    `)[0];
+    if (!open) return { code: "NOTHING_TO_REVIEW" as const };
+    if (decision === "request_revision") {
+      const used = (await tx<{ n: number }[]>`
+        SELECT count(*)::int AS n FROM milestone_submissions
+        WHERE contract_id = ${locked.id} AND milestone_index = ${index} AND status = 'revision_requested'
+      `)[0]?.n ?? 0;
+      if (used >= agreed.revision_rounds) return { code: "NO_REVISIONS_LEFT" as const, rounds: agreed.revision_rounds };
+    }
+    const status = decision === "approve" ? "approved" : "revision_requested";
+    await tx`
+      UPDATE milestone_submissions SET status = ${status}, reviewed_by = ${actor.userId}, reviewed_at = now(), review_note = ${note}
+      WHERE id = ${open.id}
+    `;
+    await recordContractEvent(
+      tx,
+      locked.id,
+      actor.userId,
+      actor.party,
+      actor.party === "system" ? "milestone.auto_completed" : decision === "approve" ? "milestone.approved" : "milestone.revision_requested",
+      { milestone: index, title: agreed.milestones[index].title }
+    );
+
+    let completed = false;
+    if (decision === "approve") {
+      const approved = (await tx<{ milestone_index: number }[]>`
+        SELECT DISTINCT milestone_index FROM milestone_submissions WHERE contract_id = ${locked.id} AND status = 'approved'
+      `).map((r) => Number(r.milestone_index));
+      completed = agreed.milestones.every((_, i) => approved.includes(i));
+      if (completed) {
+        await tx`UPDATE contracts SET status = 'completed', completed_at = now(), updated_at = now() WHERE id = ${locked.id}`;
+        await recordContractEvent(tx, locked.id, null, "system", "contract.completed", { total_minor: agreed.total_minor });
+      }
+    }
+    if (!completed) await tx`UPDATE contracts SET updated_at = now() WHERE id = ${locked.id}`;
+    return { code: "OK" as const, completed };
+  });
+}
+
 export async function handleDeliveryRoute(
   request: Request,
   env: Env,
@@ -151,7 +221,7 @@ export async function handleDeliveryRoute(
 
   const workspace = path.match(/^\/api\/v1\/contracts\/([\w-]{1,64})\/workspace$/);
   const messages = path.match(/^\/api\/v1\/contracts\/([\w-]{1,64})\/messages$/);
-  const milestone = path.match(/^\/api\/v1\/contracts\/([\w-]{1,64})\/milestones\/(\d{1,2})\/(submit|review)$/);
+  const milestone = path.match(/^\/api\/v1\/contracts\/([\w-]{1,64})\/milestones\/(\d{1,2})\/(submit|review|extend-review)$/);
 
   const known = (workspace !== null && method === "GET") || (messages !== null && method === "POST") || (milestone !== null && method === "POST");
   if (!known) return null;
@@ -187,13 +257,33 @@ export async function handleDeliveryRoute(
         SELECT actor_party, event_type, details_json, created_at FROM contract_events
         WHERE contract_id = ${contract.id} ORDER BY created_at DESC LIMIT 50
       `;
-      const views = milestoneViews(agreed.milestones, submissions, await filesBySubmission(sql, contract.id));
+      const baseViews = milestoneViews(agreed.milestones, submissions, await filesBySubmission(sql, contract.id));
+      // U29: late milestones, and for service orders when a waiting delivery completes automatically.
+      const serviceOrder = (await sql<{ id: string }[]>`SELECT id FROM service_orders WHERE contract_id = ${contract.id} LIMIT 1`.catch(() => []))[0] !== undefined;
+      const extensions = serviceOrder
+        ? new Map((await sql<{ id: string; review_extensions: number }[]>`
+            SELECT id, review_extensions FROM milestone_submissions WHERE contract_id = ${contract.id} AND status = 'submitted'
+          `.catch(() => [])).map((r) => [r.id, Number(r.review_extensions)]))
+        : new Map<string, number>();
+      const now = deps.now ? deps.now() : new Date();
+      const views = baseViews.map((m) => {
+        const open = m.state === "submitted" ? m.submissions[0] : undefined;
+        const used = open ? extensions.get(open.id) ?? 0 : 0;
+        return {
+          ...m,
+          late: contract.status === "active" && isLate(m, now),
+          auto_complete_at: serviceOrder && open ? serviceReviewDeadline(open.submitted_at, used).toISOString() : null,
+          review_extensions_left: serviceOrder && open ? Math.max(0, MAX_REVIEW_EXTENSIONS - used) : 0
+        };
+      });
       return success(
         {
           contract_id: contract.id,
           status: contract.status,
           party: side.party,
           can_manage: side.canManage,
+          service_order: serviceOrder,
+          late_cancel_allowed: contract.status === "active" && lateCancelAllowed(baseViews, now),
           revision_rounds: agreed.revision_rounds,
           currency: agreed.currency,
           milestones: views,
@@ -258,8 +348,35 @@ export async function handleDeliveryRoute(
 
     /* ---------------- milestones ---------------- */
     const index = Number(milestone![2]);
-    const step = milestone![3] as "submit" | "review";
+    const step = milestone![3] as "submit" | "review" | "extend-review";
     if (contract.status !== "active") return failure("CONTRACT_NOT_ACTIVE", "Work can only be delivered on an active contract.", 409, requestId);
+
+    /* U29: the client extends the review of a service-order delivery by 5 days (at most twice). */
+    if (step === "extend-review") {
+      if (side.party !== "client" || !side.canManage) return failure("FORBIDDEN", "Only owners and admins of the client account can extend the review.", 403, requestId);
+      const serviceOrder = (await sql<{ id: string }[]>`SELECT id FROM service_orders WHERE contract_id = ${contract.id} LIMIT 1`.catch(() => []))[0];
+      if (!serviceOrder) return failure("NOT_A_SERVICE_ORDER", "Only service orders complete automatically; project milestones wait for your review.", 409, requestId);
+      const updated = await sql<{ review_extensions: number; submitted_at: Date }[]>`
+        UPDATE milestone_submissions SET review_extensions = review_extensions + 1
+        WHERE contract_id = ${contract.id} AND milestone_index = ${index} AND status = 'submitted' AND review_extensions < ${MAX_REVIEW_EXTENSIONS}
+        RETURNING review_extensions, submitted_at
+      `.catch(() => null);
+      if (updated === null) return failure("MIGRATION_PENDING", "Extending reviews is available after the next database update.", 503, requestId);
+      if (!updated[0]) {
+        const waiting = (await sql<{ id: string }[]>`SELECT id FROM milestone_submissions WHERE contract_id = ${contract.id} AND milestone_index = ${index} AND status = 'submitted' LIMIT 1`)[0];
+        return waiting
+          ? failure("NO_EXTENSIONS_LEFT", `The review was already extended ${MAX_REVIEW_EXTENSIONS} times. Approve it or ask for a revision.`, 409, requestId)
+          : failure("NOTHING_TO_REVIEW", "There is no delivery waiting for review on this milestone.", 409, requestId);
+      }
+      const until = serviceReviewDeadline(updated[0].submitted_at, Number(updated[0].review_extensions));
+      await recordContractEvent(sql, contract.id, userId, "client", "milestone.review_extended", { milestone: index, until: until.toISOString() });
+      return success(
+        { milestone: index, auto_complete_at: until.toISOString(), review_extensions_left: MAX_REVIEW_EXTENSIONS - Number(updated[0].review_extensions) },
+        `Review extended by ${REVIEW_EXTENSION_DAYS} days. It completes automatically on ${until.toISOString().slice(0, 10)} if you do nothing.`,
+        200,
+        requestId
+      );
+    }
 
     if (step === "submit") {
       if (side.party !== "freelancer") return failure("FORBIDDEN", "Only the freelancer delivers work.", 403, requestId);
@@ -322,52 +439,13 @@ export async function handleDeliveryRoute(
     if (!side.canManage) return failure("FORBIDDEN", "Only owners and admins can approve work.", 403, requestId);
     const decision = payload.decision;
     if (decision !== "approve" && decision !== "request_revision") return failure("INVALID_DECISION", "Decision must be approve or request_revision.", 422, requestId);
+    const verdict = decision as "approve" | "request_revision";
     const note = typeof payload.note === "string" ? payload.note.trim().slice(0, MAX_NOTE) : "";
     if (decision === "request_revision" && note.length < 10) {
       return failure("NOTE_REQUIRED", "Explain what needs to change (at least 10 characters).", 422, requestId);
     }
 
-    const result = await sql.begin(async (tx) => {
-      const locked = (await tx<ContractRow[]>`SELECT * FROM contracts WHERE id = ${contract.id} FOR UPDATE`)[0];
-      if (!locked || locked.status !== "active") return { code: "CLOSED" as const };
-      const terms = await agreedTerms(tx, locked);
-      const agreed = terms ? contractVersionOut(terms) : null;
-      if (!agreed || index >= agreed.milestones.length) return { code: "NO_MILESTONE" as const };
-      const open = (await tx<{ id: string }[]>`
-        SELECT id FROM milestone_submissions WHERE contract_id = ${locked.id} AND milestone_index = ${index} AND status = 'submitted' LIMIT 1
-      `)[0];
-      if (!open) return { code: "NOTHING_TO_REVIEW" as const };
-      if (decision === "request_revision") {
-        const used = (await tx<{ n: number }[]>`
-          SELECT count(*)::int AS n FROM milestone_submissions
-          WHERE contract_id = ${locked.id} AND milestone_index = ${index} AND status = 'revision_requested'
-        `)[0]?.n ?? 0;
-        if (used >= agreed.revision_rounds) return { code: "NO_REVISIONS_LEFT" as const, rounds: agreed.revision_rounds };
-      }
-      const status = decision === "approve" ? "approved" : "revision_requested";
-      await tx`
-        UPDATE milestone_submissions SET status = ${status}, reviewed_by = ${userId}, reviewed_at = now(), review_note = ${note}
-        WHERE id = ${open.id}
-      `;
-      await recordContractEvent(tx, locked.id, userId, "client", decision === "approve" ? "milestone.approved" : "milestone.revision_requested", {
-        milestone: index,
-        title: agreed.milestones[index].title
-      });
-
-      let completed = false;
-      if (decision === "approve") {
-        const approved = (await tx<{ milestone_index: number }[]>`
-          SELECT DISTINCT milestone_index FROM milestone_submissions WHERE contract_id = ${locked.id} AND status = 'approved'
-        `).map((r) => Number(r.milestone_index));
-        completed = agreed.milestones.every((_, i) => approved.includes(i));
-        if (completed) {
-          await tx`UPDATE contracts SET status = 'completed', completed_at = now(), updated_at = now() WHERE id = ${locked.id}`;
-          await recordContractEvent(tx, locked.id, null, "system", "contract.completed", { total_minor: agreed.total_minor });
-        }
-      }
-      if (!completed) await tx`UPDATE contracts SET updated_at = now() WHERE id = ${locked.id}`;
-      return { code: "OK" as const, completed };
-    });
+    const result = await decideSubmission(sql, contract.id, index, verdict, note, { userId, party: "client" });
 
     if (result.code === "CLOSED") return failure("CONTRACT_NOT_ACTIVE", "This contract is not active.", 409, requestId);
     if (result.code === "NO_MILESTONE") return failure("NOT_FOUND", "Milestone not found", 404, requestId);

@@ -22,7 +22,7 @@ interface LoginUserRow {
 
 type LoginOutcome =
   | { kind: "invalid" }
-  | { kind: "locked" }
+  | { kind: "locked"; minutes: number }
   | { kind: "unverified" }
   | {
       kind: "mfa";
@@ -224,7 +224,11 @@ async function performLogin(
         user.locked_until &&
         new Date(user.locked_until).getTime() > now.getTime()
       ) {
-        return { kind: "locked" };
+        // U29: say the account is locked only to someone who knows the password; anyone
+        // else gets the usual answer, so the lock does not reveal that the account exists.
+        const knows = await verifyPassword(input.password, user.password_hash);
+        if (!knows) return { kind: "invalid" };
+        return { kind: "locked", minutes: Math.max(1, Math.ceil((new Date(user.locked_until).getTime() - now.getTime()) / 60_000)) };
       }
 
       const passwordValid = await verifyPassword(
@@ -371,7 +375,16 @@ export async function handleLoginRoute(
   try {
     const outcome = await performLogin(env, input);
 
-    if (outcome.kind === "invalid" || outcome.kind === "locked") {
+    if (outcome.kind === "locked") {
+      return failure(
+        "ACCOUNT_LOCKED",
+        `Too many sign-in attempts. Try again in ${outcome.minutes} minute${outcome.minutes === 1 ? "" : "s"}, or reset your password.`,
+        423,
+        requestId
+      );
+    }
+
+    if (outcome.kind === "invalid") {
       return failure(
         "INVALID_CREDENTIALS",
         "Invalid email or password",

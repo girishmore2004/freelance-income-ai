@@ -28,10 +28,18 @@ function database(env: Env) {
 
 function validate(
   body: unknown
-): { email: string; password: string; intent: "freelancer" | "client" | "both" } | null {
+): { email: string; password: string; intent: "freelancer" | "client" | "both"; fullName: string } | null {
   if (!body || typeof body !== "object") return null;
 
-  const { email, password, intent } = body as Record<string, unknown>;
+  const { email, password, intent, full_name: fullNameRaw } = body as Record<string, unknown>;
+
+  // U29: the person's name (optional for older clients; the app asks for it). 2–100 characters.
+  let fullName = "";
+  if (fullNameRaw !== undefined && fullNameRaw !== null && fullNameRaw !== "") {
+    if (typeof fullNameRaw !== "string") return null;
+    fullName = fullNameRaw.replace(/[\u0000-\u001f\u007f]/g, "").replace(/\s+/g, " ").trim();
+    if (fullName.length < 2 || fullName.length > 100) return null;
+  }
 
   // Optional: which public role(s) to start with (Master Plan: "Find work" / "Hire" / both).
   if (intent !== undefined && intent !== "freelancer" && intent !== "client" && intent !== "both") {
@@ -55,7 +63,7 @@ function validate(
   // Same limits as the original FastAPI RegisterIn schema.
   if (password.length < 12 || password.length > 128) return null;
 
-  return { email: normalized, password, intent: intent === "client" || intent === "both" ? intent : "freelancer" };
+  return { email: normalized, password, intent: intent === "client" || intent === "both" ? intent : "freelancer", fullName };
 }
 
 /**
@@ -117,7 +125,7 @@ export async function handleRegisterRoute(
   if (!input) {
     return failure(
       "INVALID_REGISTER_INPUT",
-      "Provide a valid email, a password of 12 to 128 characters and, optionally, intent \"freelancer\", \"client\" or \"both\".",
+      "Provide a valid email, a password of 12 to 128 characters and, optionally, your name (2–100 characters) and intent \"freelancer\", \"client\" or \"both\".",
       422,
       requestId
     );
@@ -164,7 +172,7 @@ export async function handleRegisterRoute(
           hourly_rate, timezone, preferred_work_types,
           preferred_industries, dealbreakers
         ) VALUES (
-          ${profileId}, ${userId}, '', '', '', '[]', '[]',
+          ${profileId}, ${userId}, ${input.fullName}, '', '', '[]', '[]',
           '[]', 5000, 'INR', 10,
           0, 'Asia/Kolkata', '["fixed", "hourly"]',
           '[]', '[]'

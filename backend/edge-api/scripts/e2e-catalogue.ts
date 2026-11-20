@@ -1,6 +1,10 @@
 import worker from "../src/index";
 import postgres from "postgres";
 import { writeFileSync } from "node:fs";
+import { autoCompleteServiceDeliveries, expireCancellationRequests } from "../src/lib/deadlines";
+import { decideSubmission } from "../src/lib/delivery-routes";
+import { acceptCancellation } from "../src/lib/payment-routes";
+import { releaseMilestone } from "../src/lib/payments";
 
 /*
  * End-to-end test-case catalogue (2026-11-20). Run against a PostgreSQL database migrated to the
@@ -89,7 +93,9 @@ const terms2 = { title: "Bakery ordering website", scope: "Order form and admin 
   await st("V17", A, "Wrong password is refused", null, "POST", "/api/v1/auth/login", { email: mail("both"), password: "Wrong-horse-42!" }, 401);
   const lockWho = await signup("lock", "freelancer");
   for (let i = 0; i < 5; i += 1) await req(null, "POST", "/api/v1/auth/login", { email: mail("lock"), password: "Wrong-horse-42!" });
-  await st("V18", A, "After 5 wrong passwords the account is locked for a while (right password refused)", null, "POST", "/api/v1/auth/login", { email: mail("lock"), password: PW }, [423, 429, 401], (r) => [r.s !== 200, `locked: ${r.s}`]);
+  await st("V18", A, "After 5 wrong passwords, the right password gets the lockout message (U29)", null, "POST", "/api/v1/auth/login", { email: mail("lock"), password: PW }, 423, (r) => [/try again in \d+ minute/i.test(r.msg), r.msg]);
+  await st("V25", A, "During the lock a wrong password still gets the usual answer (no hint the account exists)", null, "POST", "/api/v1/auth/login", { email: mail("lock"), password: "Wrong-horse-42!" }, 401, (r) => [r.code === "INVALID_CREDENTIALS", r.code]);
+  await st("V26", A, "A one-letter name at sign-up is refused", null, "POST", "/api/v1/auth/register", { email: mail("x3"), password: PW, full_name: "A", intent: "client" }, 422);
   void lockWho;
   await st("V19", A, "Unknown email gets the same answer as a wrong password", null, "POST", "/api/v1/auth/login", { email: mail("nobody"), password: PW }, 401);
   await st("V20", A, "A tampered session token is refused", null, "GET", "/api/v1/me", undefined, 401, undefined, { authorization: `Bearer ${String(tokens.asha).slice(0, -3)}abc` });
@@ -132,7 +138,7 @@ const terms2 = { title: "Bakery ordering website", scope: "Order form and admin 
   const CA = "Client";
   const idC = await req("acme", "GET", "/api/v1/me/identity");
   const org = idC.d.organizations?.[0];
-  tc("C01", CA, "A Hire sign-up gets a client account automatically", "1 individual account, owner", Boolean(org) && org.membership_role === "owner", org ? `${org.name} · ${org.kind} · ${org.membership_role}` : "none");
+  tc("C01", CA, "A Hire sign-up gets a client account named after the person (U29)", "\"Meera Shah\", individual, owner", Boolean(org) && org.membership_role === "owner" && org.name === "Meera Shah", org ? `${org.name} · ${org.kind} · ${org.membership_role}` : "none");
   await st("C02", CA, "Edit the client profile to a company with billing details", "acme", "PATCH", `/api/v1/organizations/${org.id}`, { name: `Acme Bakery ${tag}`, kind: "company", industry: "Food", website: "https://bakery.example.com", country: "IN", billing_name: "Acme Bakery LLP", billing_email: "accounts@bakery.example.com", billing_address: "Pune", tax_id: "" }, 200);
   await st("C03", CA, "A website without https:// is refused", "acme", "PATCH", `/api/v1/organizations/${org.id}`, { name: `Acme Bakery ${tag}`, kind: "company", industry: "Food", website: "bakery.example.com", country: "IN" }, 422);
   await st("C04", CA, "C1 Brief Builder drafts a brief (not stored)", "acme", "POST", `/api/v1/organizations/${org.id}/brief-assistant`, { category_slug: "website_development", notes: "We are a bakery and want customers to order cakes online and pick them up." }, 200);
@@ -389,7 +395,9 @@ const terms2 = { title: "Bakery ordering website", scope: "Order form and admin 
   const D = await st("T14", TA, "Open a dispute on the service order", "ravi", "POST", `/api/v1/contracts/${order.d.contract_id}/dispute`, { reason: "scope", description: "The client asked for three pages instead of the one page in the package.", desired_outcome: "Agree the scope of one page." }, 201);
   await st("T15", TA, "A second dispute on the same contract is refused", "acme", "POST", `/api/v1/contracts/${order.d.contract_id}/dispute`, { reason: "quality", description: "Second dispute while one is open on this contract.", desired_outcome: "x" }, 409);
   await st("T16", TA, "Someone outside the contract cannot open a dispute", "asha", "POST", `/api/v1/contracts/${order.d.contract_id}/dispute`, { reason: "quality", description: "Not my contract at all, testing access.", desired_outcome: "x" }, 404);
-  await st("T17", TA, "The other side adds a statement", "acme", "POST", `/api/v1/disputes/${D.d.id}/statements`, { body: "We agreed one page; the extra pages were a question, not a demand." }, [200, 201]);
+  await st("T16b", TA, "Staff cannot decide before the other side answers or 7 days pass (U29)", "admin", "POST", `/api/v1/admin/disputes/${D.d.id}/resolve`, { resolution: "no_action", note: "Deciding right away without the other side." }, 409, (r) => [r.code === "WAITING_FOR_REPLY", r.msg]);
+  await st("T16c", TA, "The dispute shows the reply deadline to the parties", "acme", "GET", `/api/v1/contracts/${order.d.contract_id}/dispute`, undefined, 200, (r) => { const d = r.d.dispute ?? r.d; return [typeof d.respond_by === "string" && d.ready_for_decision === false, `answer by ${String(d.respond_by).slice(0, 10)}`]; });
+  await st("T17", TA, "The other side adds a statement (staff may now decide)", "acme", "POST", `/api/v1/disputes/${D.d.id}/statements`, { body: "We agreed one page; the extra pages were a question, not a demand." }, [200, 201]);
   await st("T18", TA, "Only the side that opened it can withdraw", "acme", "POST", `/api/v1/disputes/${D.d.id}/withdraw`, {}, 403);
   await st("T19", TA, "Evidence pack for staff", "mod", "GET", `/api/v1/admin/disputes/${D.d.id}`, undefined, 200);
   await st("T20", TA, "A moderator cannot decide an outcome that moves money", "mod", "POST", `/api/v1/admin/disputes/${D.d.id}/resolve`, { resolution: "refund_funded", note: "Refund the client for the extra scope they did not order." }, 403);
@@ -465,6 +473,97 @@ const terms2 = { title: "Bakery ordering website", scope: "Order form and admin 
   await st("X12", XA, "Sign out everywhere", "both", "POST", "/api/v1/auth/logout-all", {}, 200);
   await st("X13", XA, "…the old token then fails", "both", "GET", "/api/v1/me", undefined, 401);
   await st("X14", XA, "Contract files are only for the two parties", "quota", "GET", `/api/v1/contracts/${K3}/files`, undefined, [404, 503]);
+
+  // ================= Deadlines when someone stops answering (U29, D-26 to D-29) =================
+  const DA = "Deadlines";
+  const fund = async (contractId: string, i: number, key: string) => {
+    const f = await req("acme", "POST", `/api/v1/contracts/${contractId}/milestones/${i}/fund`, {}, { "Idempotency-Key": key });
+    await req("acme", "POST", `/api/v1/payments/sandbox/${f.d.payment?.id}/complete`, { outcome: "succeed" });
+  };
+  // A second service order, funded and delivered
+  const order2 = await req("acme", "POST", `/api/v1/services/${svc.d.id}/order`, { organization_id: org.id, package: "basic", requirements: "Second order: a page for our new branch." });
+  const K5 = order2.d.contract_id;
+  await req("ravi", "POST", `/api/v1/contracts/${K5}/accept`, { version: 1 });
+  await fund(K5, 0, `k5-${tag}`);
+  await req("ravi", "POST", `/api/v1/contracts/${K5}/milestones/0/submit`, { note: "Branch page delivered and live.", links: ["https://example.dev/branch"] });
+  await st("D01", DA, "A waiting service delivery shows when it completes automatically (3 days)", "acme", "GET", `/api/v1/contracts/${K5}/workspace`, undefined, 200, (r) => { const m = r.d.milestones?.[0]; const days = m?.auto_complete_at ? Math.round((Date.parse(m.auto_complete_at) - Date.now()) / 864e5) : -1; return [r.d.service_order === true && days === 3 && m.review_extensions_left === 2, `in ${days} days, ${m?.review_extensions_left} extensions left`]; });
+  await st("D02", DA, "The freelancer cannot extend the client's review", "ravi", "POST", `/api/v1/contracts/${K5}/milestones/0/extend-review`, {}, 403);
+  await st("D03", DA, "The client extends the review by 5 days", "acme", "POST", `/api/v1/contracts/${K5}/milestones/0/extend-review`, {}, 200, (r) => [r.d.review_extensions_left === 1, `left ${r.d.review_extensions_left}, until ${String(r.d.auto_complete_at).slice(0, 10)}`]);
+  await req("acme", "POST", `/api/v1/contracts/${K5}/milestones/0/extend-review`, {});
+  await st("D04", DA, "A third extension is refused", "acme", "POST", `/api/v1/contracts/${K5}/milestones/0/extend-review`, {}, 409, (r) => [r.code === "NO_EXTENSIONS_LEFT", r.code]);
+  // A fixed-price project milestone delivered and left unreviewed (must never auto-complete, D-25)
+  const L6 = await req("acme", "POST", `/api/v1/organizations/${org.id}/listings`, listing("Logo refresh"));
+  await req("acme", "POST", `/api/v1/listings/${L6.d.id}/transition`, { action: "submit" });
+  const P6 = await req("ravi", "POST", `/api/v1/marketplace/listings/${L6.d.id}/proposals`, { cover_letter: "I will refresh your logo in two rounds with you, deliver all files and a short usage guide for the shop signs.", price_minor: 800000, estimated_days: 10 });
+  const o6 = await req("acme", "POST", `/api/v1/listing-proposals/${P6.d.id}/offer`, { terms: { ...terms2, title: "Logo refresh", milestones: [{ title: "Logo", amount_minor: 800000, due_date: "2027-01-20" }] } });
+  const K6 = o6.d.id ?? o6.d.contract_id;
+  await req("ravi", "POST", `/api/v1/contracts/${K6}/accept`, { version: 1 });
+  await fund(K6, 0, `k6-${tag}`);
+  await req("ravi", "POST", `/api/v1/contracts/${K6}/milestones/0/submit`, { note: "Logo files delivered.", links: ["https://example.dev/logo"] });
+  await st("D05", DA, "The extend button does not exist for project milestones (no deadline, D-25)", "acme", "POST", `/api/v1/contracts/${K6}/milestones/0/extend-review`, {}, 409, (r) => [r.code === "NOT_A_SERVICE_ORDER", r.code]);
+  const earnBefore = (await req("ravi", "GET", "/api/v1/me/earnings")).d;
+  const before = earnBefore.available_minor ?? earnBefore.balances?.[0]?.available_minor ?? 0;
+  // Run the 6-hourly job with a clock 14 days ahead (after both extensions)
+  const later = new Date(Date.now() + 14 * 864e5);
+  const job = await autoCompleteServiceDeliveries(db as any, later, async (sqlx, contractId, index) => {
+    const r = await decideSubmission(sqlx, contractId, index, "approve", "Completed automatically: the client did not review it within the deadline.", { userId: null, party: "system" });
+    return { approved: r.code === "OK", completed: r.code === "OK" && r.completed };
+  }, (sqlx, contractId, index) => releaseMilestone(sqlx, contractId, index));
+  const k5 = (await db`SELECT status FROM contracts WHERE id = ${K5}`)[0];
+  tc("D06", DA, "After the deadline the job approves the service delivery and completes the order", "completed", job.completed >= 1 && k5.status === "completed", `job completed ${job.completed}, contract ${k5.status}`);
+  const earnAfter = (await req("ravi", "GET", "/api/v1/me/earnings")).d;
+  const after = earnAfter.available_minor ?? earnAfter.balances?.[0]?.available_minor ?? 0;
+  tc("D07", DA, "…and releases the funded amount to the freelancer (₹8,000 − 3% = ₹7,760)", "+776000", after - before === 776000, `available ${before} → ${after}`);
+  const k6 = (await db`SELECT s.status FROM milestone_submissions s WHERE s.contract_id = ${K6} ORDER BY submitted_at DESC LIMIT 1`)[0];
+  tc("D08", DA, "The fixed-price project delivery is untouched by the job (D-25)", "still waiting", k6.status === "submitted", k6.status);
+  const ev = await db`SELECT event_type FROM contract_events WHERE contract_id = ${K5} AND event_type = 'milestone.auto_completed'`;
+  tc("D09", DA, "The activity log says it was completed automatically", "1 event", ev.length === 1, `${ev.length} event`);
+  const job2 = await autoCompleteServiceDeliveries(db as any, later, async (sqlx, contractId, index) => {
+    const r = await decideSubmission(sqlx, contractId, index, "approve", "x", { userId: null, party: "system" });
+    return { approved: r.code === "OK", completed: r.code === "OK" && r.completed };
+  }, (sqlx, contractId, index) => releaseMilestone(sqlx, contractId, index));
+  tc("D10", DA, "Running the job again changes nothing", "0 completed", job2.completed === 0, `${job2.completed} completed`);
+  // Late milestone: move the agreed due date into the past (as if time passed)
+  const lateMove = async (contractId: string, daysAgo: number) => {
+    const due = new Date(Date.now() - daysAgo * 864e5).toISOString().slice(0, 10);
+    const v = (await db`SELECT c.agreed_version, c.current_version FROM contracts c WHERE c.id = ${contractId}`)[0];
+    const row = (await db`SELECT milestones_json FROM contract_versions WHERE contract_id = ${contractId} AND version = ${v.agreed_version ?? v.current_version}`)[0];
+    const ms = JSON.parse(row.milestones_json).map((m: any) => ({ ...m, due_date: due }));
+    await db`UPDATE contract_versions SET milestones_json = ${JSON.stringify(ms)} WHERE contract_id = ${contractId} AND version = ${v.agreed_version ?? v.current_version}`;
+  };
+  const L7 = await req("acme", "POST", `/api/v1/organizations/${org.id}/listings`, listing("Flyer design"));
+  await req("acme", "POST", `/api/v1/listings/${L7.d.id}/transition`, { action: "submit" });
+  const P7 = await req("ravi", "POST", `/api/v1/marketplace/listings/${L7.d.id}/proposals`, { cover_letter: "I will design your opening-day flyer in print and phone sizes, with two rounds of changes and print-ready files.", price_minor: 500000, estimated_days: 5 });
+  const o7 = await req("acme", "POST", `/api/v1/listing-proposals/${P7.d.id}/offer`, { terms: { ...terms2, title: "Flyer", milestones: [{ title: "Flyer", amount_minor: 500000, due_date: "2027-01-05" }] } });
+  const K7 = o7.d.id ?? o7.d.contract_id;
+  await req("ravi", "POST", `/api/v1/contracts/${K7}/accept`, { version: 1 });
+  await fund(K7, 0, `k7-${tag}`);
+  await lateMove(K7, 0);
+  await st("D11", DA, "Due today: not late yet", "acme", "GET", `/api/v1/contracts/${K7}/workspace`, undefined, 200, (r) => [r.d.milestones?.[0]?.late === false && r.d.late_cancel_allowed === false, `late ${r.d.milestones?.[0]?.late}`]);
+  await lateMove(K7, 3);
+  await st("D12", DA, "Three days past the due date the milestone shows Late and the client may cancel alone", "acme", "GET", `/api/v1/contracts/${K7}/workspace`, undefined, 200, (r) => [r.d.milestones?.[0]?.late === true && r.d.late_cancel_allowed === true, `late ${r.d.milestones?.[0]?.late}, may cancel ${r.d.late_cancel_allowed}`]);
+  await st("D13", DA, "The client cancels the late order alone and gets the funded ₹5,250 back", "acme", "POST", `/api/v1/contracts/${K7}/cancellation`, { reason: "The flyer is three days late and our opening is tomorrow." }, 201, (r) => [r.d.cancelled === true && r.d.late === true && r.d.refunded_milestones === 1, r.msg]);
+  const ref7 = await db`SELECT COALESCE(sum(total_minor), 0)::bigint AS t FROM payment_intents WHERE contract_id = ${K7} AND status = 'refunded'`;
+  tc("D13b", DA, "…the refund is the full ₹5,250 the client paid (₹5,000 + 5% fee)", "525000", Number(ref7[0].t) === 525000, `refunded ${ref7[0].t}`);
+  // Cancellation not answered for 48 hours
+  const L8 = await req("acme", "POST", `/api/v1/organizations/${org.id}/listings`, listing("Menu photos"));
+  await req("acme", "POST", `/api/v1/listings/${L8.d.id}/transition`, { action: "submit" });
+  const P8 = await req("ravi", "POST", `/api/v1/marketplace/listings/${L8.d.id}/proposals`, { cover_letter: "I will edit your menu photos for the website and print, keeping colours true to the food, in one week.", price_minor: 400000, estimated_days: 7 });
+  const o8 = await req("acme", "POST", `/api/v1/listing-proposals/${P8.d.id}/offer`, { terms: { ...terms2, title: "Menu photos", milestones: [{ title: "Photos", amount_minor: 400000, due_date: "2027-02-01" }] } });
+  const K8 = o8.d.id ?? o8.d.contract_id;
+  await req("ravi", "POST", `/api/v1/contracts/${K8}/accept`, { version: 1 });
+  await fund(K8, 0, `k8-${tag}`);
+  await st("D14", DA, "A cancellation request on a contract that is not late waits for the other side, with a 48-hour deadline", "acme", "POST", `/api/v1/contracts/${K8}/cancellation`, { reason: "We are closing the menu project for now." }, 201, (r) => [r.d.cancelled === false && typeof r.d.answer_by === "string", `answer by ${String(r.d.answer_by).slice(0, 16)}`]);
+  const expiredNow = await expireCancellationRequests(db as any, new Date(), (sqlx, c, id) => acceptCancellation(sqlx, c, id, { userId: null, party: "system", kind: "expired" }));
+  const k8a = (await db`SELECT status FROM contracts WHERE id = ${K8}`)[0];
+  tc("D15", DA, "Before 48 hours the job leaves it open", "active", k8a.status === "active", `contract ${k8a.status} (job cancelled ${expiredNow} elsewhere)`);
+  await db`UPDATE contract_cancellations SET created_at = now() - interval '49 hours' WHERE contract_id = ${K8} AND status = 'open'`;
+  const expiredLater = await expireCancellationRequests(db as any, new Date(), (sqlx, c, id) => acceptCancellation(sqlx, c, id, { userId: null, party: "system", kind: "expired" }));
+  const k8b = (await db`SELECT status FROM contracts WHERE id = ${K8}`)[0];
+  const refunds8 = await db`SELECT count(*)::int AS n FROM payment_intents WHERE contract_id = ${K8} AND status = 'refunded'`;
+  tc("D16", DA, "After 48 hours without an answer the contract is cancelled and the funded milestone refunded", "cancelled, 1 refund", expiredLater >= 1 && k8b.status === "cancelled" && refunds8[0].n === 1, `contract ${k8b.status}, refunds ${refunds8[0].n}`);
+  const bal2 = await db`SELECT COALESCE(sum(CASE WHEN direction = 'debit' THEN amount_minor ELSE 0 END), 0)::bigint AS d, COALESCE(sum(CASE WHEN direction = 'credit' THEN amount_minor ELSE 0 END), 0)::bigint AS c FROM ledger_lines`;
+  tc("D17", DA, "The ledger still balances after automatic releases and refunds", "debits = credits", bal2[0].d === bal2[0].c, `${bal2[0].d} = ${bal2[0].c}`);
 
   writeFileSync(process.argv[2], JSON.stringify(cases, null, 1));
   const bad = cases.filter((c) => !c.ok);

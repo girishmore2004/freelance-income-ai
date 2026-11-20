@@ -10,6 +10,7 @@ import { screenText } from "./listings";
 import { contractVersionOut } from "./contracts";
 import type { ContractRow, ContractVersionRow, Party } from "./contracts";
 import { recordContractEvent } from "./contract-events";
+import { cancellationDeadline, lateCancelAllowed } from "./deadlines";
 import {
   applyProviderEvent,
   createFunding,
@@ -252,7 +253,7 @@ export async function handlePaymentRoute(request: Request, env: Env, requestId: 
           }),
           invoices: invoices.map((i) => ({ id: i.id, number: i.number, milestone_title: i.milestone_title, total_minor: Number(i.total_minor), status: i.status, mode: i.mode })),
           cancellation: cancellation
-            ? { id: cancellation.id, requested_by: cancellation.requested_by_party, mine: cancellation.requested_by_party === side.party, reason: cancellation.reason, status: cancellation.status }
+            ? { id: cancellation.id, requested_by: cancellation.requested_by_party, mine: cancellation.requested_by_party === side.party, reason: cancellation.reason, status: cancellation.status, answer_by: cancellation.status === "open" ? cancellationDeadline(cancellation.created_at).toISOString() : null }
             : null
         },
         "Payments",
@@ -295,8 +296,25 @@ export async function handlePaymentRoute(request: Request, env: Env, requestId: 
         RETURNING id
       `;
       if (!rows[0]) return failure("ALREADY_REQUESTED", "A cancellation request is already open.", 409, requestId);
+      // U29 (D-27): a client may cancel alone once a milestone has been late for 24 hours.
+      if (side.party === "client" && (await lateForCancel(sql, contract.id))) {
+        const done = await acceptCancellation(sql, contract.id, rows[0].id, { userId, party: "client", kind: "late" });
+        if (done.cancelled) {
+          return success(
+            { id: rows[0].id, cancelled: true, late: true, refunded_milestones: done.refunded },
+            done.refunded ? `The order was late, so it is cancelled now. ${done.refunded} funded milestone(s) refunded to you.` : "The order was late, so it is cancelled now.",
+            201,
+            requestId
+          );
+        }
+      }
       await recordContractEvent(sql, contract.id, userId, side.party, "cancellation.requested", {});
-      return success({ id: rows[0].id }, "Cancellation requested. The other party must accept it.", 201, requestId);
+      return success(
+        { id: rows[0].id, cancelled: false, answer_by: cancellationDeadline(new Date()).toISOString() },
+        "Cancellation requested. If the other party does not answer within 48 hours, the contract is cancelled.",
+        201,
+        requestId
+      );
     }
 
     const open = (await sql<{ id: string; requested_by_party: string }[]>`
@@ -319,20 +337,70 @@ export async function handlePaymentRoute(request: Request, env: Env, requestId: 
       await recordContractEvent(sql, contract.id, userId, side.party, "cancellation.declined", {});
       return success({ id: open.id, cancelled: false }, "Cancellation declined. You can raise a dispute if you cannot agree.", 200, requestId);
     }
-    const done = await sql.begin(async (tx) => {
-      const updated = await tx<{ id: string }[]>`UPDATE contract_cancellations SET status = 'accepted', responded_by = ${userId}, responded_at = now() WHERE id = ${open.id} AND status = 'open' RETURNING id`;
-      if (!updated[0]) return false;
-      await tx`UPDATE contracts SET status = 'cancelled', updated_at = now() WHERE id = ${contract.id} AND status = 'active'`;
-      await recordContractEvent(tx, contract.id, userId, side.party, "contract.cancelled", { by_agreement: true });
-      return true;
-    });
-    if (!done) return failure("NO_REQUEST", "There is no open cancellation request.", 409, requestId);
-    // Refund every unreleased funding (approved work stays paid).
-    const unreleased = await sql<IntentRow[]>`SELECT * FROM payment_intents WHERE contract_id = ${contract.id} AND status IN ('created', 'funded')`;
-    let refunded = 0;
-    for (const intent of unreleased) if ((await refundIntent(sql, intent, "Contract cancelled by agreement")) === "refunded") refunded += 1;
+    const done = await acceptCancellation(sql, contract.id, open.id, { userId, party: side.party, kind: "agreement" });
+    if (!done.cancelled) return failure("NO_REQUEST", "There is no open cancellation request.", 409, requestId);
+    const refunded = done.refunded;
     return success({ id: open.id, cancelled: true, refunded_milestones: refunded }, refunded ? `Contract cancelled. ${refunded} funded milestone(s) refunded to the client.` : "Contract cancelled.", 200, requestId);
   } finally {
     await sql.end({ timeout: 5 });
   }
+}
+
+/**
+ * Accepts an open cancellation request in one transaction and refunds every funded,
+ * unreleased milestone afterwards (approved work stays paid). Used by the other party's
+ * acceptance, the 48-hour expiry (actor system) and a client's cancel of a late order (U29).
+ */
+export async function acceptCancellation(
+  sql: Sql,
+  contractId: string,
+  cancellationId: string,
+  actor: { userId: string | null; party: "client" | "freelancer" | "system"; kind: "agreement" | "expired" | "late" }
+): Promise<{ cancelled: boolean; refunded: number }> {
+  const done = await sql.begin(async (tx) => {
+    const updated = await tx<{ id: string }[]>`
+      UPDATE contract_cancellations SET status = 'accepted', responded_by = ${actor.userId}, responded_at = now()
+      WHERE id = ${cancellationId} AND contract_id = ${contractId} AND status = 'open' RETURNING id
+    `;
+    if (!updated[0]) return false;
+    const contract = await tx<{ id: string }[]>`UPDATE contracts SET status = 'cancelled', updated_at = now() WHERE id = ${contractId} AND status = 'active' RETURNING id`;
+    if (!contract[0]) throw new Error("contract not active");
+    if (actor.kind === "expired") await recordContractEvent(tx, contractId, null, "system", "cancellation.expired", {});
+    else if (actor.kind === "late") await recordContractEvent(tx, contractId, actor.userId, "client", "contract.cancelled_late", {});
+    else await recordContractEvent(tx, contractId, actor.userId, actor.party, "contract.cancelled", { by_agreement: true });
+    return true;
+  }).catch((error: unknown) => {
+    if (error instanceof Error && error.message === "contract not active") return false;
+    throw error;
+  });
+  if (!done) return { cancelled: false, refunded: 0 };
+  const reason = actor.kind === "late" ? "Order cancelled by the client: late delivery" : actor.kind === "expired" ? "Cancellation not answered within 48 hours" : "Contract cancelled by agreement";
+  const unreleased = await sql<IntentRow[]>`SELECT * FROM payment_intents WHERE contract_id = ${contractId} AND status IN ('created', 'funded')`;
+  let refunded = 0;
+  for (const intent of unreleased) if ((await refundIntent(sql, intent, reason)) === "refunded") refunded += 1;
+  return { cancelled: true, refunded };
+}
+
+/** Whether the client may cancel this contract alone: a milestone late for 24 hours (U29). */
+export async function lateForCancel(sql: Queryable, contractId: string, now = new Date()): Promise<boolean> {
+  const contract = (await sql<{ agreed_version: number | null; current_version: number }[]>`
+    SELECT agreed_version, current_version FROM contracts WHERE id = ${contractId} AND status = 'active' LIMIT 1
+  `)[0];
+  if (!contract) return false;
+  const version = (await sql<{ milestones_json: string }[]>`
+    SELECT milestones_json FROM contract_versions WHERE contract_id = ${contractId} AND version = ${contract.agreed_version ?? contract.current_version} LIMIT 1
+  `)[0];
+  let milestones: Array<{ due_date?: string | null }> = [];
+  try {
+    const parsed = JSON.parse(version?.milestones_json || "[]");
+    milestones = Array.isArray(parsed) ? parsed : [];
+  } catch {
+    milestones = [];
+  }
+  const latest = await sql<{ milestone_index: number; status: string }[]>`
+    SELECT DISTINCT ON (milestone_index) milestone_index, status FROM milestone_submissions
+    WHERE contract_id = ${contractId} ORDER BY milestone_index, submitted_at DESC
+  `;
+  const state = new Map(latest.map((r) => [Number(r.milestone_index), r.status]));
+  return lateCancelAllowed(milestones.map((m, i) => ({ due_date: m.due_date ?? null, state: state.get(i) ?? "pending" })), now);
 }

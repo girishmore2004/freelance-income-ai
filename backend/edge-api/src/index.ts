@@ -22,12 +22,14 @@ import { autoApproveTimesheets, handleTimesheetRoute } from "./lib/timesheet-rou
 import { handleAgentToolRoute } from "./lib/agent-tools-routes";
 import { handleFairRoute } from "./lib/fair-routes";
 import { expireStaleOpportunities, handleAgentCompleteRoute, runBalanceDigest } from "./lib/agent-complete-routes";
+import { autoCompleteServiceDeliveries, expireCancellationRequests, runDisputeDeadlines } from "./lib/deadlines";
+import { acceptCancellation } from "./lib/payment-routes";
 import { handleOpsRoute } from "./lib/ops-routes";
 import { handleSupportRoute } from "./lib/support-routes";
 import { handleListingRoute } from "./lib/listing-routes";
 import { handleMatchRoute, runScheduledListingExpiry } from "./lib/match-routes";
 import { handleHiringRoute } from "./lib/hiring-routes";
-import { handleDeliveryRoute } from "./lib/delivery-routes";
+import { decideSubmission, handleDeliveryRoute } from "./lib/delivery-routes";
 import { handleReviewRoute } from "./lib/review-routes";
 import { handleFinanceRoute } from "./lib/finance-routes";
 import { handlePlanRoute } from "./lib/plan-routes";
@@ -39,7 +41,7 @@ import { handlePaymentRoute } from "./lib/payment-routes";
 import { handleNotificationRoute } from "./lib/notify";
 import { handleDisputeRoute } from "./lib/dispute-routes";
 import { handleFileRoute } from "./lib/file-routes";
-import { releasePendingApprovals } from "./lib/payments";
+import { releaseMilestone, releasePendingApprovals } from "./lib/payments";
 import { enforceRateLimit } from "./lib/rate-limit";
 import { applySessionCookies } from "./lib/auth-context";
 import { handleMfaLoginRoute } from "./lib/mfa-login-route";
@@ -774,6 +776,21 @@ async function runScheduledProgressDigests(env: Env): Promise<void> {
     if (stale) console.log(JSON.stringify({ service: "freelance-income-ai-api-edge", event: "opportunities.stale_hidden", count: stale }));
     const balance = await runBalanceDigest(sql, now);
     if (balance) console.log(JSON.stringify({ service: "freelance-income-ai-api-edge", event: "balance_digest.sent", admins: balance }));
+    // U29 deadlines (D-26 to D-29): service deliveries left unreviewed, unanswered cancellations, dispute reply windows.
+    const services = await autoCompleteServiceDeliveries(
+      sql,
+      now,
+      async (db, contractId, index) => {
+        const r = await decideSubmission(db, contractId, index, "approve", "Completed automatically: the client did not review it within the deadline.", { userId: null, party: "system" });
+        return { approved: r.code === "OK", completed: r.code === "OK" && r.completed };
+      },
+      (db, contractId, index) => releaseMilestone(db, contractId, index)
+    );
+    if (services.completed || services.reminded) console.log(JSON.stringify({ service: "freelance-income-ai-api-edge", event: "deadlines.service_reviews", ...services }));
+    const expired = await expireCancellationRequests(sql, now, (db, contractId, id) => acceptCancellation(db, contractId, id, { userId: null, party: "system", kind: "expired" }));
+    if (expired) console.log(JSON.stringify({ service: "freelance-income-ai-api-edge", event: "deadlines.cancellations_expired", count: expired }));
+    const disputes = await runDisputeDeadlines(sql, now);
+    if (disputes.reminded || disputes.ready) console.log(JSON.stringify({ service: "freelance-income-ai-api-edge", event: "deadlines.disputes", ...disputes }));
   } finally {
     await sql.end({ timeout: 5 });
   }
