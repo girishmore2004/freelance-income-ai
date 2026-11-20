@@ -47,7 +47,20 @@ export function parseDate(value: unknown): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-export async function fetchJson(url: string, extraHeaders: Record<string, string> = {}): Promise<any> {
+/**
+ * Fetches JSON from a source. With `cacheSeconds`, the response is shared through Cloudflare's
+ * cache, so a source is called once per period for everyone instead of once per user and run
+ * (U30): this keeps within each source's published limits (Remotive at most 4 a day, Jobicy at
+ * most hourly, Himalayas daily refresh). Outside Workers (tests) there is no cache.
+ */
+export async function fetchJson(url: string, extraHeaders: Record<string, string> = {}, cacheSeconds = 0): Promise<any> {
+  const cache: Cache | undefined = cacheSeconds > 0 ? (globalThis as unknown as { caches?: { default?: Cache } }).caches?.default : undefined;
+  const key = cache ? new Request(url, { method: "GET" }) : null;
+  if (cache && key) {
+    const hit = await cache.match(key).catch(() => undefined);
+    if (hit) return await hit.json();
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
@@ -61,7 +74,15 @@ export async function fetchJson(url: string, extraHeaders: Record<string, string
       }
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return await response.json();
+    if (!cache || !key) return await response.json();
+    const text = await response.text();
+    const data = JSON.parse(text);
+    {
+      await cache
+        .put(key, new Response(text, { headers: { "content-type": "application/json", "cache-control": `public, max-age=${cacheSeconds}` } }))
+        .catch(() => undefined);
+    }
+    return data;
   } finally {
     clearTimeout(timer);
   }

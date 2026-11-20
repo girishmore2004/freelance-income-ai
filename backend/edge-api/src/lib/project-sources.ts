@@ -49,7 +49,8 @@ export async function fromFreelancer(term: string, env?: Env): Promise<Normalize
   const data = await fetchJson(
     `https://www.freelancer.com/api/projects/0.1/projects/active/?query=${encodeURIComponent(term)}` +
       `&limit=${LIMIT}&full_description=true&job_details=true`,
-    token ? { "freelancer-oauth-v1": token } : {}
+    token ? { "freelancer-oauth-v1": token } : {},
+    3600
   );
   const projects: any[] = Array.isArray(data?.result?.projects) ? data.result.projects : [];
 
@@ -74,14 +75,74 @@ export async function fromFreelancer(term: string, env?: Env): Promise<Normalize
 
 /* ---------- Hacker News "Freelancer? Seeking freelancer?" (Algolia API) ---------- */
 export async function fromHackerNews(_term: string): Promise<NormalizedJob[]> {
+  const [freelance, hiring] = await Promise.allSettled([hnFreelancerThread(), hnWhoIsHiringContracts()]);
+  const out = [
+    ...(freelance.status === "fulfilled" ? freelance.value : []),
+    ...(hiring.status === "fulfilled" ? hiring.value : []),
+  ];
+  if (!out.length && freelance.status === "rejected" && hiring.status === "rejected") throw freelance.reason;
+  return out;
+}
+
+/** HN "Who is hiring?": company posts that offer contract, freelance or part-time remote work (U30). Pure filter; exported for tests. */
+export function hiringPostToJob(c: { objectID: string; author?: string; comment_text?: string; created_at?: string }): NormalizedJob | null {
+  const text = stripHtml(c.comment_text ?? "");
+  const head = text.split("\n")[0] ?? "";
+  // Companies post "Company | Role | Location | REMOTE | CONTRACT …" on the first line.
+  if (!head.includes("|")) return null;
+  if (!/\b(contract|contractor|freelance|freelancer|part[- ]time|consult(ant|ing))\b/i.test(head)) return null;
+  if (!/\bremote\b/i.test(head)) return null;
+  const parts = head.split("|").map((p) => p.trim()).filter(Boolean);
+  const budget = parseBudget(text);
+  return {
+    source: "hackernews",
+    external_id: String(c.objectID),
+    title: firstLine(parts.slice(0, 2).join(" — ")),
+    company: parts[0] || String(c.author ?? "Hacker News poster"),
+    description: text,
+    url: `https://news.ycombinator.com/item?id=${c.objectID}`,
+    job_type: "contract",
+    industry: "",
+    location: "Remote",
+    published_at: parseDate(c.created_at),
+    budget_min: budget.min,
+    budget_max: budget.max,
+    currency: "USD",
+    competition: "medium"
+  };
+}
+
+async function hnWhoIsHiringContracts(): Promise<NormalizedJob[]> {
   const threads = await fetchJson(
-    "https://hn.algolia.com/api/v1/search_by_date?tags=story,author_whoishiring&query=Freelancer&hitsPerPage=6"
+    "https://hn.algolia.com/api/v1/search_by_date?tags=story,author_whoishiring&query=hiring&hitsPerPage=6",
+    {},
+    21600
+  );
+  const thread = (threads?.hits ?? []).find((h: any) => /who is hiring/i.test(String(h.title ?? "")));
+  if (!thread?.objectID) return [];
+  const comments = await fetchJson(`https://hn.algolia.com/api/v1/search_by_date?tags=comment,story_${thread.objectID}&hitsPerPage=500`, {}, 21600);
+  const out: NormalizedJob[] = [];
+  for (const c of comments?.hits ?? []) {
+    if (String(c.parent_id) !== String(thread.objectID)) continue; // top-level company posts only
+    const job = hiringPostToJob(c);
+    if (job) out.push(job);
+  }
+  return out;
+}
+
+async function hnFreelancerThread(): Promise<NormalizedJob[]> {
+  const threads = await fetchJson(
+    "https://hn.algolia.com/api/v1/search_by_date?tags=story,author_whoishiring&query=Freelancer&hitsPerPage=6",
+    {},
+    21600
   );
   const thread = (threads?.hits ?? []).find((h: any) => /seeking freelancer/i.test(String(h.title ?? "")));
   if (!thread?.objectID) return [];
 
   const comments = await fetchJson(
-    `https://hn.algolia.com/api/v1/search_by_date?tags=comment,story_${thread.objectID}&hitsPerPage=100`
+    `https://hn.algolia.com/api/v1/search_by_date?tags=comment,story_${thread.objectID}&hitsPerPage=100`,
+    {},
+    21600
   );
 
   const out: NormalizedJob[] = [];
@@ -112,8 +173,11 @@ export async function fromHackerNews(_term: string): Promise<NormalizedJob[]> {
 }
 
 /* ---------- Reddit r/forhire (public JSON listing) ---------- */
-export async function fromReddit(_term: string): Promise<NormalizedJob[]> {
-  const data = await fetchJson("https://www.reddit.com/r/forhire/new.json?limit=50&raw_json=1");
+export async function fromReddit(_term: string, env?: Env): Promise<NormalizedJob[]> {
+  // Reddit's Public Content Policy (May 2024) requires a contract for commercial use of its data.
+  // Off until the founder records such an agreement (REDDIT_DATA_AGREEMENT=true, U30).
+  if (env?.REDDIT_DATA_AGREEMENT !== "true") return [];
+  const data = await fetchJson("https://www.reddit.com/r/forhire/new.json?limit=50&raw_json=1", {}, 3600);
   const posts: any[] = (data?.data?.children ?? []).map((c: any) => c.data);
 
   return posts
@@ -142,7 +206,7 @@ export async function fromReddit(_term: string): Promise<NormalizedJob[]> {
 
 /* ---------- RemoteOK (public API, link back + credit required) ---------- */
 export async function fromRemoteOk(_term: string): Promise<NormalizedJob[]> {
-  const data = await fetchJson("https://remoteok.com/api");
+  const data = await fetchJson("https://remoteok.com/api", {}, 21600);
   const jobs: any[] = Array.isArray(data) ? data.filter((j) => j && j.id && j.position) : [];
 
   return jobs.slice(0, 100).map((j) => ({
@@ -165,8 +229,10 @@ export async function fromRemoteOk(_term: string): Promise<NormalizedJob[]> {
 
 /* ---------- Himalayas (public jobs API) ---------- */
 export async function fromHimalayas(_term: string): Promise<NormalizedJob[]> {
-  const data = await fetchJson("https://himalayas.app/jobs/api?limit=20");
-  const jobs: any[] = Array.isArray(data?.jobs) ? data.jobs : [];
+  // The feed refreshes daily; three pages of 20, shared through the cache for a day (U30).
+  const pages = await Promise.allSettled([0, 20, 40].map((offset) => fetchJson(`https://himalayas.app/jobs/api?limit=20&offset=${offset}`, {}, 86400)));
+  const jobs: any[] = pages.flatMap((p) => (p.status === "fulfilled" && Array.isArray(p.value?.jobs) ? p.value.jobs : []));
+  if (!jobs.length && pages.every((p) => p.status === "rejected")) throw (pages[0] as PromiseRejectedResult).reason;
 
   return jobs.map((j) => ({
     source: "himalayas",

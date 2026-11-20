@@ -1,4 +1,5 @@
 import type { Env } from "../types";
+import { assessListing } from "./genuine";
 import {
   database,
   draftProposal,
@@ -19,7 +20,7 @@ export type { NormalizedJob };
 const PROJECT_SOURCES = [
   ["freelancer", fromFreelancer],
   ["hackernews", fromHackerNews],
-  ["reddit", fromReddit]
+  ["reddit", (term: string, env?: Env) => fromReddit(term, env)]
 ] as const;
 const JOB_BOARD_SOURCES = [
   ["remotive", (term: string) => fromRemotive(term)],
@@ -31,13 +32,13 @@ const ALL_SOURCE_NAMES = [...PROJECT_SOURCES, ...JOB_BOARD_SOURCES].map(([name])
 
 /** What staff see on the source management page (U10). */
 export const SOURCE_CATALOGUE: Array<{ code: string; label: string; kind: "project" | "job_board"; access: string }> = [
-  { code: "freelancer", label: "Freelancer.com", kind: "project", access: "Official API (FREELANCER_TOKEN optional)" },
-  { code: "hackernews", label: "Hacker News \"Who is hiring\"", kind: "project", access: "Official Algolia API" },
-  { code: "reddit", label: "Reddit r/forhire", kind: "project", access: "Public JSON feed" },
-  { code: "remotive", label: "Remotive", kind: "job_board", access: "Public API" },
-  { code: "jobicy", label: "Jobicy", kind: "job_board", access: "Public API" },
-  { code: "remoteok", label: "RemoteOK", kind: "job_board", access: "Public API" },
-  { code: "himalayas", label: "Himalayas", kind: "job_board", access: "Public API" }
+  { code: "freelancer", label: "Freelancer.com", kind: "project", access: "Official API (FREELANCER_TOKEN optional); shared hourly per search" },
+  { code: "hackernews", label: "Hacker News \"Seeking freelancer\" and \"Who is hiring\" (contract, remote)", kind: "project", access: "Official Algolia API; shared every 6 hours" },
+  { code: "reddit", label: "Reddit r/forhire", kind: "project", access: "Off: Reddit requires a data agreement for commercial use (set REDDIT_DATA_AGREEMENT after signing one)" },
+  { code: "remotive", label: "Remotive", kind: "job_board", access: "Public API; one shared feed every 6 hours (their limit: 4 a day); credit and link back required" },
+  { code: "jobicy", label: "Jobicy", kind: "job_board", access: "Public API; one shared feed hourly (their fair use); keep the Jobicy link" },
+  { code: "remoteok", label: "RemoteOK", kind: "job_board", access: "Public API; shared every 6 hours; link back required" },
+  { code: "himalayas", label: "Himalayas", kind: "job_board", access: "Public API; shared daily (their refresh); credit shown and Apply uses their link" }
 ];
 
 /** Sources staff switched off; empty before migration 0071 or if the table cannot be read. */
@@ -98,6 +99,9 @@ export interface DiscoveryResult {
   skipped_location?: number;
   skipped_work_type?: number;
   skipped_low_match?: number;
+  /** U30: listings dropped by the genuineness check, and why. */
+  skipped_untrusted?: number;
+  untrusted_reasons?: Record<string, number>;
 }
 
 // Common technology words used to detect what a listing actually asks for.
@@ -113,12 +117,12 @@ const TECH_VOCAB = new Set(
 );
 
 export async function fromRemotive(term: string): Promise<NormalizedJob[]> {
-  const data = await fetchJson(
-    `https://remotive.com/api/remote-jobs?search=${encodeURIComponent(term)}&limit=${FETCH_LIMIT}`
-  );
+  // One shared feed every 6 hours (Remotive asks for at most 4 requests a day); matching happens here (U30).
+  void term;
+  const data = await fetchJson("https://remotive.com/api/remote-jobs?limit=300", {}, 21600);
   const jobs: any[] = Array.isArray(data?.jobs) ? data.jobs : [];
 
-  return jobs.slice(0, FETCH_LIMIT).map((job) => ({
+  return jobs.slice(0, 300).map((job) => ({
     source: "remotive" as const,
     external_id: String(job.id),
     title: String(job.title ?? "").trim(),
@@ -133,14 +137,12 @@ export async function fromRemotive(term: string): Promise<NormalizedJob[]> {
 }
 
 export async function fromJobicy(term: string): Promise<NormalizedJob[]> {
-  if (term.length < 3) return [];
-
-  const data = await fetchJson(
-    `https://jobicy.com/api/v2/remote-jobs?count=${FETCH_LIMIT}&tag=${encodeURIComponent(term)}`
-  );
+  // One shared feed, at most hourly (Jobicy fair use); matching happens here (U30).
+  void term;
+  const data = await fetchJson("https://jobicy.com/api/v2/remote-jobs?count=100", {}, 3600);
   const jobs: any[] = Array.isArray(data?.jobs) ? data.jobs : [];
 
-  return jobs.slice(0, FETCH_LIMIT).map((job) => ({
+  return jobs.slice(0, 100).map((job) => ({
     source: "jobicy" as const,
     external_id: String(job.id),
     title: String(job.jobTitle ?? "").trim(),
@@ -292,7 +294,8 @@ export async function runDiscovery(
     skipped_duplicates: 0,
     skipped_location: 0,
     skipped_work_type: 0,
-    skipped_low_match: 0
+    skipped_low_match: 0,
+    skipped_untrusted: 0
   };
 
   const profileForScore = scoreProfile(profile);
@@ -302,6 +305,15 @@ export async function runDiscovery(
     if (!job.title || !job.url || !job.external_id) continue;
     if (takenDown.has(`${job.source}|${safeHttpUrl(job.url) || job.url}`)) {
       result.skipped_duplicates = (result.skipped_duplicates ?? 0) + 1;
+      continue;
+    }
+
+    // U30: drop listings with known scam patterns before anyone sees them.
+    const verdict = assessListing(job);
+    if (!verdict.genuine) {
+      result.skipped_untrusted = (result.skipped_untrusted ?? 0) + 1;
+      const tally = (result.untrusted_reasons ??= {});
+      for (const r of verdict.reasons) tally[r] = (tally[r] ?? 0) + 1;
       continue;
     }
 

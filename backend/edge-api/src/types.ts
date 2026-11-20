@@ -65,6 +65,8 @@ export interface Env {
   // Comma-separated feature flag keys forced OFF (emergency kill switch; "*" = all).
   FEATURE_FLAGS_OFF?: string;
   FREELANCER_TOKEN?: string;
+  /** "true" only once Reddit has granted a data agreement for commercial use (Public Content Policy, 2024). */
+  REDDIT_DATA_AGREEMENT?: string;
   INCLUDE_JOB_BOARDS?: string;
 
   // Authentication secrets must be configured as Cloudflare secrets.

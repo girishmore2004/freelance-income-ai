@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fromFreelancer, fromHackerNews, fromReddit, parseBudget } from "./project-sources";
+import { fromFreelancer, fromHackerNews, fromReddit, hiringPostToJob, parseBudget } from "./project-sources";
 import { detectTech, workTypeOk } from "./discovery-agent";
 
 // Payload shapes follow each provider's documented fields. These tests check
@@ -7,6 +7,16 @@ import { detectTech, workTypeOk } from "./discovery-agent";
 function mockFetchSequence(payloads: unknown[]) {
   const queue = [...payloads];
   vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => queue.shift() })));
+}
+
+/** Answers by URL, for sources that make several requests in parallel. */
+function mockFetchByUrl(routes: Array<[RegExp, unknown]>) {
+  const fn = vi.fn(async (url: string) => {
+    const hit = routes.find(([pattern]) => pattern.test(String(url)));
+    return { ok: Boolean(hit), status: hit ? 200 : 404, json: async () => hit?.[1] };
+  });
+  vi.stubGlobal("fetch", fn);
+  return fn;
 }
 
 afterEach(() => vi.unstubAllGlobals());
@@ -47,21 +57,47 @@ describe("project sources", () => {
     expect(workTypeOk(job, [])).toBe(true);
   });
 
+  // Since U30 the source also reads the monthly "Who is hiring?" thread in parallel, so the fake answers by URL.
   it("keeps only top-level 'SEEKING FREELANCER' Hacker News posts", async () => {
-    mockFetchSequence([
-      { hits: [{ objectID: "1", title: "Ask HN: Freelancer? Seeking freelancer? (November 2026)" }] },
-      {
+    mockFetchByUrl([
+      [/query=Freelancer/, { hits: [{ objectID: "1", title: "Ask HN: Freelancer? Seeking freelancer? (November 2026)" }] }],
+      [/query=hiring/, { hits: [] }],
+      [/story_1/, {
         hits: [
           { objectID: "10", parent_id: 1, author: "acme", created_at: "2026-11-02T10:00:00.000Z", comment_text: "SEEKING FREELANCER | Remote | React dev<p>Budget $3,000 fixed</p>" },
           { objectID: "11", parent_id: 1, author: "bob", comment_text: "SEEKING WORK | Remote | I do React" },
           { objectID: "12", parent_id: 10, author: "x", comment_text: "SEEKING FREELANCER reply" }
         ]
-      }
+      }]
     ]);
     const jobs = await fromHackerNews("react");
     expect(jobs).toHaveLength(1);
     expect(jobs[0].url).toBe("https://news.ycombinator.com/item?id=10");
     expect(jobs[0].budget_min).toBe(3000);
+  });
+
+  it("adds contract, freelance or part-time remote company posts from \"Who is hiring?\" (U30)", async () => {
+    mockFetchByUrl([
+      [/query=Freelancer/, { hits: [] }],
+      [/query=hiring/, { hits: [{ objectID: "2", title: "Ask HN: Who is hiring? (November 2026)" }] }],
+      [/story_2/, { hits: [
+        { objectID: "20", parent_id: 2, author: "acme", created_at: "2026-11-03T10:00:00.000Z", comment_text: "Acme Analytics | Senior React engineer | REMOTE | Contract, 3 months<p>We build dashboards for clinics. Rate $90/hr. Apply at careers page.</p>" },
+        { objectID: "21", parent_id: 2, author: "big", comment_text: "BigCo | Backend engineer | Onsite NYC | Full-time<p>Great benefits.</p>" },
+        { objectID: "22", parent_id: 2, author: "far", comment_text: "FarCo | Designer | Full-time | REMOTE<p>Salary 120k.</p>" },
+        { objectID: "23", parent_id: 20, author: "reply", comment_text: "Acme | Contract | REMOTE reply" },
+      ] }],
+    ]);
+    const jobs = await fromHackerNews("react");
+    expect(jobs.map((j) => j.external_id)).toEqual(["20"]);
+    expect(jobs[0]).toMatchObject({ company: "Acme Analytics", job_type: "contract", location: "Remote", url: "https://news.ycombinator.com/item?id=20" });
+    expect(hiringPostToJob({ objectID: "x", comment_text: "No pipes here, contract remote" })).toBeNull();
+  });
+
+  // Reddit's Public Content Policy (May 2024) needs a contract for commercial use: off by default since U30.
+  it("calls Reddit only once a data agreement is recorded", async () => {
+    const fetchFn = mockFetchByUrl([]);
+    expect(await fromReddit("node")).toEqual([]);
+    expect(fetchFn).not.toHaveBeenCalled();
   });
 
   it("keeps only [Hiring] posts from r/forhire", async () => {
@@ -75,7 +111,7 @@ describe("project sources", () => {
         }
       }
     ]);
-    const jobs = await fromReddit("node");
+    const jobs = await fromReddit("node", { REDDIT_DATA_AGREEMENT: "true" } as never);
     expect(jobs).toHaveLength(1);
     expect(jobs[0].title).toBe("Node.js API developer");
     expect(jobs[0].budget_min).toBe(800);
