@@ -3,6 +3,7 @@
 ## U30 — genuine external sources (2026-11-20, release 5.97.0)
 - Edge: vitest **458 passed** (new `genuine.test.ts` 5: ordinary ads with an email or rate pass; fees first, chat apps, crypto, UPI, get-rich, $900/h, empty, link shorteners, http/javascript links and look-alike hosts rejected; `project-sources.test.ts`: "Who is hiring?" keeps only remote contract/freelance company posts, Reddit makes no request without an agreement — changed on purpose (Reddit policy) and its old test now passes the agreement; the HN fake answers by URL because two threads are read in parallel). Typecheck and bundle clean. Live source calls cannot run here (network blocked); CI and the first cron run are the real check.
 - Frontend: typecheck clean, unit 49 passed; the search result says how many listings were hidden as possible scams.
+- GitHub CI: Edge API CI success @ cc1d7d1; `main` @ bad053a and 6dbacd6 Backend tests and Full CI success (pytest, Alembic, build, Playwright in both modes).
 
 ## U29 — deadlines when someone stops answering (GitHub CI verified, 2026-11-20, release 5.96.0)
 - Edge: vitest **451 passed** (new `deadlines.test.ts` 9: review deadline with extensions, lateness, late-cancel after 24 h, 48-hour cancellation, dispute reply window, and the three jobs; `disputes.test.ts` changed on purpose: its dispute is 8 days old because staff now wait for the reply window, plus a test of the window). Edge API CI success @ 0cc2b26.
