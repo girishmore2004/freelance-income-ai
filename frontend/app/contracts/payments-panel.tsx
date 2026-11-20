@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api } from '@/lib/api-client';
 import { formatMinor } from '@/lib/listing-format';
+import { SetupWarning } from '../onboarding-ui';
 
 /**
  * Milestone funding, invoices and mutual cancellation for one contract.
@@ -72,8 +73,9 @@ export function PaymentsPanel({ contractId, contractStatus, party, canManage, on
   if (!data) return error ? <p className="error" role="alert">{error}</p> : null;
   const c = data.cancellation;
   return (
-    <section className="card" aria-label="Payments">
+    <section className="card" aria-label="Payments" aria-busy={busy || undefined}>
       <b>Payments</b>
+      {party === 'client' && canManage && data.enabled && contractStatus === 'active' && <SetupWarning side="client" kind="billing" action="fund anyway" />}
       {data.mode === 'sandbox' && <p className="badge">TEST MODE — no real money moves</p>}
       {data.notice && <p className="muted">{data.notice}</p>}
       {data.enabled && !data.fees_configured && <p className="muted">Platform fees are not approved yet, so milestones cannot be funded.</p>}

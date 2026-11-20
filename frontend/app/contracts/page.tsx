@@ -126,7 +126,7 @@ export default function ContractsPage() {
   const shownItems = detail ? items.filter((c) => c.id === detail.id) : items.filter((c) => c.party === mode);
   const hiddenCount = items.length - shownItems.length;
   return (
-    <main className="shell">
+    <main aria-busy={busy || undefined} className="shell">
       <div className="row between">
         <h2>Contracts</h2>
         <span className="row"><NotificationLink />{mode === 'client' ? <a className="link" href="/client/projects">My projects</a> : <a className="link" href="/projects">Find projects</a>}</span>

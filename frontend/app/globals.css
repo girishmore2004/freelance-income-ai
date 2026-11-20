@@ -307,3 +307,17 @@ html[data-theme=dark][data-side=admin]{--accent:#cbd5e1;--accent2:#e2e8f0;--acce
 }
 .grid>.card,.grid>article,.grid>li{margin-top:0}
 .next-step{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:12px 14px;margin:10px 0;border:1px solid var(--accent-line);background:var(--accent-soft);border-radius:var(--radius-sm)}
+/* U31 onboarding: required marks, setup warnings, Get started list; while a page is busy,
+   only the clicked button changes (the rest keep their look but ignore clicks). */
+.req{color:var(--bad);font-weight:600}
+.setup-warning{background:var(--warn-soft);border:1px solid var(--warn-line);color:var(--text);border-radius:var(--radius-sm);padding:10px 12px;margin:8px 0}
+.setup-warning b{color:var(--warn)}
+.get-started ol{list-style:none;padding:0;margin:8px 0;display:grid;gap:6px}
+.get-started li{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:1px solid var(--line,#e4e7ec);border-radius:var(--radius-sm)}
+.get-started li.next{border-color:var(--accent-line);background:var(--accent-soft)}
+.get-started li.done{opacity:.75}
+.get-started .mark{min-width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;border:1px solid var(--accent-line);color:var(--accent)}
+.get-started li.done .mark{background:var(--good-soft);border-color:var(--good-line);color:var(--good)}
+.get-started .progress{height:6px;border-radius:99px;background:var(--accent-soft);overflow:hidden}
+.get-started .progress span{display:block;height:100%;background:var(--accent)}
+[aria-busy="true"] .btn:disabled:not([data-off]){opacity:1;cursor:progress}

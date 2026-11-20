@@ -87,7 +87,7 @@ export function HoursPanel({ contractId, onEnded }: { contractId: string; onEnde
   const left = Math.max(0, data.limit_minutes - data.this_week_minutes);
 
   return (
-    <section aria-label="Hours">
+    <section aria-busy={busy || undefined} aria-label="Hours">
       <p className="muted">
         {formatMinor(data.billing.hourly_rate_minor, 'INR')} an hour · up to {data.billing.weekly_limit_hours} hours a week
         {data.contract_status === 'active' && <> · this week: {formatMinutes(data.this_week_minutes)} logged, {formatMinutes(left)} left</>}

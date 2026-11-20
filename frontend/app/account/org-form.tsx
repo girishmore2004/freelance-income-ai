@@ -1,4 +1,5 @@
 'use client';
+import { Req } from '../onboarding-ui';
 
 /** Client account (organisation) details: one form used on Account and on the Client profile page. */
 
@@ -48,19 +49,19 @@ export function OrgFields({ form, set, fieldErrors }: { form: OrgForm; set: (key
   return (
     <>
       <div className="field">
-        <label htmlFor="org-kind">Account type</label>
+        <label htmlFor="org-kind">Account type<Req /></label>
         <select id="org-kind" value={form.kind} onChange={set('kind')}>
           <option value="individual">Individual</option>
           <option value="company">Company</option>
         </select>
       </div>
       <div className="field">
-        <label htmlFor="org-name">{form.kind === 'company' ? 'Company name' : 'Your name'} (required)</label>
+        <label htmlFor="org-name">{form.kind === 'company' ? 'Company name' : 'Your name'}<Req /></label>
         <input id="org-name" value={form.name} onChange={set('name')} required minLength={2} maxLength={160} aria-invalid={Boolean(fieldErrors.name)} aria-describedby={fieldErrors.name ? 'org-name-error' : undefined} />
         {fieldErrors.name && <p className="error" id="org-name-error">{fieldErrors.name}</p>}
       </div>
       <div className="field">
-        <label htmlFor="org-industry">Industry</label>
+        <label htmlFor="org-industry">Industry<Req /></label>
         <input id="org-industry" value={form.industry} onChange={set('industry')} maxLength={120} aria-invalid={Boolean(fieldErrors.industry)} aria-describedby={fieldErrors.industry ? 'org-industry-error' : undefined} />
         {fieldErrors.industry && <p className="error" id="org-industry-error">{fieldErrors.industry}</p>}
       </div>
@@ -70,17 +71,17 @@ export function OrgFields({ form, set, fieldErrors }: { form: OrgForm; set: (key
         {fieldErrors.website && <p className="error" id="org-website-error">{fieldErrors.website}</p>}
       </div>
       <div className="field">
-        <label htmlFor="org-country">Country code</label>
+        <label htmlFor="org-country">Country code (2 letters, for example IN)<Req /></label>
         <input id="org-country" value={form.country} onChange={set('country')} maxLength={2} placeholder="IN" aria-invalid={Boolean(fieldErrors.country)} aria-describedby={fieldErrors.country ? 'org-country-error' : undefined} />
         {fieldErrors.country && <p className="error" id="org-country-error">{fieldErrors.country}</p>}
       </div>
       <div className="field">
-        <label htmlFor="org-billing-name">Billing name</label>
+        <label htmlFor="org-billing-name">Billing name (needed before your first payment)</label>
         <input id="org-billing-name" value={form.billing_name} onChange={set('billing_name')} maxLength={200} aria-invalid={Boolean(fieldErrors.billing_name)} aria-describedby={fieldErrors.billing_name ? 'org-billing-name-error' : undefined} />
         {fieldErrors.billing_name && <p className="error" id="org-billing-name-error">{fieldErrors.billing_name}</p>}
       </div>
       <div className="field">
-        <label htmlFor="org-billing-email">Billing email</label>
+        <label htmlFor="org-billing-email">Billing email (needed before your first payment)</label>
         <input id="org-billing-email" type="email" value={form.billing_email} onChange={set('billing_email')} maxLength={320} aria-invalid={Boolean(fieldErrors.billing_email)} aria-describedby={fieldErrors.billing_email ? 'org-billing-email-error' : undefined} />
         {fieldErrors.billing_email && <p className="error" id="org-billing-email-error">{fieldErrors.billing_email}</p>}
       </div>

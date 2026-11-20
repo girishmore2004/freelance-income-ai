@@ -2,6 +2,8 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ApiError, api, useSessionToken } from '@/lib/api-client';
 import { EMPTY_FORM, OrgFields, formFrom, type Identity, type OrgForm } from '../../account/org-form';
+import { RequiredNote } from '../../onboarding-ui';
+import { billingGaps, clientGaps } from '@/lib/onboarding';
 
 /**
  * Client profile: the details freelancers and invoices see for the client account
@@ -57,7 +59,7 @@ export default function ClientProfilePage() {
   if (!token) return <main className="shell"><div className="card"><h2>Client profile</h2><p className="muted">Sign in first.</p><a className="btn" href="/">Go to sign in</a></div></main>;
 
   return (
-    <main className="shell">
+    <main className="shell" aria-busy={busy || undefined}>
       <h2>Client profile</h2>
       <p className="muted">How you appear to freelancers on your projects and offers, and the details used on invoices and statements.</p>
       <div aria-live="polite">{notice && <p className="success">{notice}</p>}{error && <p className="error" role="alert">{error}</p>}</div>
@@ -79,6 +81,14 @@ export default function ClientProfilePage() {
       {org && (
         canEdit ? (
           <form className="card" onSubmit={save} aria-label="Client profile details" noValidate>
+            <RequiredNote text="needed for a complete profile (you can save at any time)" />
+            {(() => {
+              const gaps = clientGaps(form);
+              const billing = billingGaps(form);
+              return gaps.length
+                ? <p className="setup-warning" role="status">Still needed for a complete profile: {gaps.map((g) => g.label).join(', ')}.</p>
+                : <p className="success" role="status">Your client profile is complete.{billing.length ? ` Add ${billing.map((g) => g.label.toLowerCase()).join(' and ')} before your first payment.` : ''}</p>;
+            })()}
             <OrgFields form={form} set={set} fieldErrors={fieldErrors} />
             <div className="row">
               <button className="btn primary" type="submit" disabled={busy || form.name.trim().length < 2}>{busy ? 'Saving…' : 'Save client profile'}</button>

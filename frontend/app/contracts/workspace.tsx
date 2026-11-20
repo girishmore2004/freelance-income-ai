@@ -139,7 +139,7 @@ export function ContractWorkspace({ contractId, onChanged, view = 'delivery' }: 
   const open = ws.status === 'active';
 
   return (
-    <section className="card" aria-label="Delivery workspace">
+    <section aria-busy={busy || undefined} className="card" aria-label="Delivery workspace">
       <p className="muted">Approved {formatMinor(ws.approved_minor, ws.currency)} of {formatMinor(ws.total_minor, ws.currency)} · {ws.revision_rounds} revision round{ws.revision_rounds === 1 ? '' : 's'} per milestone</p>
       {view === 'delivery' && <p className="muted">{ws.funding_note}</p>}
       {view === 'delivery' && ws.late_cancel_allowed && ws.party === 'client' && (

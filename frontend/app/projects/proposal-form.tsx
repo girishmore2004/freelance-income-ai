@@ -1,4 +1,5 @@
 'use client';
+import { SetupWarning } from '../onboarding-ui';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ApiError, api } from '@/lib/api-client';
 import { PROPOSAL_LABELS, formatMinor, rupeesToMinor } from '@/lib/listing-format';
@@ -167,7 +168,8 @@ export function ProposalForm({ listingId, budgetModel, existing, onDone, onCance
   const suggested = check?.evidence_suggestions.length ? check.evidence_suggestions.map((s) => s.url) : links;
 
   return (
-    <form className="card" onSubmit={(e) => void review(e)} noValidate aria-label="Proposal">
+    <form className="card" onSubmit={(e) => void review(e)} noValidate aria-label="Proposal" aria-busy={busy || undefined}>
+      {!existing && <SetupWarning side="freelancer" kind="profile" action="send this proposal anyway" />}
       <div className="row between">
         <b>Proposal Studio</b>
         <button className="btn" type="button" disabled={busy} onClick={() => void draft()}>Draft introduction with AI</button>

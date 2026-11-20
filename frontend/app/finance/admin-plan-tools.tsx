@@ -50,7 +50,7 @@ export function AdminPlanTools() {
 
   if (!plans) return null;
   return (
-    <section className="card" aria-labelledby="plans-heading">
+    <section aria-busy={busy || undefined} className="card" aria-labelledby="plans-heading">
       <h3 id="plans-heading">Plans and AI credits (admin)</h3>
       <div aria-live="polite">{notice && <p className="success">{notice}</p>}{error && <p className="error" role="alert">{error}</p>}</div>
       <ul>

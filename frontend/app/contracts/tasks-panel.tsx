@@ -81,7 +81,7 @@ export function TasksPanel({ contractId }: { contractId: string }) {
   const milestoneTitle = (i: number | null) => (i === null ? '' : state.milestones[i]?.title ?? '');
 
   return (
-    <section aria-label="Tasks">
+    <section aria-busy={busy || undefined} aria-label="Tasks">
       <div aria-live="polite">{notice && <p className="success">{notice}</p>}{error && <p className="error" role="alert">{error}</p>}</div>
       {progress && <p className="muted">{progress.done} of {progress.total} tasks done</p>}
       {state.tasks.length === 0 && (
@@ -236,7 +236,7 @@ export function HandoverPanel({ contractId }: { contractId: string }) {
   if (!state.available) return <p className="muted">Handover is not switched on yet.</p>;
   const confirmed = state.items.filter((i) => i.status === 'confirmed').length;
   return (
-    <section aria-label="Handover">
+    <section aria-busy={busy || undefined} aria-label="Handover">
       <p className="muted">List what you hand over at the end: source files, documentation, access and deployment notes. Transfer access through each service's own invite or team feature; never paste passwords or keys here.</p>
       <div aria-live="polite">{notice && <p className="success">{notice}</p>}{error && <p className="error" role="alert">{error}</p>}</div>
       {state.items.length > 0 && <p className="muted">{confirmed} of {state.items.length} items confirmed by the client</p>}

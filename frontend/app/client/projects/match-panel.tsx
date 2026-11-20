@@ -84,7 +84,7 @@ export function MatchPanel({ listingId, organizationId, canInvite, invitable }: 
   );
 
   return (
-    <section className="card" aria-label="Suggested freelancers">
+    <section aria-busy={busy || undefined} className="card" aria-label="Suggested freelancers">
       <div className="row between">
         <b>Suggested freelancers</b>
         <button className="btn" type="button" onClick={() => void load()} disabled={busy}>{busy ? 'Loading…' : 'Refresh'}</button>

@@ -1,4 +1,5 @@
 'use client';
+import { SetupWarning } from '../onboarding-ui';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ApiError, api, useSessionToken } from '@/lib/api-client';
 import { formatMinor } from '@/lib/listing-format';
@@ -274,7 +275,8 @@ function MyServices({ categories, onOpen }: { categories: Category[]; onOpen: (i
     return <ServiceEditor service={editing === 'new' ? null : editing} categories={categories} onCancel={() => setEditing(null)} onSaved={(_s, m) => { setEditing(null); setNotice(m); void load(); }} />;
   }
   return (
-    <section aria-label="My services">
+    <section aria-label="My services" aria-busy={busy || undefined}>
+      <SetupWarning side="freelancer" kind="profile" action="publish anyway" />
       {!canSell && <p className="muted">Use “+ Freelancer” in the top bar to start selling services.</p>}
       <div className="row between"><p className="muted">Up to {max} services. New and edited services are checked; flagged ones wait for a moderator.</p>
         <button className="btn primary" type="button" disabled={!canSell || (items?.length ?? 0) >= max || categories.length === 0} onClick={() => setEditing('new')}>New service</button></div>

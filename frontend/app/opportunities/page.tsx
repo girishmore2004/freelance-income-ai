@@ -106,7 +106,7 @@ export default function OpportunityPage() {
   }
 
   return (
-    <main className="shell">
+    <main aria-busy={busy || undefined} className="shell">
       <p><a className="link" href="/projects?view=external">← Find work</a></p>
       {error && <p className="error" role="alert">{error}</p>}
       <div aria-live="polite">{notice && <p className="success">{notice}</p>}</div>

@@ -51,7 +51,7 @@ export function MarketplaceVisibility() {
 
   if (!state && !error) return null;
   return (
-    <section className="card" aria-labelledby="visibility-heading">
+    <section aria-busy={busy || undefined} className="card" aria-labelledby="visibility-heading">
       <h3 id="visibility-heading">Be suggested to clients</h3>
       {state && (
         <>
@@ -107,7 +107,7 @@ export function Invitations({ onProposalSent }: { onProposalSent?: (message: str
 
   if (!items || (items.length === 0 && !error)) return null;
   return (
-    <section aria-labelledby="invitations-heading">
+    <section aria-busy={busy || undefined} aria-labelledby="invitations-heading">
       <h3 id="invitations-heading">Invitations from clients</h3>
       <div aria-live="polite">
         {notice && <p className="success">{notice}</p>}

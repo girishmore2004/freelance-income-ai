@@ -73,7 +73,7 @@ export function VerificationQueue() {
   }
 
   return (
-    <section className="card" aria-labelledby="verify-heading">
+    <section aria-busy={busy || undefined} className="card" aria-labelledby="verify-heading">
       <h3 id="verify-heading">Freelancer and client verification</h3>
       {meaning && <p className="muted small">{meaning}</p>}
       <div className="row" role="group" aria-label="Request status">
@@ -159,7 +159,7 @@ export function SourcesPanel() {
   }
 
   return (
-    <section className="card" aria-labelledby="sources-heading">
+    <section aria-busy={busy || undefined} className="card" aria-labelledby="sources-heading">
       <h3 id="sources-heading">External sources and freshness</h3>
       <p className="muted small">Last 7 days of discovery runs per source, and how old the open external opportunities are (by the original post date).</p>
       {!available && <p className="muted">Switches need database migration 0071; figures below still come from stored opportunities.</p>}

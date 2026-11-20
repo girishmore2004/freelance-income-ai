@@ -78,7 +78,7 @@ export function TeamPanel({ organizationId, myRole, myUserId, onLeft }: { organi
   }
 
   return (
-    <details className="item">
+    <details aria-busy={busy || undefined} className="item">
       <summary>Team ({members.length || '…'})</summary>
       <div aria-live="polite">{notice && <p className="success">{notice}</p>}{error && <p className="error" role="alert">{error}</p>}</div>
       <ul aria-label="Members">
@@ -182,7 +182,7 @@ export function MyInvitations({ onJoined }: { onJoined: () => void }) {
 
   if (!items.length) return null;
   return (
-    <section className="card" aria-labelledby="my-invites-heading">
+    <section aria-busy={busy || undefined} className="card" aria-labelledby="my-invites-heading">
       <h3 id="my-invites-heading">Team invitations for you</h3>
       {error && <p className="error" role="alert">{error}</p>}
       {items.map((i) => (

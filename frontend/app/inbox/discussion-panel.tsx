@@ -92,7 +92,7 @@ export function DiscussionPanel({ proposalId, draft }: { proposalId: string; dra
   const now = Date.now();
 
   return (
-    <section className="card" aria-label="Messages and interviews">
+    <section aria-busy={busy || undefined} className="card" aria-label="Messages and interviews">
       <div aria-live="polite">
         {notice && <p className="success">{notice}</p>}
         {error && <p className="error" role="alert">{error}</p>}

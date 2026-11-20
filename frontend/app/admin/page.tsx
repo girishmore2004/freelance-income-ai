@@ -87,7 +87,7 @@ export default function AdminPage() {
   if (forbidden) return <main className="shell"><div className="card"><h2>Admin</h2><p className="muted">This page is for staff.</p><a className="btn" href="/workspace">Back to workspace</a></div></main>;
 
   return (
-    <main className="shell">
+    <main aria-busy={busy || undefined} className="shell">
       <div className="row between"><h2>Admin</h2><span className="row"><a className="link" href="/analytics">Analytics</a><a className="link" href="/finance">Finance</a><a className="link" href="/ai-agents">AI agents</a></span></div>
       <div aria-live="polite">{notice && <p className="success">{notice}</p>}{error && <p className="error" role="alert">{error}</p>}</div>
 

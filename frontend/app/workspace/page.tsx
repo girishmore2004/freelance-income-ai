@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, useSessionToken } from '@/lib/api-client';
 import { onSide, useMode, type Mode } from '@/lib/mode';
 import { formatMinor } from '@/lib/listing-format';
+import { GetStarted } from '../onboarding-ui';
 
 /**
  * Business workspace: one view across marketplace work (contracts, deliveries,
@@ -99,6 +100,7 @@ export default function WorkspacePage() {
       </header>
       <p className="muted">As of {data?.as_of ?? '—'} · <button className="btn" disabled={busy} onClick={() => void load()}>{busy ? 'Refreshing…' : 'Refresh'}</button></p>
       <div aria-live="polite">{notice && <p className="success">{notice}</p>}{error && <p className="error" role="alert">{error}</p>}</div>
+      <GetStarted key={mode} side={mode} />
 
       <section className="grid" aria-label="Metrics">
         {CARDS[mode].map(([key, label]) => <article className="card" key={key}><small className="muted">{label}</small><h2>{num(key)}</h2></article>)}

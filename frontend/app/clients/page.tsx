@@ -605,7 +605,7 @@ function ClientsPage() {
   }
 
   return (
-    <main className="shell">
+    <main aria-busy={busy || undefined} className="shell">
       <header className="top">
         <div>
           <div className="brand">Client Relationship Management</div>

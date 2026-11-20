@@ -88,7 +88,7 @@ export function ExternalOpportunities({ query }: { query: string }) {
     .sort((a, b) => b.match_score - a.match_score);
 
   return (
-    <section aria-labelledby="external-heading">
+    <section aria-busy={busy || undefined} aria-labelledby="external-heading">
       <div className="row between">
         <h3 id="external-heading">External opportunities</h3>
         <span className="row">

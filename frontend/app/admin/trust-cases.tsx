@@ -87,7 +87,7 @@ export function TrustCases({ isAdmin }: { isAdmin: boolean }) {
     run(() => api(`/api/v1/admin/disputes/${id}/resolve`, 'POST', { resolution, note: note(id) }), 'Decision recorded');
 
   return (
-    <>
+    <div aria-busy={busy || undefined} style={{ display: "contents" }}>
       <div aria-live="polite">{notice && <p className="success">{notice}</p>}{error && <p className="error" role="alert">{error}</p>}</div>
       <section className="card" aria-labelledby="disputes-heading">
         <h3 id="disputes-heading">Open disputes</h3>
@@ -191,6 +191,6 @@ export function TrustCases({ isAdmin }: { isAdmin: boolean }) {
         ))}
         {!isAdmin && <p className="muted">Moderators can suspend and lift; money decisions in disputes need an admin.</p>}
       </section>
-    </>
+    </div>
   );
 }

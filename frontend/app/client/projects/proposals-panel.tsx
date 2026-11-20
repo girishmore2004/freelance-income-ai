@@ -20,7 +20,7 @@ import { scopeSummary, type StudioSections } from '@/lib/proposal-studio';
 
 type Proposal = {
   id: string; status: string; cover_letter: string; price_minor: number; currency: string; budget_model: string;
-  estimated_days: number | null; invited: boolean; created_at: string; contract_id: string | null; contract_status: string | null;
+  estimated_days: number | null; invited: boolean; created_at: string; contract_id: string | null; contract_status: string | null; profile_complete?: boolean;
   freelancer: FreelancerCard;
   sections?: StudioSections | null; current_version?: number; revision_requested_at?: string | null; revision_note?: string | null;
 };
@@ -140,7 +140,7 @@ export function ProposalsPanel({ listingId, brief, canManage }: { listingId: str
   }
 
   return (
-    <section className="card" aria-label="Proposals">
+    <section aria-busy={busy || undefined} className="card" aria-label="Proposals">
       <b>Proposals</b>
       <IntakeControl listingId={listingId} />
       <div aria-live="polite">
@@ -176,7 +176,7 @@ export function ProposalsPanel({ listingId, brief, canManage }: { listingId: str
       {items?.map((p) => (
         <div className="card item" key={p.id}>
           <div className="row between">
-            <span><b>{p.freelancer.display_name}</b>{p.invited && <span className="badge"> Invited</span>}{p.freelancer.verified && <span className="badge" title="Staff reviewed this freelancer's public work evidence. Not an identity check."> Reviewed</span>}{p.freelancer.rating && <span className="muted"> ★ {p.freelancer.rating.average} ({p.freelancer.rating.count})</span>}</span>
+            <span><b>{p.freelancer.display_name}</b>{p.invited && <span className="badge"> Invited</span>}{p.freelancer.verified && <span className="badge" title="Staff reviewed this freelancer's public work evidence. Not an identity check."> Reviewed</span>}{p.freelancer.rating && <span className="muted"> ★ {p.freelancer.rating.average} ({p.freelancer.rating.count})</span>}{p.profile_complete === false && <span className="badge external" title="This freelancer's profile is missing some details (headline, skills, bio or rate)."> Profile incomplete</span>}</span>
             <span className="row" style={{ gap: 6 }}>
               {(p.current_version ?? 1) > 1 && <span className="badge">Version {p.current_version}</span>}
               <span className="badge">{PROPOSAL_LABELS[p.status] ?? p.status}</span>
