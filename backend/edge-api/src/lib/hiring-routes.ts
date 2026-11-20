@@ -1,4 +1,5 @@
 import { tableExists } from "./external-pipeline";
+import { freelancerProfileGaps } from "./onboarding";
 import { intakeOf, isBlocked, loadQuota, nearDuplicate } from "./fair-proposals";
 import type { Env } from "../types";
 import { notifyUsers, organizationManagers } from "./notify";
@@ -554,8 +555,8 @@ export async function handleHiringRoute(
       const listing = (await sql<ListingRow[]>`SELECT * FROM project_listings WHERE id = ${listingProposals[1]} LIMIT 1`)[0];
       const org = listing ? await organizationForMember(sql, userId, listing.organization_id) : null;
       if (!listing || !org) return failure("NOT_FOUND", "Listing not found", 404, requestId);
-      const rows = await sql<(ProposalWithCard & { contract_id: string | null; contract_status: string | null })[]>`
-        SELECT p.*, pr.full_name, pr.headline, pr.skills, pr.services, pr.minimum_budget, pr.hourly_rate,
+      const rows = await sql<(ProposalWithCard & { contract_id: string | null; contract_status: string | null; bio: string | null })[]>`
+        SELECT p.*, pr.full_name, pr.headline, pr.skills, pr.services, pr.minimum_budget, pr.hourly_rate, pr.bio,
                pr.currency AS profile_currency, pr.weekly_hours, pr.timezone, u.created_at AS user_created_at, (to_jsonb(pr)->>'verified_at') AS verified_at,
                c.id AS contract_id, c.status AS contract_status
         FROM listing_proposals p
@@ -572,6 +573,8 @@ export async function handleHiringRoute(
           ...proposalOut(r),
           contract_id: r.contract_id,
           contract_status: r.contract_status,
+          // D-31 (warn only): clients see when a proposal comes from an incomplete profile.
+          profile_complete: freelancerProfileGaps({ full_name: r.full_name, headline: r.headline, skills: r.skills, bio: r.bio, hourly_rate: r.hourly_rate }).length === 0,
           freelancer: freelancerCard(
             {
               user_id: r.freelancer_user_id, full_name: r.full_name ?? "", headline: r.headline ?? "", skills: r.skills ?? "[]",

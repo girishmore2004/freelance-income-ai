@@ -13,7 +13,7 @@
   },
   "vars": {
     "APP_NAME": "Freelance Income AI",
-    "APP_VERSION": "5.97.0",
+    "APP_VERSION": "5.98.0",
     "APP_ENV": "staging",
     "CORS_ORIGINS": "https://freelance-income-ai.girishmore097.workers.dev",
     "PUBLIC_REGISTRATION": "true",

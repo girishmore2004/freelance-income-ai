@@ -4,10 +4,12 @@ import { authenticateRequest } from "./auth-context";
 import { body, database, jsonList, safeHttpUrl } from "./core-routes";
 import type { Queryable, Sql } from "./core-routes";
 import { failure, success } from "./response";
-import { loadRoles } from "./identity";
+import { ensureClientAccount, loadRoles } from "./identity";
+import { FLAGS, isEnabled } from "./flags";
 import { notifyUsers } from "./notify";
 import { tableExists } from "./external-pipeline";
 import { normaliseSkill } from "./matching";
+import { billingGaps, clientFacts, clientProfileGaps, clientSteps, freelancerFacts, freelancerProfileGaps, freelancerSteps, onboardingOut } from "./onboarding";
 
 /**
  * Helping freelancers find and win work faster (U12).
@@ -18,6 +20,7 @@ import { normaliseSkill } from "./matching";
  *   POST /api/v1/saved-searches/{id}/seen            reset the "new" count
  *   POST /api/v1/saved-searches/{id}/delete
  *   GET  /api/v1/me/profile-checklist                what is missing from my profile, in the order that helps matching most
+ *   GET  /api/v1/me/onboarding?side=client|freelancer  step-by-step start for the overview (U31, D-31; warn only)
  *
  * Alerts: `alertSavedSearches` runs when a public project is published (by
  * the client or a moderator) and notifies each freelancer whose saved search
@@ -207,6 +210,7 @@ export async function handleGrowthRoute(request: Request, env: Env, requestId: s
   const known =
     (path === "/api/v1/me/saved-searches" && (method === "GET" || method === "POST")) ||
     (path === "/api/v1/me/profile-checklist" && method === "GET") ||
+    (path === "/api/v1/me/onboarding" && method === "GET") ||
     (one !== null && method === "POST");
   if (!known) return null;
 
@@ -216,6 +220,24 @@ export async function handleGrowthRoute(request: Request, env: Env, requestId: s
   const sql = deps.database(env);
 
   try {
+    if (path === "/api/v1/me/onboarding") {
+      const side = new URL(request.url).searchParams.get("side");
+      if (side !== "client" && side !== "freelancer") return failure("VALIDATION_ERROR", "side must be client or freelancer", 422, requestId);
+      const roles = await loadRoles(sql, userId);
+      if (!roles.includes(side)) return success({ side, applies: false, steps: [], next: null, done: 0, total: 0, complete: false, profile_gaps: [], billing_gaps: [] }, "Not on this side", 200, requestId);
+      if (side === "client") {
+        let facts = await clientFacts(sql, userId);
+        // Same as /me/identity: a client never starts by creating an account; one is made for them.
+        if (!facts.profile && (await isEnabled(env, sql, FLAGS.clientMarketplace, false))) {
+          await ensureClientAccount(sql, userId);
+          facts = await clientFacts(sql, userId);
+        }
+        return success({ applies: true, ...onboardingOut("client", clientSteps(facts), { profile: clientProfileGaps(facts.profile), billing: billingGaps(facts.profile) }) }, "Get started", 200, requestId);
+      }
+      const facts = await freelancerFacts(sql, userId);
+      return success({ applies: true, ...onboardingOut("freelancer", freelancerSteps(facts), { profile: freelancerProfileGaps(facts.profile) }) }, "Get started", 200, requestId);
+    }
+
     if (path === "/api/v1/me/profile-checklist") {
       const roles = await loadRoles(sql, userId);
       if (!roles.includes("freelancer")) return success({ applies: false, score: 0, items: [] }, "Checklist", 200, requestId);
