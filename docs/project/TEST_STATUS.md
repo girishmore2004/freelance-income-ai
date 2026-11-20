@@ -1,5 +1,11 @@
 # Test Status
 
+## U28 — end-to-end test-case catalogue (2026-11-20, Edge 5.95.0)
+- 245 server cases through the real Edge Worker on PostgreSQL with fresh accounts (`backend/edge-api/scripts/e2e-catalogue.ts`): visitor and sign-up 24, freelancer 63, client 74, portals 11, trust and safety 36, staff/money/AI 23, security 14. **245/245 pass** after two fixes. Report: claude.ai Docs "Freelance Income AI — End-to-End Test Cases and Results".
+- Defects found and fixed: (1) off-platform payment screening missed UPI, Paytm, UPI IDs, NEFT and "without the platform fee" (12 phrasings now caught, 13 ordinary sentences pass; unit tests); (2) a client could report a project of their own client account (now 422; unit test).
+- First-run failures that were test mistakes (short notes, wrong field names): 12; local database gaps (tables from migration 0045, present in production): 2. Ten weak cases were rewritten to test what their titles say.
+- Edge vitest **441 passed**; Edge API CI success @ dc42ce1. Frontend unchanged (5.94.0 CI: Playwright 99/100 passed, unit 49).
+
 ## U27 — Client profile, Security fixed, sides from the switch (GitHub CI verified, 2026-11-19, release 5.94.0)
 - Edge: vitest **439 passed** (new: automatic client account named after the person or email, created once, not for freelancer-only accounts or while hiring is closed). Edge API CI success @ afeb428.
 - PostgreSQL through the real Worker: a new "Hire" account → three identity requests at the same moment all returned 200 and saw the same single individual client account (owner, IN); 1 membership in the database; editing it to a company with billing details 200; a freelancer-only account had none until hiring was turned on, then one. Security: sessions 200 (list), two-factor status 200 (the local test database first lacked `mfa_recovery_codes` from migration 0045; production has it).
