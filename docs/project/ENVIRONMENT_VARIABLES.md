@@ -21,7 +21,8 @@ Set in Cloudflare → Workers & Pages → *Worker* → Settings → Variables an
 | `AI_COST_INPUT_USD_PER_MTOK` / `AI_COST_OUTPUT_USD_PER_MTOK` | Variable | Recommended | USD per 1M tokens for `WORKERS_AI_MODEL`, from the Cloudflare Workers AI pricing page. Defaults (1 / 3) are placeholders. |
 | `AI_BUDGET_ALERT_RATIO` | Variable | Optional | Default `0.8` — logs `ai.budget_threshold` alerts. |
 | `FEATURE_FLAGS_OFF` | Variable | Optional | Emergency kill switch, e.g. `ai.generation` or `*`. |
-| `APP_VERSION` | Variable (wrangler) | — | `5.46.0` |
+| `REDDIT_DATA_AGREEMENT` | Variable | Optional | Set to `true` only after Reddit has granted a data agreement for commercial use; until then the Reddit source is skipped (U30, D-8). |
+| `APP_VERSION` | Variable (wrangler) | — | `5.97.0` |
 
 Bindings in `wrangler.jsonc` (5.48.0): rate limiters `AUTH_RATE_LIMITER` (namespace 1001, 20/60 s) and `API_RATE_LIMITER` (namespace 1002, 300/60 s) — no dashboard setup needed; queue **consumer** for `freelance-income-ai-jobs` (DLQ `freelance-income-ai-jobs-dlq`).
 
