@@ -157,3 +157,18 @@ Set build variable `NEXT_PUBLIC_AUTH_MODE=cookie`, redeploy, sign in, and confir
 
 ## Dedicated MFA key (release 5.81.0, K-04)
 Cloudflare → Workers & Pages → `freelance-income-ai-api-edge` → Settings → Variables and Secrets → Add → `MFA_ENCRYPTION_KEY`, type **Secret**, value from `openssl rand -base64 32` (store it in your password manager) → Deploy. Nothing changes for users: each MFA user's secret moves to the new key at their next MFA sign-in. Do not rotate `JWT_SECRET` until all MFA users have signed in once (or accept that the rest must re-enrol MFA).
+
+## Demo site (test copy with demo data) — 2026-11-20
+A separate copy of the app for testing: its own database (Neon branch `demo`), its own API Worker `freelance-income-ai-api-edge-demo` and website Worker `freelance-income-ai-demo`. Production Workers and the production database are never touched; deleting the branch deletes every piece of demo data (ledger and moderation history included, which cannot be deleted row by row by design).
+
+One-time setup:
+1. **Neon** (console.neon.tech → your project → Branches → Create branch): name `demo`, parent = the production branch, current data. Then **Connect** → branch `demo` → turn **Connection pooling off** → copy the `postgresql://…` string.
+2. **Cloudflare API token** (dash.cloudflare.com/profile/api-tokens → Create Token → template "Edit Cloudflare Workers" → add permission *Account → Hyperdrive → Edit* → Create). Copy the token (shown once). Copy your **Account ID** (Workers & Pages overview, right side).
+3. **GitHub secrets** (repository → Settings → Secrets and variables → Actions → New repository secret): `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `DEMO_DATABASE_URL` (the Neon `demo` string), `DEMO_PASSWORD` (12+ characters, used by every demo login). `PRODUCTION_DATABASE_URL` already exists and is used only to refuse it.
+
+Use:
+4. Actions → **Demo site (test copy)** → Run workflow → **1. Set up or update the demo site**. The run summary shows the website address (`https://freelance-income-ai-demo.<subdomain>.workers.dev`). Run it again after each code update.
+5. Run workflow → **2. Fill the demo database with demo data** (once per branch; a second run changes nothing). Logins: `admin@`, `moderator@`, `finance@`, `asha@`, `ravi@`, `neha@`, `meera@`, `arjun@`, `kiran@demo.test`.
+6. Remove: Run workflow → **3. Remove the demo site**, then delete the `demo` branch in Neon. To start again with fresh data: new branch, update `DEMO_DATABASE_URL`, steps 4–5.
+
+Demo data (`backend/edge-api/scripts/seed-demo.ts`, created through the real Worker code): staff accounts; three freelancers with visible profiles and published services; two client companies; a project with three proposals, messages and a hired contract whose first funded milestone waits for review; a completed contract with reviews both ways; an open project with a proposal; a draft; an open project with none; a project held for review (upfront fee); a service order delivered and counting down to automatic completion; a contract with an open dispute; a person on both sides with their own project. Switches on in the demo database only: client marketplace, test payments, funding before work; fee schedule 5% + 3%.

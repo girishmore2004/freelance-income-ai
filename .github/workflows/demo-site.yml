@@ -1,0 +1,104 @@
+name: Demo site (test copy)
+
+# A separate copy of the app for testing with demo data: its own API Worker, website Worker
+# and database (a Neon branch). Production Workers and the production database are never
+# touched. See docs/project/DEPLOYMENT_RUNBOOK.md → "Demo site".
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: What to do
+        required: true
+        type: choice
+        options:
+          - 1. Set up or update the demo site
+          - 2. Fill the demo database with demo data
+          - 3. Remove the demo site
+
+concurrency:
+  group: demo-site
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  demo:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      DEMO_DATABASE_URL: ${{ secrets.DEMO_DATABASE_URL }}
+      PRODUCTION_DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: main
+
+      - uses: actions/checkout@v4
+        with:
+          ref: cloudflare-edge-api-phase1
+          path: edge
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Check the settings (refuses the production database)
+        run: |
+          node --test main/.github/scripts/demo-site.test.mjs
+          node main/.github/scripts/demo-site.mjs check
+
+      - name: Find or create the demo database connection (Hyperdrive)
+        id: prep
+        if: startsWith(inputs.action, '1.')
+        run: node main/.github/scripts/demo-site.mjs prepare
+
+      - name: Deploy the demo API Worker
+        if: startsWith(inputs.action, '1.')
+        working-directory: edge/backend/edge-api
+        env:
+          DEMO_HYPERDRIVE_ID: ${{ steps.prep.outputs.hyperdrive_id }}
+          DEMO_WEB_URL: ${{ steps.prep.outputs.web_url }}
+        run: |
+          npm ci --no-audit --no-fund
+          node ../../../main/.github/scripts/demo-site.mjs config-edge wrangler.jsonc
+          npx wrangler deploy
+          node ../../../main/.github/scripts/demo-site.mjs secret
+
+      - name: Deploy the demo website Worker
+        if: startsWith(inputs.action, '1.')
+        working-directory: main/frontend
+        env:
+          DEMO_EDGE_URL: ${{ steps.prep.outputs.edge_url }}
+          NEXT_PUBLIC_API_URL: ${{ steps.prep.outputs.edge_url }}
+        run: |
+          npm install --no-audit --no-fund
+          node ../.github/scripts/demo-site.mjs config-web wrangler.jsonc
+          npx opennextjs-cloudflare build
+          npx opennextjs-cloudflare deploy
+
+      - name: Demo site addresses
+        if: startsWith(inputs.action, '1.')
+        run: |
+          {
+            echo "## Demo site is ready"
+            echo "- Website: ${{ steps.prep.outputs.web_url }}"
+            echo "- API health: ${{ steps.prep.outputs.edge_url }}/health"
+            echo "Next: run this workflow again with **2. Fill the demo database with demo data**."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fill the demo database
+        if: startsWith(inputs.action, '2.')
+        working-directory: edge/backend/edge-api
+        env:
+          DEMO_PASSWORD: ${{ secrets.DEMO_PASSWORD }}
+        run: |
+          npm ci --no-audit --no-fund
+          npx --yes tsx@4.20.6 scripts/seed-demo.ts 2>&1 | grep -v '"event":"http.request"'
+          exit ${PIPESTATUS[0]}
+
+      - name: Remove the demo Workers and connection
+        if: startsWith(inputs.action, '3.')
+        run: node main/.github/scripts/demo-site.mjs remove
