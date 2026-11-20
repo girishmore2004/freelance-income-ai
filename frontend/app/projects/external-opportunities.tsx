@@ -74,11 +74,11 @@ export function ExternalOpportunities({ query }: { query: string }) {
   }
 
   const searchSources = () => run(async () => {
-    const r = await api<{ ran: boolean; reason?: string; searched_for?: string; new_matches?: number; sources?: Array<{ name: string; error?: string }> }>('/api/v1/discovery/run', 'POST', {});
+    const r = await api<{ ran: boolean; reason?: string; searched_for?: string; new_matches?: number; skipped_untrusted?: number; sources?: Array<{ name: string; error?: string }> }>('/api/v1/discovery/run', 'POST', {});
     if (!r || !r.ran) return r?.reason ?? 'Search skipped.';
     const d = await api<{ drafted?: number }>('/api/v1/discovery/draft', 'POST', {}).catch(() => ({ drafted: 0 }));
     const failed = (r.sources ?? []).filter((s) => s.error).map((s) => s.name).join(', ');
-    return `Searched for "${r.searched_for ?? ''}": ${r.new_matches ?? 0} new matches, ${d.drafted ?? 0} draft(s) ready to review.${failed ? ` (${failed} did not answer this time.)` : ''}`;
+    return `Searched for "${r.searched_for ?? ''}": ${r.new_matches ?? 0} new matches, ${d.drafted ?? 0} draft(s) ready to review.${r.skipped_untrusted ? ` ${r.skipped_untrusted} listing(s) hidden because they looked like scams.` : ''}${failed ? ` (${failed} did not answer this time.)` : ''}`;
   });
 
   const q = query.trim().toLowerCase();
