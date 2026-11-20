@@ -13,6 +13,8 @@ type Statement = { id: string; party: string; body: string; created_at: string }
 type Dispute = {
   id: string; opened_by: string; mine: boolean; reason: string; description: string; desired_outcome: string; status: string;
   resolution: string | null; resolution_note: string; resolved_at: string | null; created_at: string; statements: Statement[];
+  /** U29: the other side has 7 days to answer, then staff decide with what is on file. */
+  respond_by?: string; replied?: boolean; ready_for_decision?: boolean;
 };
 type DisputeView = { dispute: Dispute | null; can_open: boolean };
 
@@ -97,6 +99,13 @@ export function DisputePanel({ contractId, canManage, onChanged }: { contractId:
           </p>
           <p style={{ whiteSpace: 'pre-wrap' }}>{d.description}</p>
           {d.desired_outcome && <p className="muted">Outcome asked for: {d.desired_outcome}</p>}
+          {d.status === 'open' && d.respond_by && !d.replied && (
+            <p className="notice" role="status">
+              {d.mine
+                ? `The other side can answer until ${new Date(d.respond_by).toLocaleDateString()}. After that, staff decide with what is on file.`
+                : `Add your side by ${new Date(d.respond_by).toLocaleDateString()}. After that, staff decide with what is on file.`}
+            </p>
+          )}
           {d.status === 'resolved' && d.resolution && (
             <div className="item">
               <b>Decision: {RESOLUTION_LABELS[d.resolution] ?? d.resolution}</b>

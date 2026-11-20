@@ -11,13 +11,16 @@ import { FileLink, FilesPanel, type FilesState } from './files-panel';
  */
 
 type Submission = { id: string; status: string; note: string; links: string[]; submitted_at: string; reviewed_at: string | null; review_note: string; files?: { id: string; filename: string; size_bytes: number }[] };
-type MilestoneView = { index: number; title: string; amount_minor: number; due_date: string | null; state: string; revisions_used: number; submissions: Submission[] };
+type MilestoneView = { index: number; title: string; amount_minor: number; due_date: string | null; state: string; revisions_used: number; submissions: Submission[]; late?: boolean; auto_complete_at?: string | null; review_extensions_left?: number };
 type Workspace = {
   contract_id: string; status: string; party: 'client' | 'freelancer'; can_manage: boolean; revision_rounds: number; currency: string;
   milestones: MilestoneView[]; approved_minor: number; total_minor: number;
   messages: { id: string; from: string; mine: boolean; body: string; created_at: string }[];
   activity: { actor: string; type: string; details: Record<string, unknown>; created_at: string }[];
   funding_note: string;
+  /** U29: service orders complete automatically; late orders may be cancelled by the client alone. */
+  service_order?: boolean;
+  late_cancel_allowed?: boolean;
 };
 
 type Checklist = { items: { criterion: string; mentioned: boolean }[]; summary: string; note: string };
@@ -27,7 +30,11 @@ const EVENT_LABELS: Record<string, string> = {
   'offer.sent': 'Offer sent', 'offer.declined': 'Offer declined', 'offer.withdrawn': 'Offer withdrawn', 'terms.proposed': 'New terms proposed',
   'terms.accepted': 'Terms accepted', 'contract.activated': 'Contract active', 'milestone.submitted': 'Work delivered',
   'milestone.approved': 'Milestone approved', 'milestone.revision_requested': 'Revision requested', 'contract.completed': 'Contract completed',
+  'milestone.auto_completed': 'Completed automatically (no review in time)', 'milestone.review_extended': 'Review extended by 5 days',
+  'cancellation.expired': 'Cancelled: no answer within 48 hours', 'contract.cancelled_late': 'Cancelled by the client: late delivery',
 };
+
+const day = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 
 function messageOf(e: unknown): string {
   return e instanceof Error ? e.message : 'Something went wrong. Please try again.';
@@ -117,6 +124,10 @@ export function ContractWorkspace({ contractId, onChanged, view = 'delivery' }: 
     }
   }
 
+  function extendReview(index: number) {
+    void run(() => api(`/api/v1/contracts/${contractId}/milestones/${index}/extend-review`, 'POST', {}));
+  }
+
   function review(index: number, decision: 'approve' | 'request_revision') {
     void run(
       () => api(`/api/v1/contracts/${contractId}/milestones/${index}/review`, 'POST', { decision, note: reviewNote }),
@@ -131,6 +142,9 @@ export function ContractWorkspace({ contractId, onChanged, view = 'delivery' }: 
     <section className="card" aria-label="Delivery workspace">
       <p className="muted">Approved {formatMinor(ws.approved_minor, ws.currency)} of {formatMinor(ws.total_minor, ws.currency)} · {ws.revision_rounds} revision round{ws.revision_rounds === 1 ? '' : 's'} per milestone</p>
       {view === 'delivery' && <p className="muted">{ws.funding_note}</p>}
+      {view === 'delivery' && ws.late_cancel_allowed && ws.party === 'client' && (
+        <p className="notice" role="status">This order is late by more than a day. You can cancel it now under Payments without waiting for the freelancer, and every funded amount not yet released comes back to you.</p>
+      )}
       <div aria-live="polite">
         {notice && <p className="success">{notice}</p>}
         {error && <p className="error" role="alert">{error}</p>}
@@ -140,8 +154,18 @@ export function ContractWorkspace({ contractId, onChanged, view = 'delivery' }: 
         <div className="card item" key={m.index}>
           <div className="row between">
             <b>{m.index + 1}. {m.title}</b>
-            <span className="badge">{STATE_LABELS[m.state] ?? m.state}</span>
+            <span className="row" style={{ gap: 6 }}>
+              {m.late && <span className="badge danger">Late</span>}
+              <span className="badge">{STATE_LABELS[m.state] ?? m.state}</span>
+            </span>
           </div>
+          {m.state === 'submitted' && m.auto_complete_at && (
+            <p className="muted small">
+              {ws.party === 'client'
+                ? `If you do nothing, this delivery is approved automatically on ${day(m.auto_complete_at)} and the freelancer is paid.`
+                : `The client has until ${day(m.auto_complete_at)} to review; after that it is approved automatically and you are paid.`}
+            </p>
+          )}
           <p className="muted">{formatMinor(m.amount_minor, ws.currency)}{m.due_date ? ` · due ${m.due_date}` : ''}{m.revisions_used ? ` · revisions used ${m.revisions_used}/${ws.revision_rounds}` : ''}</p>
           {m.submissions.slice(0, 3).map((s) => (
             <div key={s.id}>
@@ -193,6 +217,9 @@ export function ContractWorkspace({ contractId, onChanged, view = 'delivery' }: 
                   <button className="btn primary" disabled={busy} onClick={() => review(m.index, 'approve')}>Approve milestone</button>
                   <button className="btn" disabled={busy || m.revisions_used >= ws.revision_rounds} onClick={() => review(m.index, 'request_revision')}>Request revision</button>
                   <button className="btn" type="button" onClick={() => setReviewFor(null)}>Cancel</button>
+                  {m.auto_complete_at && (m.review_extensions_left ?? 0) > 0 && (
+                    <button className="btn" type="button" disabled={busy} onClick={() => extendReview(m.index)}>Extend review by 5 days</button>
+                  )}
                 </div>
                 {m.revisions_used >= ws.revision_rounds && <p className="muted">All agreed revision rounds are used.</p>}
               </div>

@@ -11,7 +11,7 @@ import { formatMinor } from '@/lib/listing-format';
 type Payment = { id: string; status: string; amount_minor: number; client_fee_minor: number; freelancer_fee_minor: number; total_minor: number; currency: string; mode: string };
 type Milestone = { index: number; title: string; amount_minor: number; payment: Payment | null };
 type Invoice = { id: string; number: string; milestone_title: string; total_minor: number; status: string; mode: string };
-type Cancellation = { id: string; requested_by: string; mine: boolean; reason: string; status: string } | null;
+type Cancellation = { id: string; requested_by: string; mine: boolean; reason: string; status: string; answer_by?: string | null } | null;
 type Payments = { enabled: boolean; mode: string | null; notice: string; fees_configured: boolean; require_funding: boolean; can_fund: boolean; milestones: Milestone[]; invoices: Invoice[]; cancellation: Cancellation };
 type InvoiceDetail = { number: string; milestone_title: string; amount_minor: number; client_fee_minor: number; total_minor: number; currency: string; issued_to: string; created_at: string; status: string; notice: string };
 
@@ -128,14 +128,15 @@ export function PaymentsPanel({ contractId, contractStatus, party, canManage, on
           <b>Cancel the contract</b>
           {!c || c.status !== 'open' ? (
             <form onSubmit={requestCancel}>
-              <div className="field"><label htmlFor={`cancel-${contractId}`}>Reason (the other side must agree; unreleased funds are refunded)</label><textarea id={`cancel-${contractId}`} rows={2} maxLength={2000} value={reason} onChange={(e) => setReason(e.target.value)} /></div>
+              <div className="field"><label htmlFor={`cancel-${contractId}`}>Reason (the other side has 48 hours to answer, silence counts as yes; a client can cancel a late order at once; unreleased funds are refunded)</label><textarea id={`cancel-${contractId}`} rows={2} maxLength={2000} value={reason} onChange={(e) => setReason(e.target.value)} /></div>
               <button className="btn" type="submit" disabled={busy || reason.trim().length < 10}>Request cancellation</button>
             </form>
           ) : c.mine ? (
-            <p className="muted">You asked to cancel: “{c.reason}”. Waiting for the other side. <button className="link" disabled={busy} onClick={() => void run(() => api(`/api/v1/contracts/${contractId}/cancellation/withdraw`, 'POST'))}>Withdraw request</button></p>
+            <p className="muted">You asked to cancel: “{c.reason}”. Waiting for the other side{c.answer_by ? ` until ${new Date(c.answer_by).toLocaleString()}; with no answer by then the contract is cancelled` : ''}. <button className="link" disabled={busy} onClick={() => void run(() => api(`/api/v1/contracts/${contractId}/cancellation/withdraw`, 'POST'))}>Withdraw request</button></p>
           ) : (
             <div>
               <p>The {c.requested_by} asked to cancel: “{c.reason}”</p>
+              {c.answer_by && <p className="notice">Answer by {new Date(c.answer_by).toLocaleString()}. If you do not, the contract is cancelled and unreleased funds go back to the client.</p>}
               <div className="row">
                 <button className="btn" disabled={busy} onClick={() => void run(() => api(`/api/v1/contracts/${contractId}/cancellation/respond`, 'POST', { accept: true }))}>Agree to cancel</button>
                 <button className="btn" disabled={busy} onClick={() => void run(() => api(`/api/v1/contracts/${contractId}/cancellation/respond`, 'POST', { accept: false }))}>Decline</button>

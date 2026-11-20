@@ -41,5 +41,6 @@ def test_models_match_the_migration():
     assert {"terms_url", "permitted_fields", "reviewed_at", "reviewed_by_user_id"} <= {c.name for c in sources.c}
 
 
-def test_head_pin():
-    assert 'EXPECTED_MIGRATION_HEAD = "0079_agents_complete"' in (BACKEND / "app" / "main.py").read_text()
+def test_next_migration_follows():
+    # 0080 (review deadlines) builds on this revision.
+    assert (BACKEND / "alembic" / "versions" / "0080_review_deadlines.py").exists()

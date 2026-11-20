@@ -16,7 +16,7 @@ type DisputeRow = {
   resolution: string | null; created_at: string; contract_title: string; freelancer_name: string; organization_name: string; funded_unreleased_minor: number;
 };
 type Pack = {
-  dispute: { statements: Array<{ id: string; party: string; body: string; created_at: string }> };
+  dispute: { statements: Array<{ id: string; party: string; body: string; created_at: string }>; respond_by?: string; replied?: boolean; ready_for_decision?: boolean };
   can_move_money: boolean;
   evidence: {
     contract: { status: string } | null;
@@ -141,12 +141,15 @@ export function TrustCases({ isAdmin }: { isAdmin: boolean }) {
                     <label htmlFor={`dnote-${d.id}`}>Decision explanation (both parties see it; at least 20 characters)</label>
                     <textarea id={`dnote-${d.id}`} rows={3} value={note(d.id)} onChange={(e) => setNote(d.id, e.target.value)} />
                   </div>
+                  {pack.dispute.ready_for_decision === false && pack.dispute.respond_by && (
+                    <p className="notice" role="status">Waiting for the other side's answer until {new Date(pack.dispute.respond_by).toLocaleDateString()}. You can decide once they answer or the 7 days pass; suspend an account separately if there is fraud.</p>
+                  )}
                   <div className="row">
-                    <button className="btn" disabled={busy} onClick={() => void resolve(d.id, 'no_action')}>No money moves</button>
+                    <button className="btn" disabled={busy || pack.dispute.ready_for_decision === false} onClick={() => void resolve(d.id, 'no_action')}>No money moves</button>
                     {pack.can_move_money && pack.evidence.summary.funded_unreleased_count > 0 && (
                       <>
-                        <button className="btn primary" disabled={busy} onClick={() => void resolve(d.id, 'release_funded')}>Release funded to freelancer</button>
-                        <button className="btn" disabled={busy} onClick={() => void resolve(d.id, 'refund_funded')}>Refund funded to client</button>
+                        <button className="btn primary" disabled={busy || pack.dispute.ready_for_decision === false} onClick={() => void resolve(d.id, 'release_funded')}>Release funded to freelancer</button>
+                        <button className="btn" disabled={busy || pack.dispute.ready_for_decision === false} onClick={() => void resolve(d.id, 'refund_funded')}>Refund funded to client</button>
                       </>
                     )}
                   </div>

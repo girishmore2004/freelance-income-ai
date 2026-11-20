@@ -1,6 +1,6 @@
 import uuid
 from datetime import date, datetime, timezone
-from sqlalchemy import String, Text, DateTime, Date, Float, Integer, BigInteger, ForeignKey, Boolean, UniqueConstraint, Index, CheckConstraint, func, text as sql_text
+from sqlalchemy import String, Text, DateTime, Date, Float, Integer, BigInteger, SmallInteger, ForeignKey, Boolean, UniqueConstraint, Index, CheckConstraint, func, text as sql_text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import JSON
 from pgvector.sqlalchemy import Vector
@@ -1837,6 +1837,8 @@ class MilestoneSubmission(Base):
     reviewed_by: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     review_note: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    # Service orders: review extensions by the client, 5 days each, at most 2 (migration 0080).
+    review_extensions: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0, server_default="0")
 
 
 class ContractEvent(Base):
