@@ -266,13 +266,13 @@ export default function ProfilePage() {
           {(() => {
             const gaps = freelancerGaps({ full_name: name, headline: form.headline, skills: form.skills, bio: form.bio, hourly_rate: hourlyRate });
             return gaps.length
-              ? <p className="setup-warning" role="status">Still needed before clients see a complete profile: {gaps.map((g) => g.label).join(', ')}.</p>
-              : <p className="success" role="status">Your profile is complete.</p>;
+              ? <p className="setup-warning">Still needed before clients see a complete profile: {gaps.map((g) => g.label).join(', ')}.</p>
+              : <p className="success">Your profile is complete.</p>;
           })()}
           <div className="field"><label htmlFor="pf-name">Full name<Req /></label><input id="pf-name" value={name} maxLength={160} onChange={(e) => setName(e.target.value)} /></div>
-          <div className="field"><label htmlFor="pf-headline">Headline (your role in one line, 10+ characters)<Req /></label><input id="pf-headline" value={form.headline} maxLength={240} onChange={(e) => setForm({ ...form, headline: e.target.value })} /></div>
-          <div className="field"><label htmlFor="pf-bio">Bio and experience (true facts only, 50+ characters)<Req /></label><textarea id="pf-bio" rows={5} value={form.bio} onChange={(e) => setForm({ ...form, bio: e.target.value })} /></div>
-          <div className="field"><label htmlFor="pf-skills">Skills (comma separated, at least 3)<Req /></label><input id="pf-skills" value={form.skills} onChange={(e) => setForm({ ...form, skills: e.target.value })} /></div>
+          <div className="field"><label htmlFor="pf-headline">Headline (your role in one line) — 10+ characters<Req /></label><input id="pf-headline" value={form.headline} maxLength={240} onChange={(e) => setForm({ ...form, headline: e.target.value })} /></div>
+          <div className="field"><label htmlFor="pf-bio">Bio and experience (true facts only) — 50+ characters<Req /></label><textarea id="pf-bio" rows={5} value={form.bio} onChange={(e) => setForm({ ...form, bio: e.target.value })} /></div>
+          <div className="field"><label htmlFor="pf-skills">Skills (comma separated) — at least 3<Req /></label><input id="pf-skills" value={form.skills} onChange={(e) => setForm({ ...form, skills: e.target.value })} /></div>
           <div className="field"><label htmlFor="pf-services">Services you offer (comma separated)</label><input id="pf-services" value={form.services} onChange={(e) => setForm({ ...form, services: e.target.value })} /></div>
           <div className="field"><label htmlFor="pf-links">Portfolio links (one per line, https://…). Proposals can cite only these.</label><textarea id="pf-links" rows={3} value={form.links} onChange={(e) => setForm({ ...form, links: e.target.value })} /></div>
           <div className="grid g3">

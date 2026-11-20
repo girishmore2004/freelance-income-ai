@@ -65,7 +65,7 @@ test('client drafts a brief with AI, sets the budget in rupees and publishes', a
   const next = page.getByRole('button', { name: 'Next', exact: true });
   // Four steps since 2026-11-18.
   await next.click(); // 2. Scope and skills
-  await expect(page.getByLabel('Project title (required)')).toHaveValue('Candle shop website');
+  await expect(page.getByLabel(/Project title/)).toHaveValue('Candle shop website');
   await next.click(); // 3. Budget and dates
   await page.getByLabel('Minimum budget (₹)').fill('25000');
   await page.getByLabel('Maximum budget (₹)').fill('50000');

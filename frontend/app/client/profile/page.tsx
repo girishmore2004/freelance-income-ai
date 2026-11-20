@@ -86,8 +86,8 @@ export default function ClientProfilePage() {
               const gaps = clientGaps(form);
               const billing = billingGaps(form);
               return gaps.length
-                ? <p className="setup-warning" role="status">Still needed for a complete profile: {gaps.map((g) => g.label).join(', ')}.</p>
-                : <p className="success" role="status">Your client profile is complete.{billing.length ? ` Add ${billing.map((g) => g.label.toLowerCase()).join(' and ')} before your first payment.` : ''}</p>;
+                ? <p className="setup-warning">Still needed for a complete profile: {gaps.map((g) => g.label).join(', ')}.</p>
+                : <p className="success">Your client profile is complete.{billing.length ? ` Add ${billing.map((g) => g.label.toLowerCase()).join(' and ')} before your first payment.` : ''}</p>;
             })()}
             <OrgFields form={form} set={set} fieldErrors={fieldErrors} />
             <div className="row">

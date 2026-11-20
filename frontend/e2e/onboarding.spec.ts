@@ -101,7 +101,7 @@ test('posting marks required fields with ★, checks each step on Next and warns
   await page.goto('/client/projects');
   await page.getByRole('button', { name: 'Post a new project' }).click();
   await expect(page.getByTestId('setup-warning-profile')).toContainText('Missing: Industry');
-  await expect(page.getByLabel('Work category (required)')).toBeVisible();
+  await expect(page.getByLabel(/Work category/)).toBeVisible();
 
   const next = page.getByRole('button', { name: 'Next', exact: true });
   await next.click();
@@ -111,9 +111,9 @@ test('posting marks required fields with ★, checks each step on Next and warns
   await expect(page.getByText('Step 2 of 4')).toBeVisible();
   await expect(page.getByText('Enter a title of 5 to 160 characters.')).toBeVisible();
   await expect(page.getByText('Describe the business outcome in at least 20 characters.')).toBeVisible();
-  await expect(page.getByLabel('Project title (required)')).toHaveAttribute('aria-invalid', 'true');
+  await expect(page.getByLabel(/Project title/)).toHaveAttribute('aria-invalid', 'true');
 
-  await page.getByLabel('Project title (required)').fill('Bakery ordering website');
+  await page.getByLabel(/Project title/).fill('Bakery ordering website');
   await expect(page.getByText('Enter a title of 5 to 160 characters.')).toHaveCount(0);
   await page.getByLabel(/Business outcome/).fill('Customers order cakes online and pick a pickup time.');
   await page.getByLabel(/Deliverables/).fill('Order form');
